@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=1440"/>
+<title>Motion — 3D editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: oklch(0.16 0.012 280);
+    --bg-2: oklch(0.185 0.013 280);
+    --panel: oklch(0.205 0.014 280);
+    --panel-hi: oklch(0.235 0.015 280);
+    --line: oklch(0.28 0.015 280);
+    --line-soft: oklch(0.24 0.014 280);
+    --fg: oklch(0.94 0.008 280);
+    --fg-2: oklch(0.78 0.012 280);
+    --muted: oklch(0.6 0.012 280);
+    --muted-2: oklch(0.46 0.012 280);
+    --accent: #7c5cff;
+    --accent-2: #a48bff;
+    --accent-soft: color-mix(in oklch, var(--accent) 18%, transparent);
+    --accent-glow: color-mix(in oklch, var(--accent) 35%, transparent);
+    --warn: #ffb454;
+    --pink: #ff5b9a;
+    --green: #4ee2a3;
+    --red: #ff6b6b;
+    --blue: #6ba8ff;
+    --r-sm: 6px;
+    --r-md: 10px;
+    --r-lg: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; width: 100%; height: 100%; overflow: hidden; }
+  #root { position: absolute; left: 0; top: 0; width: 1440px; height: 880px; transform-origin: top left; }
+  /* scrollbars */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  button { font-family: inherit; cursor: pointer; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  /* selection */
+  ::selection { background: color-mix(in oklch, var(--accent) 50%, transparent); color: white; }
+  /* gentle ambient breath on the hero 3D icon */
+  @keyframes breathFloat {
+    0%, 100% { transform: translateY(0) rotateY(0deg); }
+    50%      { transform: translateY(-6px) rotateY(2deg); }
+  }
+  .breath { animation: breathFloat 5.5s ease-in-out infinite; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+  (function () {
+    const DW = 1440, DH = 880;
+    function fit() {
+      const r = document.getElementById('root'); if (!r) return;
+      const s = Math.min(1, Math.min(window.innerWidth / DW, window.innerHeight / DH));
+      r.style.transform = 'scale(' + s + ')';
+    }
+    fit(); window.addEventListener('resize', fit);
+  })();
+</script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="ui-icons.jsx"></script>
+<script type="text/babel" src="icons-3d.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="app.jsx"></script>
+<script type="text/babel" src="panels.jsx"></script>
+</body>
+</html>
