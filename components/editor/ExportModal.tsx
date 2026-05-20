@@ -334,13 +334,10 @@ function ExtrudedIcon({ progress = 0 }: ExtrudedIconProps) {
       <div className="w-[620px] max-h-[85vh] bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col font-sans">
         
         {/* Header */}
-        <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-violet-400" />
-            <h2 className="text-base font-semibold text-white">Export & Code Center</h2>
-          </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-white transition-colors text-sm">
-            ✕ Close
+        <div className="px-5 py-3.5 border-b border-zinc-800/60 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-white">Export</h2>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors text-xs px-2 py-1 rounded-md hover:bg-zinc-800">
+            Close
           </button>
         </div>
 
@@ -443,10 +440,8 @@ function ExtrudedIcon({ progress = 0 }: ExtrudedIconProps) {
           </div>
         </Tabs>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-zinc-800 bg-zinc-900 flex items-center justify-between text-[11px] text-muted-foreground">
-          <span>💖 Rendered client-side. Zero server uploads.</span>
-          <span>Press Copy to apply to your app.</span>
+        <div className="px-5 py-3 border-t border-zinc-800/60 flex items-center justify-between text-[11px] text-zinc-500">
+          <span>All processing happens locally</span>
         </div>
       </div>
     </div>

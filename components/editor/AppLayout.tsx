@@ -594,39 +594,35 @@ export default function AppLayout() {
       {/* =========================================================================
           1. TOP BAR
           ========================================================================= */}
-      <div className="h-14 border-b border-zinc-800 flex items-center justify-between px-6 bg-zinc-950/95 backdrop-blur-md shrink-0 relative z-30">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-zinc-800 to-zinc-950 flex items-center justify-center shadow-lg shadow-zinc-950/40 border border-zinc-800">
-            <Sparkles className="w-4 h-4 text-white fill-white/10" />
+      <div className="h-12 border-b border-zinc-800/50 flex items-center justify-between px-4 bg-zinc-950/95 backdrop-blur-md shrink-0 relative z-30">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-zinc-900 flex items-center justify-center border border-zinc-800">
+            <Sparkles className="w-3.5 h-3.5 text-zinc-400" />
           </div>
-          <div>
-            <span className="font-bold text-white tracking-tight text-sm">Motion 3D</span>
-            <span className="text-muted-foreground/60 text-[10.5px] uppercase font-bold tracking-widest pl-2 border-l border-zinc-800 ml-2">Shape Shifter</span>
-          </div>
+          <span className="font-semibold text-white text-[13px] tracking-tight">Shape Shifter</span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Zen Toggle Button */}
+        <div className="flex items-center gap-1.5">
           <Button 
             variant="ghost" 
             size="sm" 
-            className={`text-muted-foreground hover:text-white text-xs gap-1.5 transition-all rounded-lg ${
-              zenMode ? 'bg-zinc-800 border border-zinc-700 text-white shadow-md shadow-zinc-950/50 font-bold' : 'hover:bg-zinc-900'
+            className={`text-xs gap-1.5 rounded-lg h-8 transition-all ${
+              zenMode ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-white hover:bg-zinc-900'
             }`} 
             onClick={() => setZenMode(!zenMode)}
           >
             {zenMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            {zenMode ? 'Exit Zen' : 'Zen Focus'}
+            {zenMode ? 'Exit Focus' : 'Focus'}
           </Button>
 
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-white text-xs gap-1.5 hover:bg-zinc-900" onClick={handleResetRecipe}>
+          <Button variant="ghost" size="sm" className="text-zinc-500 hover:text-white text-xs gap-1.5 hover:bg-zinc-900 h-8 rounded-lg" onClick={handleResetRecipe}>
             <RefreshCw className="w-3.5 h-3.5" />
-            Reset Recipe
+            Reset
           </Button>
 
-          <Button size="sm" className="bg-zinc-50 hover:bg-zinc-200 text-zinc-950 gap-1.5 font-medium shadow-md shadow-zinc-950/20 border border-zinc-200" onClick={() => setIsExportOpen(true)}>
+          <Button size="sm" className="bg-white hover:bg-zinc-200 text-zinc-950 gap-1.5 font-medium h-8 rounded-lg text-xs" onClick={() => setIsExportOpen(true)}>
             <Download className="w-3.5 h-3.5" />
-            Export Output
+            Export
           </Button>
         </div>
       </div>

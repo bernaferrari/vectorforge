@@ -288,112 +288,105 @@ export const Timeline: React.FC<TimelineProps> = ({
   })();
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950 border-t border-zinc-900 select-none shrink-0 overflow-hidden font-sans">
+    <div className="flex flex-col h-full bg-zinc-950 select-none shrink-0 overflow-hidden font-sans">
       
       {/* 1. Header controls */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <Button size="icon" variant="ghost" className="w-8 h-8 hover:bg-zinc-800 hover:text-white" onClick={onPlayToggle}>
-            {isPlaying ? <Pause size={14} className="fill-white" /> : <Play size={14} className="fill-white" />}
+      <div className="flex items-center justify-between px-4 h-10 border-b border-zinc-800/60 bg-zinc-900/60 backdrop-blur-md shrink-0">
+        <div className="flex items-center gap-2">
+          <Button size="icon" variant="ghost" className="w-7 h-7 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-white" onClick={onPlayToggle}>
+            {isPlaying ? <Pause size={13} className="fill-white" /> : <Play size={13} className="fill-white" />}
           </Button>
-          <Button size="icon" variant="ghost" className="w-8 h-8 hover:bg-zinc-800 hover:text-white" onClick={onReset}>
-            <RotateCcw size={14} />
+          <Button size="icon" variant="ghost" className="w-7 h-7 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-white" onClick={onReset}>
+            <RotateCcw size={13} />
           </Button>
-          <div className="text-xs text-muted-foreground font-mono bg-zinc-950 px-2 py-1 rounded border border-zinc-800/80">
-            <span className="text-zinc-200 font-semibold">{currentTime.toFixed(2)}s</span>
-            <span className="text-muted-foreground/40 mx-1">/</span>
+          <div className="text-[11px] text-zinc-500 font-mono ml-1">
+            <span className="text-zinc-300">{currentTime.toFixed(2)}</span>
+            <span className="text-zinc-600 mx-0.5">/</span>
             <span>{duration.toFixed(1)}s</span>
           </div>
         </div>
 
-        {/* Easing configuration details of selected keyframe */}
+        {/* Keyframe inspector */}
         {activeKf && (
-          <div className="flex items-center gap-3 text-xs bg-zinc-900 px-3 py-1 rounded-lg border border-zinc-800 animate-fade-in">
-            <span className="text-muted-foreground font-medium uppercase tracking-wider text-[10px]">Active Keyframe</span>
-            <div className="flex items-center gap-2">
-              <span className="text-white font-mono">{activeKf.kf.time.toFixed(2)}s</span>
-              <span className="text-muted-foreground">value:</span>
-              <Slider
-                min={0}
-                max={1}
-                step={0.01}
-                value={[activeKf.kf.value]}
-                className="w-20 cursor-pointer my-1 [&_[data-slot=slider-range]]:bg-violet-500 [&_[data-slot=slider-thumb]]:border-violet-500"
-                onValueChange={(val) => {
-                  const numVal = (val as number[])[0];
-                  onTracksChange(tracks.map(t => t.id === activeKf.trackId ? {
-                    ...t,
-                    keyframes: t.keyframes.map(k => k.id === activeKf.kf.id ? { ...k, value: numVal } : k)
-                  } : t));
-                }}
-              />
-              <span className="text-white font-mono">{(activeKf.kf.value * 100).toFixed(0)}%</span>
-            </div>
+          <div className="flex items-center gap-2.5 text-xs animate-fade-in">
+            <span className="text-zinc-500 text-[11px]">{activeKf.kf.time.toFixed(2)}s</span>
+            <Slider
+              min={0}
+              max={1}
+              step={0.01}
+              value={[activeKf.kf.value]}
+              className="w-20 cursor-pointer my-1 [&_[data-slot=slider-range]]:bg-violet-500 [&_[data-slot=slider-thumb]]:border-violet-500"
+              onValueChange={(val) => {
+                const numVal = (val as number[])[0];
+                onTracksChange(tracks.map(t => t.id === activeKf.trackId ? {
+                  ...t,
+                  keyframes: t.keyframes.map(k => k.id === activeKf.kf.id ? { ...k, value: numVal } : k)
+                } : t));
+              }}
+            />
+            <span className="text-zinc-300 font-mono text-[11px] w-8 text-right">{(activeKf.kf.value * 100).toFixed(0)}%</span>
             
             <div className="w-px h-4 bg-zinc-800" />
             
-            <div className="flex items-center gap-1.5">
-              <Zap size={11} className="text-yellow-400" />
-              <select
-                value={activeKf.kf.easing}
-                className="bg-black/50 border border-zinc-800 rounded px-1.5 py-0.5 text-white outline-none cursor-pointer text-xs"
-                onChange={(e) => changeKeyframeEasing(activeKf.trackId, activeKf.kf.id, e.target.value as EasingType)}
-              >
-                <option value="linear">Linear</option>
-                <option value="ease-in-out">Ease InOut</option>
-                <option value="spring">Spring</option>
-                <option value="bounce">Bounce</option>
-              </select>
+            <select
+              value={activeKf.kf.easing}
+              className="bg-zinc-900 border border-zinc-800 rounded-md px-1.5 py-1 text-zinc-300 outline-none cursor-pointer text-[11px]"
+              onChange={(e) => changeKeyframeEasing(activeKf.trackId, activeKf.kf.id, e.target.value as EasingType)}
+            >
+              <option value="linear">Linear</option>
+              <option value="ease-in-out">Ease In Out</option>
+              <option value="spring">Spring</option>
+              <option value="bounce">Bounce</option>
+            </select>
 
-              {/* Micro visualizer of the easing plot */}
-              <div className="w-10 h-7 bg-black/60 rounded border border-white/5 flex items-center justify-center p-1 shrink-0 overflow-hidden">
-                <svg className="w-full h-full text-violet-400" viewBox="0 0 100 100" preserveAspectRatio="none">
-                  <path
-                    d={(() => {
-                      const points: string[] = [];
-                      for (let i = 0; i <= 20; i++) {
-                        const r = i / 20;
-                        let er = r;
-                        if (activeKf.kf.easing === 'ease-in-out') er = easeInOut(r);
-                        else if (activeKf.kf.easing === 'spring') er = springEase(r);
-                        else if (activeKf.kf.easing === 'bounce') er = bounceEase(r);
-                        const x = r * 100;
-                        const y = 90 - er * 80;
-                        points.push(`${x},${y}`);
-                      }
-                      return `M ${points.join(' L ')}`;
-                    })()}
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="10"
-                  />
-                </svg>
-              </div>
+            {/* Easing curve preview */}
+            <div className="w-8 h-6 bg-zinc-900 rounded border border-zinc-800 flex items-center justify-center p-0.5 shrink-0 overflow-hidden">
+              <svg className="w-full h-full text-violet-400" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <path
+                  d={(() => {
+                    const points: string[] = [];
+                    for (let i = 0; i <= 20; i++) {
+                      const r = i / 20;
+                      let er = r;
+                      if (activeKf.kf.easing === 'ease-in-out') er = easeInOut(r);
+                      else if (activeKf.kf.easing === 'spring') er = springEase(r);
+                      else if (activeKf.kf.easing === 'bounce') er = bounceEase(r);
+                      const x = r * 100;
+                      const y = 90 - er * 80;
+                      points.push(`${x},${y}`);
+                    }
+                    return `M ${points.join(' L ')}`;
+                  })()}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="10"
+                />
+              </svg>
             </div>
             
-            <Button size="icon" variant="ghost" className="w-6 h-6 hover:bg-red-500/20 hover:text-red-400 text-red-500/60" onClick={() => deleteKeyframe(activeKf.trackId, activeKf.kf.id)}>
-              <Trash2 size={12} />
+            <Button size="icon" variant="ghost" className="w-6 h-6 rounded-md hover:bg-red-500/10 hover:text-red-400 text-zinc-600" onClick={() => deleteKeyframe(activeKf.trackId, activeKf.kf.id)}>
+              <Trash2 size={11} />
             </Button>
           </div>
         )}
 
-        <div className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">
-          💎 Double click track grid to append keyframe
-        </div>
+        <span className="text-[10px] text-zinc-600">
+          Double-click to add keyframe
+        </span>
       </div>
 
       {/* 2. Scrollable timeline tracks */}
       <div className="flex flex-1 overflow-y-auto overflow-x-hidden min-h-0 bg-zinc-950">
         {/* Left Side: Track Names list */}
-        <div className="w-[200px] border-r border-zinc-800 shrink-0 bg-zinc-900">
+        <div className="w-[160px] border-r border-zinc-800/50 shrink-0 bg-zinc-900/50">
           {tracks.map((track) => (
-            <div key={track.id} className="flex items-center justify-between h-[42px] px-3 border-b border-zinc-800/30 hover:bg-zinc-800/30 group">
+            <div key={track.id} className="flex items-center justify-between h-[36px] px-3 border-b border-zinc-800/20 hover:bg-white/[0.03] group transition-colors">
               <div className="flex items-center gap-2 min-w-0">
-                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: track.color }} />
-                <span className="text-[12.5px] font-medium text-white truncate">{track.name}</span>
+                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: track.color }} />
+                <span className="text-[11px] font-medium text-zinc-400 truncate">{track.name}</span>
               </div>
-              <Button size="icon" variant="ghost" className="w-6 h-6 opacity-0 group-hover:opacity-100 hover:bg-zinc-800" onClick={() => addKeyframe(track.id)}>
-                <Plus size={12} className="text-muted-foreground hover:text-white" />
+              <Button size="icon" variant="ghost" className="w-5 h-5 rounded opacity-0 group-hover:opacity-100 hover:bg-zinc-800 transition-opacity" onClick={() => addKeyframe(track.id)}>
+                <Plus size={10} className="text-zinc-500 hover:text-white" />
               </Button>
             </div>
           ))}
@@ -402,20 +395,17 @@ export const Timeline: React.FC<TimelineProps> = ({
         {/* Right Side: Keyframe grid editor & scrub ruler */}
         <div className="flex-1 flex flex-col relative overflow-hidden">
           {/* Timeline ruler */}
-          <div ref={rulerRef} onMouseDown={handleMouseDown} className="h-6 bg-zinc-900/40 border-b border-zinc-800 relative cursor-col-resize shrink-0">
-            {/* Hourglass tick marks */}
+          <div ref={rulerRef} onMouseDown={handleMouseDown} className="h-5 bg-zinc-900/30 border-b border-zinc-800/40 relative cursor-col-resize shrink-0">
             {Array.from({ length: Math.ceil(duration) + 1 }).map((_, i) => (
               <div key={i} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${(i / duration) * 100}%` }}>
-                <span className="text-[9px] text-muted-foreground/60 font-mono pl-1 absolute top-0.5">{i}s</span>
-                <div className="w-px h-full bg-border/20 absolute bottom-0" />
+                <span className="text-[9px] text-zinc-600 font-mono pl-1 absolute top-0.5">{i}s</span>
+                <div className="w-px h-full bg-zinc-800/30 absolute bottom-0" />
               </div>
             ))}
             
-            {/* Playhead vertical line */}
-            <div className="absolute top-0 bottom-0 w-px bg-red-500 z-10 pointer-events-none" style={{ left: `${(currentTime / duration) * 100}%` }}>
-              <div className="w-3 h-3 bg-red-500 rounded-b absolute -top-0.5 -left-1.5 shadow-md flex items-center justify-center">
-                <div className="w-1 h-1 bg-white rounded-full" />
-              </div>
+            {/* Playhead */}
+            <div className="absolute top-0 bottom-0 w-px bg-white z-10 pointer-events-none" style={{ left: `${(currentTime / duration) * 100}%` }}>
+              <div className="w-2 h-2.5 bg-white rounded-sm absolute -top-0.5 -left-[3.5px] shadow-sm" />
             </div>
           </div>
 
@@ -424,7 +414,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             {tracks.map((track) => (
               <div
                 key={track.id}
-                className="h-[42px] border-b border-zinc-800/30 relative hover:bg-zinc-850/20 transition-all cursor-crosshair"
+                className="h-[36px] border-b border-zinc-800/20 relative hover:bg-white/[0.02] transition-colors cursor-crosshair"
                 onDoubleClick={(e) => {
                   if (!rulerRef.current) return;
                   const rect = rulerRef.current.getBoundingClientRect();
@@ -535,8 +525,8 @@ export const Timeline: React.FC<TimelineProps> = ({
               </div>
             ))}
             
-            {/* Playhead vertical line guide across all tracks */}
-            <div className="absolute top-0 bottom-0 w-px bg-red-500/25 pointer-events-none" style={{ left: `${(currentTime / duration) * 100}%` }} />
+            {/* Playhead line across tracks */}
+            <div className="absolute top-0 bottom-0 w-px bg-white/15 pointer-events-none" style={{ left: `${(currentTime / duration) * 100}%` }} />
           </div>
         </div>
       </div>
