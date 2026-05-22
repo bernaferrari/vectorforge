@@ -248,7 +248,7 @@ export const MOTION_RECIPES: MotionRecipe[] = [
       },
       {
         id: 'rotation',
-        name: 'Spin Speed Y',
+        name: 'Spin',
         color: '#a48bff',
         min: 0.0,
         max: 2.0,

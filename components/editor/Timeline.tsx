@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, Plus, Trash2, Zap } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Slider } from '@/components/ui/slider';
 
 export type EasingType = 'linear' | 'ease-in-out' | 'spring' | 'bounce';
 
@@ -33,7 +32,19 @@ interface TimelineProps {
   onReset: () => void;
   tracks: TimelineTrack[];
   onTracksChange: (tracks: TimelineTrack[]) => void;
+  sequenceSlot?: React.ReactNode;
+  activeTrackId?: string | null;
+  onActiveTrackChange?: (trackId: string) => void;
 }
+
+const formatTimeLabel = (value: number) => `${value.toFixed(0)}s`;
+
+const formatValueLabel = (track: TimelineTrack, value: number) => {
+  if (track.id === 'transition') return `${Math.round(value * 100)}%`;
+  if (track.id === 'rotation') return value.toFixed(2);
+  if (track.id === 'lighting') return value.toFixed(1);
+  return value.toFixed(2);
+};
 
 // Math Easing Formulas
 const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
@@ -109,19 +120,37 @@ export const Timeline: React.FC<TimelineProps> = ({
   onPlayToggle,
   onReset,
   tracks,
-  onTracksChange
+  onTracksChange,
+  sequenceSlot,
+  activeTrackId,
+  onActiveTrackChange
 }) => {
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null);
+  const [showSequence, setShowSequence] = useState(false);
   const rulerRef = useRef<HTMLDivElement>(null);
+  const activeTrack = tracks.find((track) => track.id === activeTrackId) ?? tracks[0];
+
+  useEffect(() => {
+    if (!activeTrackId) return;
+    setSelectedTrackId(activeTrackId);
+  }, [activeTrackId]);
+
+  const selectTrack = (trackId: string) => {
+    setSelectedTrackId(trackId);
+    onActiveTrackChange?.(trackId);
+  };
+
+  const timeFromClientX = (clientX: number) => {
+    if (!rulerRef.current) return currentTime;
+    const rect = rulerRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    return Number(((x / rect.width) * duration).toFixed(3));
+  };
 
   // Handle timeline clicking and dragging
   const handleTimelineScrub = (clientX: number) => {
-    if (!rulerRef.current) return;
-    const rect = rulerRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
-    const newTime = (x / rect.width) * duration;
-    onTimeChange(Number(newTime.toFixed(3)));
+    onTimeChange(timeFromClientX(clientX));
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -142,6 +171,8 @@ export const Timeline: React.FC<TimelineProps> = ({
 
   // Add Keyframe on current timeline time
   const addKeyframe = (trackId: string) => {
+    const keyframeTime = Number(currentTime.toFixed(2));
+    let nextSelectedKeyframeId: string | null = null;
     const updatedTracks = tracks.map((track) => {
       if (track.id !== trackId) return track;
       
@@ -149,22 +180,28 @@ export const Timeline: React.FC<TimelineProps> = ({
       const currentValue = interpolateKeyframes(currentTime, track);
       
       // Prevent overlapping keyframes on exact time (keep threshold of 0.05s)
-      const existingIdx = track.keyframes.findIndex(k => Math.abs(k.time - currentTime) < 0.05);
-      if (existingIdx !== -1) return track; // Skip duplicates
+      const existingKeyframe = track.keyframes.find(k => Math.abs(k.time - keyframeTime) < 0.05);
+      if (existingKeyframe) {
+        nextSelectedKeyframeId = existingKeyframe.id;
+        return track;
+      }
 
       const newKeyframe: Keyframe = {
         id: Math.random().toString(36).substr(2, 9),
-        time: currentTime,
+        time: keyframeTime,
         value: currentValue,
         easing: 'ease-in-out'
       };
+      nextSelectedKeyframeId = newKeyframe.id;
 
       return {
         ...track,
-        keyframes: [...track.keyframes, newKeyframe]
+        keyframes: [...track.keyframes, newKeyframe].sort((a, b) => a.time - b.time)
       };
     });
     
+    selectTrack(trackId);
+    setSelectedKeyframeId(nextSelectedKeyframeId);
     onTracksChange(updatedTracks);
   };
 
@@ -188,6 +225,20 @@ export const Timeline: React.FC<TimelineProps> = ({
       return {
         ...track,
         keyframes: track.keyframes.map(k => k.id === kfId ? { ...k, easing } : k)
+      };
+    });
+    onTracksChange(updatedTracks);
+  };
+
+  const changeKeyframeValue = (trackId: string, kfId: string, value: number) => {
+    if (!Number.isFinite(value)) return;
+    const updatedTracks = tracks.map((track) => {
+      if (track.id !== trackId) return track;
+      const clampedValue = Math.max(track.min, Math.min(track.max, value));
+      return {
+        ...track,
+        defaultValue: clampedValue,
+        keyframes: track.keyframes.map(k => k.id === kfId ? { ...k, value: clampedValue } : k)
       };
     });
     onTracksChange(updatedTracks);
@@ -284,53 +335,43 @@ export const Timeline: React.FC<TimelineProps> = ({
     const track = tracks.find(t => t.id === selectedTrackId);
     if (!track) return null;
     const kf = track.keyframes.find(k => k.id === selectedKeyframeId);
-    return kf ? { trackId: track.id, kf } : null;
+    return kf ? { track, trackId: track.id, kf } : null;
   })();
+  const visibleTracks = activeTrack ? [activeTrack] : [];
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950 select-none shrink-0 overflow-hidden font-sans">
+    <div className="flex flex-col h-full bg-[#0f1012] select-none shrink-0 overflow-hidden font-sans">
       
       {/* 1. Header controls */}
-      <div className="flex items-center justify-between px-4 h-10 border-b border-zinc-800/60 bg-zinc-900/60 backdrop-blur-md shrink-0">
-        <div className="flex items-center gap-2">
-          <Button size="icon" variant="ghost" className="w-7 h-7 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-white" onClick={onPlayToggle}>
-            {isPlaying ? <Pause size={13} className="fill-white" /> : <Play size={13} className="fill-white" />}
-          </Button>
-          <Button size="icon" variant="ghost" className="w-7 h-7 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-white" onClick={onReset}>
-            <RotateCcw size={13} />
-          </Button>
-          <div className="text-[11px] text-zinc-500 font-mono ml-1">
-            <span className="text-zinc-300">{currentTime.toFixed(2)}</span>
-            <span className="text-zinc-600 mx-0.5">/</span>
-            <span>{duration.toFixed(1)}s</span>
+      <div className="flex items-center justify-between gap-3 px-3 h-9 border-b border-white/[0.055] bg-[#101113] shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="text-[11px] text-zinc-500 font-mono tabular-nums w-[58px] shrink-0">
+            <span className="text-zinc-300">{currentTime.toFixed(2)}s</span>
+          </div>
+          <div className="hidden sm:flex items-center gap-1.5 min-w-0 text-[10px] uppercase tracking-[0.14em] text-zinc-600">
+            <span>Keyframes</span>
+            <span className="text-zinc-700">/</span>
+            <span className="normal-case tracking-normal text-zinc-500 truncate">{activeTrack?.name}</span>
           </div>
         </div>
 
         {/* Keyframe inspector */}
         {activeKf && (
-          <div className="flex items-center gap-2.5 text-xs animate-fade-in">
+          <div className="flex items-center gap-2 text-xs animate-fade-in">
+            <span className="hidden sm:inline text-zinc-500 text-[11px]">{activeKf.track.name}</span>
             <span className="text-zinc-500 text-[11px]">{activeKf.kf.time.toFixed(2)}s</span>
-            <Slider
-              min={0}
-              max={1}
-              step={0.01}
-              value={[activeKf.kf.value]}
-              className="w-20 cursor-pointer my-1 [&_[data-slot=slider-range]]:bg-violet-500 [&_[data-slot=slider-thumb]]:border-violet-500"
-              onValueChange={(val) => {
-                const numVal = (val as number[])[0];
-                onTracksChange(tracks.map(t => t.id === activeKf.trackId ? {
-                  ...t,
-                  keyframes: t.keyframes.map(k => k.id === activeKf.kf.id ? { ...k, value: numVal } : k)
-                } : t));
-              }}
+            <input
+              type="number"
+              min={activeKf.track.min}
+              max={activeKf.track.max}
+              step={(activeKf.track.max - activeKf.track.min) > 2 ? 0.1 : 0.01}
+              value={Number(activeKf.kf.value.toFixed(2))}
+              onChange={(event) => changeKeyframeValue(activeKf.trackId, activeKf.kf.id, Number.parseFloat(event.target.value))}
+              className="h-6 w-14 rounded-md border border-white/[0.08] bg-black/25 px-1.5 text-right font-mono text-[11px] text-zinc-300 outline-none focus:border-white/20"
             />
-            <span className="text-zinc-300 font-mono text-[11px] w-8 text-right">{(activeKf.kf.value * 100).toFixed(0)}%</span>
-            
-            <div className="w-px h-4 bg-zinc-800" />
-            
             <select
               value={activeKf.kf.easing}
-              className="bg-zinc-900 border border-zinc-800 rounded-md px-1.5 py-1 text-zinc-300 outline-none cursor-pointer text-[11px]"
+              className="h-6 bg-black/25 border border-white/[0.08] rounded-md px-1.5 text-zinc-300 outline-none cursor-pointer text-[11px]"
               onChange={(e) => changeKeyframeEasing(activeKf.trackId, activeKf.kf.id, e.target.value as EasingType)}
             >
               <option value="linear">Linear</option>
@@ -338,161 +379,126 @@ export const Timeline: React.FC<TimelineProps> = ({
               <option value="spring">Spring</option>
               <option value="bounce">Bounce</option>
             </select>
-
-            {/* Easing curve preview */}
-            <div className="w-8 h-6 bg-zinc-900 rounded border border-zinc-800 flex items-center justify-center p-0.5 shrink-0 overflow-hidden">
-              <svg className="w-full h-full text-violet-400" viewBox="0 0 100 100" preserveAspectRatio="none">
-                <path
-                  d={(() => {
-                    const points: string[] = [];
-                    for (let i = 0; i <= 20; i++) {
-                      const r = i / 20;
-                      let er = r;
-                      if (activeKf.kf.easing === 'ease-in-out') er = easeInOut(r);
-                      else if (activeKf.kf.easing === 'spring') er = springEase(r);
-                      else if (activeKf.kf.easing === 'bounce') er = bounceEase(r);
-                      const x = r * 100;
-                      const y = 90 - er * 80;
-                      points.push(`${x},${y}`);
-                    }
-                    return `M ${points.join(' L ')}`;
-                  })()}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="10"
-                />
-              </svg>
-            </div>
-            
-            <Button size="icon" variant="ghost" className="w-6 h-6 rounded-md hover:bg-red-500/10 hover:text-red-400 text-zinc-600" onClick={() => deleteKeyframe(activeKf.trackId, activeKf.kf.id)}>
+            <Button size="icon-xs" variant="ghost" aria-label="Delete keyframe" className="hover:bg-red-500/10 hover:text-red-400 text-zinc-600" onClick={() => deleteKeyframe(activeKf.trackId, activeKf.kf.id)}>
               <Trash2 size={11} />
             </Button>
           </div>
         )}
-
-        <span className="text-[10px] text-zinc-600">
-          Double-click to add keyframe
-        </span>
+        {!activeKf && sequenceSlot && (
+          <button
+            type="button"
+            onClick={() => setShowSequence((value) => !value)}
+            className={`h-6 shrink-0 rounded-md border px-2 text-[10px] font-medium transition-colors ${
+              showSequence
+                ? 'border-white/[0.14] bg-white/[0.08] text-zinc-100'
+                : 'border-white/[0.07] bg-black/20 text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-200'
+            }`}
+          >
+            Shapes
+          </button>
+        )}
       </div>
 
+      {sequenceSlot && showSequence && (
+        <div className="h-9 shrink-0 border-b border-white/[0.055] bg-[#111316] flex items-center overflow-hidden">
+          <div className="min-w-0 flex-1 px-3 overflow-x-auto">
+            {sequenceSlot}
+          </div>
+        </div>
+      )}
+
       {/* 2. Scrollable timeline tracks */}
-      <div className="flex flex-1 overflow-y-auto overflow-x-hidden min-h-0 bg-zinc-950">
+      <div className="flex flex-1 overflow-y-auto overflow-x-hidden min-h-0 bg-[#0f1012]">
         {/* Left Side: Track Names list */}
-        <div className="w-[160px] border-r border-zinc-800/50 shrink-0 bg-zinc-900/50">
-          {tracks.map((track) => (
-            <div key={track.id} className="flex items-center justify-between h-[36px] px-3 border-b border-zinc-800/20 hover:bg-white/[0.03] group transition-colors">
+        <div className="w-[132px] border-r border-white/[0.055] shrink-0 bg-[#101113]">
+          {visibleTracks.map((track) => {
+            const isActiveTrack = activeTrackId === track.id || selectedTrackId === track.id;
+            return (
+            <div
+              key={track.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => {
+                selectTrack(track.id);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  selectTrack(track.id);
+                }
+              }}
+              className={`flex items-center justify-between h-10 px-3 border-b border-white/[0.035] group transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25 ${
+                isActiveTrack ? 'bg-white/[0.055]' : 'hover:bg-white/[0.02]'
+              }`}
+            >
               <div className="flex items-center gap-2 min-w-0">
-                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: track.color }} />
-                <span className="text-[11px] font-medium text-zinc-400 truncate">{track.name}</span>
+                <div className={`size-2 rounded-full shrink-0 ${isActiveTrack ? 'ring-2 ring-white/25' : ''}`} style={{ backgroundColor: track.color }} />
+                <div className="min-w-0">
+                  <div className={`text-[11px] font-medium truncate ${isActiveTrack ? 'text-zinc-100' : 'text-zinc-300'}`}>{track.name}</div>
+                  {track.keyframes.length > 0 && (
+                    <div className="text-[9px] leading-none text-zinc-600">{track.keyframes.length} {track.keyframes.length === 1 ? 'key' : 'keys'}</div>
+                  )}
+                </div>
               </div>
-              <Button size="icon" variant="ghost" className="w-5 h-5 rounded opacity-0 group-hover:opacity-100 hover:bg-zinc-800 transition-opacity" onClick={() => addKeyframe(track.id)}>
-                <Plus size={10} className="text-zinc-500 hover:text-white" />
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                aria-label={`Add keyframe to ${track.name}`}
+                className={`${isActiveTrack ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} hover:bg-white/[0.08] transition-opacity text-zinc-500 hover:text-white`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  selectTrack(track.id);
+                  addKeyframe(track.id);
+                }}
+              >
+                <Plus size={10} />
               </Button>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Right Side: Keyframe grid editor & scrub ruler */}
         <div className="flex-1 flex flex-col relative overflow-hidden">
           {/* Timeline ruler */}
-          <div ref={rulerRef} onMouseDown={handleMouseDown} className="h-5 bg-zinc-900/30 border-b border-zinc-800/40 relative cursor-col-resize shrink-0">
+          <div ref={rulerRef} onMouseDown={handleMouseDown} className="h-6 bg-black/15 border-b border-white/[0.045] relative cursor-col-resize shrink-0">
             {Array.from({ length: Math.ceil(duration) + 1 }).map((_, i) => (
               <div key={i} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${(i / duration) * 100}%` }}>
-                <span className="text-[9px] text-zinc-600 font-mono pl-1 absolute top-0.5">{i}s</span>
-                <div className="w-px h-full bg-zinc-800/30 absolute bottom-0" />
+                <span className="text-[9px] text-zinc-600 font-mono pl-1 absolute top-1">{formatTimeLabel(i)}</span>
+                {i > 0 && <div className="w-px h-full bg-white/[0.025] absolute bottom-0" />}
               </div>
             ))}
             
             {/* Playhead */}
             <div className="absolute top-0 bottom-0 w-px bg-white z-10 pointer-events-none" style={{ left: `${(currentTime / duration) * 100}%` }}>
-              <div className="w-2 h-2.5 bg-white rounded-sm absolute -top-0.5 -left-[3.5px] shadow-sm" />
+              <div className="w-2.5 h-2.5 bg-white rounded-full absolute -top-0.5 -left-1 shadow-sm" />
             </div>
           </div>
 
           {/* Grid tracks container */}
           <div className="flex-1 relative overflow-y-auto">
-            {tracks.map((track) => (
+            {visibleTracks.length === 0 && (
+              <div className="h-full flex items-center justify-center text-[11px] text-zinc-600">
+                Select a motion property
+              </div>
+            )}
+            {visibleTracks.map((track) => (
               <div
                 key={track.id}
-                className="h-[36px] border-b border-zinc-800/20 relative hover:bg-white/[0.02] transition-colors cursor-crosshair"
+                className={`h-10 border-b border-white/[0.035] relative transition-colors cursor-pointer ${
+                  activeTrackId === track.id || selectedTrackId === track.id ? 'bg-white/[0.025]' : 'hover:bg-white/[0.014]'
+                }`}
+                onClick={(event) => {
+                  selectTrack(track.id);
+                  onTimeChange(timeFromClientX(event.clientX));
+                }}
                 onDoubleClick={(e) => {
-                  if (!rulerRef.current) return;
-                  const rect = rulerRef.current.getBoundingClientRect();
-                  const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-                  const newTime = Number(((x / rect.width) * duration).toFixed(2));
-                  onTimeChange(newTime);
-                  
-                  // Append keyframe dynamically
-                  const currentValue = interpolateKeyframes(newTime, track);
-                  const updatedTracks = tracks.map((t) => {
-                    if (t.id !== track.id) return t;
-                    const newKf: Keyframe = {
-                      id: Math.random().toString(36).substr(2, 9),
-                      time: newTime,
-                      value: currentValue,
-                      easing: 'ease-in-out'
-                    };
-                    return { ...t, keyframes: [...t.keyframes, newKf] };
-                  });
-                  onTracksChange(updatedTracks);
+                  e.preventDefault();
+                  addKeyframe(track.id);
                 }}
               >
                 {/* Horizontal guide line */}
-                <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px border-t border-dashed border-border/10 pointer-events-none" />
-
-                {/* Draw Premiere-Style Glassy Transition Blocks */}
-                {(() => {
-                  const sortedKfs = [...track.keyframes].sort((a, b) => a.time - b.time);
-                  const blocks = [];
-                  for (let i = 0; i < sortedKfs.length - 1; i++) {
-                    const kf1 = sortedKfs[i];
-                    const kf2 = sortedKfs[i + 1];
-                    const left = (kf1.time / duration) * 100;
-                    const width = ((kf2.time - kf1.time) / duration) * 100;
-                    
-                    // Generate exact mathematical SVG ease curve path inside
-                    const pathD = (() => {
-                      const points: string[] = [];
-                      const N = 30;
-                      for (let j = 0; j <= N; j++) {
-                        const ratio = j / N;
-                        let easedRatio = ratio;
-                        if (kf1.easing === 'ease-in-out') easedRatio = easeInOut(ratio);
-                        else if (kf1.easing === 'spring') easedRatio = springEase(ratio);
-                        else if (kf1.easing === 'bounce') easedRatio = bounceEase(ratio);
-                        
-                        const val = kf1.value + (kf2.value - kf1.value) * easedRatio;
-                        const x = ratio * 100;
-                        const y = 90 - val * 80;
-                        points.push(`${x.toFixed(1)},${y.toFixed(1)}`);
-                      }
-                      return `M ${points.join(' L ')}`;
-                    })();
-
-                    blocks.push(
-                      <div
-                        key={`block-${kf1.id}-${kf2.id}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedTrackId(track.id);
-                          setSelectedKeyframeId(kf1.id);
-                        }}
-                        onMouseDown={(e) => handleBlockDragStart(e, track.id, kf1.id, kf2.id)}
-                        className="absolute h-8 top-1 rounded-md border border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/10 cursor-col-resize select-none overflow-hidden backdrop-blur-sm transition-colors group/block"
-                        style={{
-                          left: `${left}%`,
-                          width: `${width}%`
-                        }}
-                        title={`Drag to slide transition | Easing: ${kf1.easing}`}
-                      >
-                        <svg className="w-full h-full text-white/25 group-hover/block:text-white/40 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
-                          <path d={pathD} fill="none" stroke="currentColor" strokeWidth="4" />
-                        </svg>
-                      </div>
-                    );
-                  }
-                  return blocks;
-                })()}
+                <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-white/[0.04] pointer-events-none" />
 
                 {/* Draw Keyframe diamonds */}
                 {track.keyframes.map((kf) => {
@@ -500,25 +506,22 @@ export const Timeline: React.FC<TimelineProps> = ({
                   return (
                     <div
                       key={kf.id}
-                      className={`absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rotate-45 border-2 cursor-grab active:cursor-grabbing hover:scale-125 transition-transform duration-100 flex items-center justify-center`}
+                      title={`${track.name} ${formatValueLabel(track, kf.value)} at ${kf.time.toFixed(2)}s`}
+                      className="absolute top-1/2 -translate-y-1/2 size-3 rotate-45 border cursor-grab active:cursor-grabbing hover:scale-125 transition-transform duration-100 flex items-center justify-center"
                       style={{
-                        left: `calc(${(kf.time / duration) * 100}% - 7px)`,
+                        left: `calc(${(kf.time / duration) * 100}% - 6px)`,
                         backgroundColor: selected ? '#ffffff' : track.color,
-                        borderColor: selected ? '#7c5cff' : '#000000',
-                        boxShadow: selected ? '0 0 8px #7c5cff' : 'none',
+                        borderColor: selected ? '#ffffff' : 'rgba(0,0,0,0.9)',
+                        boxShadow: selected ? `0 0 0 3px ${track.color}44` : 'none',
                         zIndex: selected ? 30 : 20
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        setSelectedTrackId(track.id);
+                        selectTrack(track.id);
                         setSelectedKeyframeId(kf.id);
                       }}
                       onMouseDown={(e) => handleKeyframeDragStart(e, track.id, kf.id)}
                     >
-                      {/* Inner dot depending on easing */}
-                      {kf.easing !== 'linear' && (
-                        <div className={`w-1 h-1 rounded-full ${selected ? 'bg-[#7c5cff]' : 'bg-white'}`} />
-                      )}
                     </div>
                   );
                 })}

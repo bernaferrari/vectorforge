@@ -40,6 +40,8 @@ export interface SvgCanvasProps {
   wipeDirection: { x: number; y: number }; // (0,0) means Crossfade / Dissolve
   transitionProgress: number; // 0 to 1
   rotationSpeed: { x: number; y: number; z: number };
+  rotationOffset: { x: number; y: number; z: number };
+  isPlaying: boolean;
   ambientColor: string;
   ambientIntensity: number;
   keyLightColor: string;
@@ -61,6 +63,25 @@ export interface SvgCanvasRef {
 
 // Module-level cache for gradient canvas textures to prevent memory leaks
 const gradientCache = new Map<string, THREE.CanvasTexture>();
+const DEFAULT_VIEW_ROTATION = { x: 0, y: 0 };
+const MODEL_SCALE = 0.12;
+
+const applySvgModelScale = (group: THREE.Group) => {
+  group.scale.set(MODEL_SCALE, -MODEL_SCALE, MODEL_SCALE);
+};
+
+const finiteNumber = (value: unknown, fallback: number) =>
+  typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+
+const containsInvalidPositions = (geometry: THREE.BufferGeometry) => {
+  const position = geometry.getAttribute('position');
+  if (!position) return true;
+  const values = position.array;
+  for (let i = 0; i < values.length; i++) {
+    if (!Number.isFinite(values[i])) return true;
+  }
+  return false;
+};
 
 const getOrCreateGradientTexture = (color1: string, color2: string): THREE.CanvasTexture => {
   const key = `${color1}_${color2}`;
@@ -95,7 +116,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const clockRef = useRef<THREE.Clock | null>(null);
+  const animationStartRef = useRef<number>(performance.now());
   
   // Lighting refs
   const ambientLightRef = useRef<THREE.AmbientLight | null>(null);
@@ -110,8 +131,17 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
   // Drag interaction states with inertia
   const isDraggingRef = useRef(false);
   const previousPointerPositionRef = useRef({ x: 0, y: 0 });
-  const targetRotationRef = useRef({ x: 0.1, y: 0.4 }); // default angle
-  const currentRotationRef = useRef({ x: 0.1, y: 0.4 });
+  const targetRotationRef = useRef({ ...DEFAULT_VIEW_ROTATION });
+  const currentRotationRef = useRef({ ...DEFAULT_VIEW_ROTATION });
+  const liveRenderPropsRef = useRef({
+    transitionType: props.transitionType,
+    transitionProgress: props.transitionProgress,
+    wipeDirection: props.wipeDirection,
+    rotationOffset: props.rotationOffset,
+    rotationSpeed: props.rotationSpeed,
+    isPlaying: props.isPlaying,
+    keyLightIntensity: props.keyLightIntensity
+  });
 
   // Camera Zoom Refs (with damping)
   const targetZoomRef = useRef<number>(props.zoom);
@@ -129,12 +159,19 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
   const lineXRef = useRef<SVGLineElement>(null);
   const lineYRef = useRef<SVGLineElement>(null);
   const lineZRef = useRef<SVGLineElement>(null);
-  const headXRef = useRef<SVGCircleElement>(null);
-  const headYRef = useRef<SVGCircleElement>(null);
-  const headZRef = useRef<SVGCircleElement>(null);
-  const labelXRef = useRef<SVGTextElement>(null);
-  const labelYRef = useRef<SVGTextElement>(null);
-  const labelZRef = useRef<SVGTextElement>(null);
+  const markerXRef = useRef<SVGGElement>(null);
+  const markerYRef = useRef<SVGGElement>(null);
+  const markerZRef = useRef<SVGGElement>(null);
+
+  liveRenderPropsRef.current = {
+    transitionType: props.transitionType,
+    transitionProgress: props.transitionProgress,
+    wipeDirection: props.wipeDirection,
+    rotationOffset: props.rotationOffset,
+    rotationSpeed: props.rotationSpeed,
+    isPlaying: props.isPlaying,
+    keyLightIntensity: props.keyLightIntensity
+  };
 
   // Handle outside actions via ref
   useImperativeHandle(ref, () => ({
@@ -202,8 +239,13 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     },
 
     resetRotation() {
-      targetRotationRef.current = { x: 0.1, y: 0.4 };
+      targetRotationRef.current = { ...DEFAULT_VIEW_ROTATION };
+      currentRotationRef.current = { ...DEFAULT_VIEW_ROTATION };
       targetZoomRef.current = 1.0;
+      currentZoomRef.current = 1.0;
+      animationStartRef.current = performance.now();
+      if (iconAGroupRef.current) iconAGroupRef.current.rotation.set(0, 0, 0);
+      if (iconBGroupRef.current) iconBGroupRef.current.rotation.set(0, 0, 0);
       props.onZoomChange?.(1.0);
     }
   }));
@@ -241,13 +283,18 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
 
     const paths = svgData.paths;
     const centerOffset = new THREE.Vector3();
+    const baseDepth = Math.max(0.02, finiteNumber(props.extrusionDepth, 1));
+    const baseBevelSize = Math.max(0, finiteNumber(props.bevelSize, 0));
+    const baseBevelThickness = Math.max(0, finiteNumber(props.bevelThickness, 0));
+    const baseBevelSegments = Math.max(0, Math.min(10, Math.round(finiteNumber(props.bevelSegments, 1))));
+    const layerSpacing = finiteNumber(props.layerSpacing, 0);
 
     const extrudeSettings = {
-      depth: props.extrusionDepth,
+      depth: baseDepth,
       bevelEnabled: props.bevelEnabled,
-      bevelThickness: props.bevelThickness,
-      bevelSize: props.bevelSize,
-      bevelSegments: props.bevelSegments,
+      bevelThickness: baseBevelThickness,
+      bevelSize: baseBevelSize,
+      bevelSegments: baseBevelSegments,
       curveSegments: 16,
       steps: 1
     };
@@ -271,7 +318,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       if (!isVisible) return;
 
       const customColor = override?.color || (path.color ? `#${path.color.getHexString()}` : (isIconA ? props.colorA : props.colorB));
-      const depthMultiplier = override ? override.depthMultiplier : 1.0;
+      const depthMultiplier = Math.max(0.02, finiteNumber(override ? override.depthMultiplier : 1.0, 1.0));
 
       const textureMap = props.enableGradient ? getOrCreateGradientTexture(
         isIconA ? props.colorA : props.colorB,
@@ -486,29 +533,50 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
 
       shapes.forEach((shape) => {
         const shapePts = shape.getPoints(12);
+        if (shapePts.length < 2 || shapePts.some((pt) => !Number.isFinite(pt.x) || !Number.isFinite(pt.y))) {
+          return;
+        }
+
         const shapeBox = new THREE.Box2().setFromPoints(shapePts);
         const shapeSize = new THREE.Vector2();
         shapeBox.getSize(shapeSize);
-        const shapeMinDim = Math.max(0.1, Math.min(shapeSize.x, shapeSize.y));
+        if (!Number.isFinite(shapeSize.x) || !Number.isFinite(shapeSize.y)) {
+          return;
+        }
 
-        const shapeDepth = (extrudeSettings.depth * depthMultiplier) + (pathIndex * props.layerSpacing * 0.1);
+        const shapeMinDim = Math.max(0.1, Math.min(Math.abs(shapeSize.x), Math.abs(shapeSize.y)));
+
+        const shapeDepth = Math.max(0.02, (baseDepth * depthMultiplier) + (pathIndex * layerSpacing * 0.1));
         const safeBevelSize = props.bevelEnabled 
-          ? Math.max(0.002, Math.min(props.bevelSize, shapeMinDim * 0.05, shapeDepth * 0.18))
+          ? Math.max(0.001, Math.min(baseBevelSize, shapeMinDim * 0.05, shapeDepth * 0.18))
           : 0;
         const safeBevelThickness = props.bevelEnabled
-          ? Math.max(0.002, Math.min(props.bevelThickness, shapeMinDim * 0.08, shapeDepth * 0.25))
+          ? Math.max(0.001, Math.min(baseBevelThickness, shapeMinDim * 0.08, shapeDepth * 0.25))
           : 0;
 
-        const geometry = new THREE.ExtrudeGeometry(shape, {
-          ...extrudeSettings,
-          depth: shapeDepth,
-          bevelSize: safeBevelSize,
-          bevelThickness: safeBevelThickness,
-          bevelEnabled: props.bevelEnabled && safeBevelSize > 0.002
-        });
+        let geometry: THREE.ExtrudeGeometry;
+        try {
+          geometry = new THREE.ExtrudeGeometry(shape, {
+            ...extrudeSettings,
+            depth: shapeDepth,
+            bevelSize: safeBevelSize,
+            bevelThickness: safeBevelThickness,
+            bevelSegments: baseBevelSegments,
+            bevelEnabled: props.bevelEnabled && safeBevelSize > 0.001 && safeBevelThickness > 0.001
+          });
+        } catch (error) {
+          console.warn('Skipping SVG shape that failed extrusion', error);
+          return;
+        }
+
+        if (containsInvalidPositions(geometry)) {
+          geometry.dispose();
+          console.warn('Skipping SVG shape with invalid geometry positions');
+          return;
+        }
 
         const mesh = new THREE.Mesh(geometry, pathMaterial);
-        mesh.position.z = pathIndex * props.layerSpacing * 0.1;
+        mesh.position.z = pathIndex * layerSpacing * 0.1;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
 
@@ -516,44 +584,45 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       });
     });
 
-    group.scale.set(0.12, -0.12, 0.12);
+    applySvgModelScale(group);
 
-    const box = new THREE.Box3().setFromObject(group);
-    box.getCenter(centerOffset);
-    group.children.forEach((child) => {
-      child.position.x -= centerOffset.x / group.scale.x;
-      child.position.y -= centerOffset.y / group.scale.y;
-    });
+    if (group.children.length > 0) {
+      const box = new THREE.Box3().setFromObject(group);
+      if (
+        Number.isFinite(box.min.x) && Number.isFinite(box.min.y) && Number.isFinite(box.min.z) &&
+        Number.isFinite(box.max.x) && Number.isFinite(box.max.y) && Number.isFinite(box.max.z)
+      ) {
+        box.getCenter(centerOffset);
+        group.children.forEach((child) => {
+          child.position.x -= centerOffset.x / group.scale.x;
+          child.position.y -= centerOffset.y / group.scale.y;
+        });
+      }
+    }
 
     return group;
   };
 
+  const setViewRotation = (rotation: { x: number; y: number }) => {
+    targetRotationRef.current = { ...rotation };
+    currentRotationRef.current = { ...rotation };
+  };
+
   // 2D SVG Orientation Compass Updater (updates line/circle/text endpoints)
-  const updateGizmo = (rx: number, ry: number) => {
+  const updateGizmo = (rx: number, ry: number, rz: number) => {
     const cx = 40;
     const cy = 40;
     const L = 22; // axis length in pixels
 
-    const cosX = Math.cos(rx);
-    const sinX = Math.sin(rx);
-    const cosY = Math.cos(ry);
-    const sinY = Math.sin(ry);
+    const euler = new THREE.Euler(rx, ry, rz, 'XYZ');
 
     const project = (x: number, y: number, z: number) => {
-      // Rotate Y (yaw)
-      const x1 = x * cosY + z * sinY;
-      const y1 = y;
-      const z1 = -x * sinY + z * cosY;
-
-      // Rotate X (pitch)
-      const x2 = x1;
-      const y2 = y1 * cosX - z1 * sinX;
-      const z2 = y1 * sinX + z1 * cosX;
+      const vector = new THREE.Vector3(x, y, z).applyEuler(euler);
 
       return {
-        x: cx + x2 * L,
-        y: cy - y2 * L, // Negate Y for screen projection
-        z: z2
+        x: cx + vector.x * L,
+        y: cy - vector.y * L, // Negate Y for screen projection
+        z: vector.z
       };
     };
 
@@ -575,31 +644,9 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       lineZRef.current.setAttribute('y2', ptZ.y.toFixed(1));
     }
 
-    if (headXRef.current) {
-      headXRef.current.setAttribute('cx', ptX.x.toFixed(1));
-      headXRef.current.setAttribute('cy', ptX.y.toFixed(1));
-    }
-    if (headYRef.current) {
-      headYRef.current.setAttribute('cx', ptY.x.toFixed(1));
-      headYRef.current.setAttribute('cy', ptY.y.toFixed(1));
-    }
-    if (headZRef.current) {
-      headZRef.current.setAttribute('cx', ptZ.x.toFixed(1));
-      headZRef.current.setAttribute('cy', ptZ.y.toFixed(1));
-    }
-
-    if (labelXRef.current) {
-      labelXRef.current.setAttribute('x', ptX.x.toFixed(1));
-      labelXRef.current.setAttribute('y', ptX.y.toFixed(1));
-    }
-    if (labelYRef.current) {
-      labelYRef.current.setAttribute('x', ptY.x.toFixed(1));
-      labelYRef.current.setAttribute('y', ptY.y.toFixed(1));
-    }
-    if (labelZRef.current) {
-      labelZRef.current.setAttribute('x', ptZ.x.toFixed(1));
-      labelZRef.current.setAttribute('y', ptZ.y.toFixed(1));
-    }
+    markerXRef.current?.setAttribute('transform', `translate(${ptX.x.toFixed(1)} ${ptX.y.toFixed(1)})`);
+    markerYRef.current?.setAttribute('transform', `translate(${ptY.x.toFixed(1)} ${ptY.y.toFixed(1)})`);
+    markerZRef.current?.setAttribute('transform', `translate(${ptZ.x.toFixed(1)} ${ptZ.y.toFixed(1)})`);
   };
 
   // Effect: Initializes Scene, Camera, Renderer, and Lights
@@ -621,16 +668,17 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.localClippingEnabled = true;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = Math.max(0.45, Math.min(1.8, 0.75 + props.keyLightIntensity * 0.22));
     rendererRef.current = renderer;
 
     const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
     camera.position.set(0, 0, 16);
     cameraRef.current = camera;
 
-    const clock = new THREE.Clock();
-    clockRef.current = clock;
+    animationStartRef.current = performance.now();
 
     const pivotGroup = new THREE.Group();
     scene.add(pivotGroup);
@@ -659,7 +707,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     scene.add(rimLight);
     rimLightRef.current = rimLight;
 
-    // Direct Pointer Drag-to-Rotate Interaction with damping inertia
+    // Direct Pointer Drag-to-Rotate Interaction
     const canvas = canvasRef.current;
     
     const handlePointerDown = (e: PointerEvent) => {
@@ -677,12 +725,14 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       targetRotationRef.current.x += deltaY * 0.006;
       
       targetRotationRef.current.x = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, targetRotationRef.current.x));
+      currentRotationRef.current = { ...targetRotationRef.current };
       
       previousPointerPositionRef.current = { x: e.clientX, y: e.clientY };
     };
 
     const handlePointerUp = (e: PointerEvent) => {
       isDraggingRef.current = false;
+      currentRotationRef.current = { ...targetRotationRef.current };
       try {
         canvas.releasePointerCapture(e.pointerId);
       } catch (err) {}
@@ -700,8 +750,13 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     };
 
     const handleDoubleClick = () => {
-      targetRotationRef.current = { x: 0.1, y: 0.4 };
+      targetRotationRef.current = { ...DEFAULT_VIEW_ROTATION };
+      currentRotationRef.current = { ...DEFAULT_VIEW_ROTATION };
       targetZoomRef.current = 1.0;
+      currentZoomRef.current = 1.0;
+      animationStartRef.current = performance.now();
+      if (iconAGroupRef.current) iconAGroupRef.current.rotation.set(0, 0, 0);
+      if (iconBGroupRef.current) iconBGroupRef.current.rotation.set(0, 0, 0);
       props.onZoomChange?.(1.0);
     };
 
@@ -740,7 +795,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
   useEffect(() => {
     if (ambientLightRef.current) {
       ambientLightRef.current.color.set(props.ambientColor);
-      ambientLightRef.current.intensity = props.ambientIntensity;
+      ambientLightRef.current.intensity = props.ambientIntensity + props.keyLightIntensity * 0.12;
     }
     if (keyLightRef.current) {
       keyLightRef.current.color.set(props.keyLightColor);
@@ -749,6 +804,9 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     if (rimLightRef.current) {
       rimLightRef.current.color.set(props.rimLightColor);
       rimLightRef.current.intensity = props.rimLightIntensity;
+    }
+    if (rendererRef.current) {
+      rendererRef.current.toneMappingExposure = Math.max(0.45, Math.min(1.8, 0.75 + props.keyLightIntensity * 0.22));
     }
   }, [props.ambientColor, props.ambientIntensity, props.keyLightColor, props.keyLightIntensity, props.rimLightColor, props.rimLightIntensity]);
 
@@ -806,21 +864,29 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       const scene = sceneRef.current;
       const renderer = rendererRef.current;
       const camera = cameraRef.current;
-      const clock = clockRef.current;
 
-      if (!scene || !renderer || !camera || !clock) return;
+      if (!scene || !renderer || !camera) return;
 
-      const elapsed = clock.getElapsedTime();
-      const progress = props.transitionProgress;
+      const liveProps = liveRenderPropsRef.current;
+      const elapsed = (performance.now() - animationStartRef.current) / 1000;
+      const progress = liveProps.transitionProgress;
 
-      // 1. Smoothly interpolate (damp) manual dragging rotation
+      // 1. Use direct view rotation while editing. Drag release should freeze exactly where the pointer left it.
       const dampingFactor = 0.08;
-      currentRotationRef.current.x += (targetRotationRef.current.x - currentRotationRef.current.x) * dampingFactor;
-      currentRotationRef.current.y += (targetRotationRef.current.y - currentRotationRef.current.y) * dampingFactor;
+      if (!isDraggingRef.current) {
+        currentRotationRef.current = { ...targetRotationRef.current };
+      }
+
+      const displayRotation = {
+        x: currentRotationRef.current.x + THREE.MathUtils.degToRad(liveProps.rotationOffset.x),
+        y: currentRotationRef.current.y + THREE.MathUtils.degToRad(liveProps.rotationOffset.y),
+        z: THREE.MathUtils.degToRad(liveProps.rotationOffset.z)
+      };
 
       if (pivotGroupRef.current) {
-        pivotGroupRef.current.rotation.x = currentRotationRef.current.x;
-        pivotGroupRef.current.rotation.y = currentRotationRef.current.y;
+        pivotGroupRef.current.rotation.x = displayRotation.x;
+        pivotGroupRef.current.rotation.y = displayRotation.y;
+        pivotGroupRef.current.rotation.z = displayRotation.z;
       }
 
       // 2. Smoothly damp the scroll-wheel camera zoom
@@ -828,21 +894,23 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       camera.position.z = 16 / currentZoomRef.current;
 
       // 3. Update the 2D SVG Orientation Gizmo
-      updateGizmo(currentRotationRef.current.x, currentRotationRef.current.y);
+      updateGizmo(displayRotation.x, displayRotation.y, displayRotation.z);
 
-      // Apply subtle automatic spin addition on meshes inside the pivot
+      // Apply automatic spin only during preview playback. Idle editing should stay still.
       if (iconAGroupRef.current) {
-        iconAGroupRef.current.rotation.y = elapsed * props.rotationSpeed.y * 0.15;
-        iconAGroupRef.current.rotation.x = elapsed * props.rotationSpeed.x * 0.15;
+        iconAGroupRef.current.rotation.y = liveProps.isPlaying ? elapsed * liveProps.rotationSpeed.y * 0.15 : 0;
+        iconAGroupRef.current.rotation.x = liveProps.isPlaying ? elapsed * liveProps.rotationSpeed.x * 0.15 : 0;
+        iconAGroupRef.current.rotation.z = liveProps.isPlaying ? elapsed * liveProps.rotationSpeed.z * 0.15 : 0;
       }
       if (iconBGroupRef.current) {
-        iconBGroupRef.current.rotation.y = elapsed * props.rotationSpeed.y * 0.15;
-        iconBGroupRef.current.rotation.x = elapsed * props.rotationSpeed.x * 0.15;
+        iconBGroupRef.current.rotation.y = liveProps.isPlaying ? elapsed * liveProps.rotationSpeed.y * 0.15 : 0;
+        iconBGroupRef.current.rotation.x = liveProps.isPlaying ? elapsed * liveProps.rotationSpeed.x * 0.15 : 0;
+        iconBGroupRef.current.rotation.z = liveProps.isPlaying ? elapsed * liveProps.rotationSpeed.z * 0.15 : 0;
       }
 
       // 4. Compute Transition Wipe boundaries
-      const isWipeActive = props.transitionType === 'wipe' && (props.wipeDirection.x !== 0 || props.wipeDirection.y !== 0);
-      const isCrossfade = props.transitionType === 'wipe' && props.wipeDirection.x === 0 && props.wipeDirection.y === 0;
+      const isWipeActive = liveProps.transitionType === 'wipe' && (liveProps.wipeDirection.x !== 0 || liveProps.wipeDirection.y !== 0);
+      const isCrossfade = liveProps.transitionType === 'wipe' && liveProps.wipeDirection.x === 0 && liveProps.wipeDirection.y === 0;
 
       if (isWipeActive && clipPlaneARef.current && clipPlaneBRef.current) {
         const range = 5.0; 
@@ -853,7 +921,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
 
         if (iconAGroupRef.current) {
           iconAGroupRef.current.visible = true;
-          iconAGroupRef.current.scale.setScalar(0.12);
+          applySvgModelScale(iconAGroupRef.current);
           iconAGroupRef.current.children.forEach((c) => {
             const mesh = c as THREE.Mesh;
             const mat = mesh.material as THREE.Material;
@@ -862,7 +930,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
         }
         if (iconBGroupRef.current) {
           iconBGroupRef.current.visible = true;
-          iconBGroupRef.current.scale.setScalar(0.12);
+          applySvgModelScale(iconBGroupRef.current);
           iconBGroupRef.current.children.forEach((c) => {
             const mesh = c as THREE.Mesh;
             const mat = mesh.material as THREE.Material;
@@ -873,7 +941,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       else if (isCrossfade) {
         if (iconAGroupRef.current) {
           iconAGroupRef.current.visible = true;
-          iconAGroupRef.current.scale.setScalar(0.12);
+          applySvgModelScale(iconAGroupRef.current);
           iconAGroupRef.current.children.forEach((c) => {
             const mesh = c as THREE.Mesh;
             const mat = mesh.material as THREE.Material;
@@ -883,7 +951,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
         }
         if (iconBGroupRef.current) {
           iconBGroupRef.current.visible = true;
-          iconBGroupRef.current.scale.setScalar(0.12);
+          applySvgModelScale(iconBGroupRef.current);
           iconBGroupRef.current.children.forEach((c) => {
             const mesh = c as THREE.Mesh;
             const mat = mesh.material as THREE.Material;
@@ -896,7 +964,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
         // No transition active (display only Icon A)
         if (iconAGroupRef.current) {
           iconAGroupRef.current.visible = true;
-          iconAGroupRef.current.scale.setScalar(0.12);
+          applySvgModelScale(iconAGroupRef.current);
           iconAGroupRef.current.children.forEach((c) => {
             const mesh = c as THREE.Mesh;
             const mat = mesh.material as THREE.Material;
@@ -917,7 +985,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     return () => {
       cancelAnimationFrame(animFrameId);
     };
-  }, [props.transitionType, props.transitionProgress, props.rotationSpeed, props.wipeDirection]);
+  }, []);
 
   return (
     <div ref={containerRef} className="relative w-full h-full min-h-[400px] overflow-hidden rounded-xl border border-border/10 bg-[oklch(0.13_0.012_280)] shadow-2xl">
@@ -933,19 +1001,19 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
         <line ref={lineZRef} x1="40" y1="40" x2="40" y2="40" className="stroke-blue-500 stroke-[2.5]" />
         
         {/* Interactive Axis Endpoints */}
-        <g className="cursor-pointer group" onClick={() => { targetRotationRef.current = { x: 0, y: -Math.PI / 2 }; }}>
-          <circle ref={headXRef} cx="40" cy="40" r="6.5" className="fill-red-500 hover:fill-red-400 active:scale-95 transition-all duration-100" />
-          <text ref={labelXRef} x="40" y="40" className="fill-white font-mono font-bold text-[8px] select-none" textAnchor="middle" dominantBaseline="central">X</text>
+        <g ref={markerXRef} className="cursor-pointer group" transform="translate(40 40)" onClick={() => setViewRotation({ x: 0, y: -Math.PI / 2 })}>
+          <circle cx="0" cy="0" r="6.5" className="fill-red-500 group-hover:fill-red-400" />
+          <text x="0" y="0" className="fill-white font-mono font-bold text-[8px] select-none" textAnchor="middle" dominantBaseline="central">X</text>
         </g>
 
-        <g className="cursor-pointer group" onClick={() => { targetRotationRef.current = { x: -Math.PI / 2, y: 0 }; }}>
-          <circle ref={headYRef} cx="40" cy="40" r="6.5" className="fill-emerald-500 hover:fill-emerald-400 active:scale-95 transition-all duration-100" />
-          <text ref={labelYRef} x="40" y="40" className="fill-white font-mono font-bold text-[8px] select-none" textAnchor="middle" dominantBaseline="central">Y</text>
+        <g ref={markerYRef} className="cursor-pointer group" transform="translate(40 40)" onClick={() => setViewRotation({ x: -Math.PI / 2, y: 0 })}>
+          <circle cx="0" cy="0" r="6.5" className="fill-emerald-500 group-hover:fill-emerald-400" />
+          <text x="0" y="0" className="fill-white font-mono font-bold text-[8px] select-none" textAnchor="middle" dominantBaseline="central">Y</text>
         </g>
 
-        <g className="cursor-pointer group" onClick={() => { targetRotationRef.current = { x: 0, y: 0 }; }}>
-          <circle ref={headZRef} cx="40" cy="40" r="6.5" className="fill-blue-500 hover:fill-blue-400 active:scale-95 transition-all duration-100" />
-          <text ref={labelZRef} x="40" y="40" className="fill-white font-mono font-bold text-[8px] select-none" textAnchor="middle" dominantBaseline="central">Z</text>
+        <g ref={markerZRef} className="cursor-pointer group" transform="translate(40 40)" onClick={() => setViewRotation({ x: 0, y: 0 })}>
+          <circle cx="0" cy="0" r="6.5" className="fill-blue-500 group-hover:fill-blue-400" />
+          <text x="0" y="0" className="fill-white font-mono font-bold text-[8px] select-none" textAnchor="middle" dominantBaseline="central">Z</text>
         </g>
         
         {/* Center Origin Anchor */}
