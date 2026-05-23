@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Trash2, Diamond, Plus, Magnet, RotateCw } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 export type EasingType = 'linear' | 'ease-in-out' | 'spring' | 'bounce';
 
@@ -10,6 +10,22 @@ export interface Keyframe {
   id: string;
   time: number; // in seconds, 0 to duration
   value: number; // generalized 0 to 1
+  easing: EasingType;
+}
+
+export interface FillStop {
+  id: string;
+  color: string;
+  position: number;
+}
+
+export type FillGradientType = 'linear' | 'radial' | 'conic';
+
+export interface FillKeyframe {
+  id: string;
+  time: number;
+  stops: FillStop[];
+  gradientType?: FillGradientType;
   easing: EasingType;
 }
 
@@ -23,25 +39,119 @@ export interface TimelineTrack {
   keyframes: Keyframe[];
 }
 
+// A shape on the morph timeline. The animation blends between consecutive stops.
+// transitionType/wipeDirection/easing describe the transition LEAVING this stop.
+export interface ShapeStop {
+  id: string;
+  time: number;
+  iconId: string;
+  svgContent: string;
+  color: string;
+  colorSecondary: string;
+  fillGradientType?: FillGradientType;
+  fillKeyframes?: FillKeyframe[];
+  easing: EasingType;
+  transitionType: 'none' | 'wipe';
+  wipeDirection: { x: number; y: number };
+}
+
+export interface ShapeOption {
+  id: string;
+  name: string;
+  svgContent: string;
+  defaultTint: string;
+}
+
+export interface WipeDirectionOption {
+  label: string;
+  x: number;
+  y: number;
+  tooltip: string;
+}
+
 interface TimelineProps {
   duration: number; // in seconds
   currentTime: number;
-  isPlaying: boolean;
   onTimeChange: (time: number) => void;
-  onPlayToggle: () => void;
-  onReset: () => void;
+  onScrubStart?: () => void;
+  loop: boolean;
+  onLoopChange: (loop: boolean) => void;
   tracks: TimelineTrack[];
   onTracksChange: (tracks: TimelineTrack[]) => void;
-  sequenceSlot?: React.ReactNode;
   activeTrackId?: string | null;
   onActiveTrackChange?: (trackId: string) => void;
+  // The shape sequence rendered as the top "Shape" lane.
+  shapes: ShapeStop[];
+  selectedShapeId: string | null;
+  onSelectShape: (id: string) => void;
+  onShapesChange: (shapes: ShapeStop[]) => void;
+  onAddShape: () => void;
+  onRemoveShape: (id: string) => void;
+  onShapeEasingChange: (id: string, easing: EasingType) => void;
+  shapeOptions: ShapeOption[];
+  onShapeIconChange: (id: string, option: ShapeOption) => void;
+  onUploadShape: (id: string) => void;
+  onShapeBlendChange: (id: string, patch: Partial<Pick<ShapeStop, 'transitionType' | 'wipeDirection'>>) => void;
+  openShapePicker: string | null;
+  onOpenShapePicker: (id: string | null) => void;
+  wipeDirections: WipeDirectionOption[];
 }
 
-const formatTimeLabel = (value: number) => `${value.toFixed(0)}s`;
+// Sample an easing into an SVG path for a little preview curve in a 16x16 box.
+const easingCurvePath = (easing: EasingType): string => {
+  const pts: string[] = [];
+  for (let i = 0; i <= 14; i++) {
+    const t = i / 14;
+    const v = applyEasing(easing, t);
+    pts.push(`${(t * 14 + 1).toFixed(1)},${(15 - v * 13).toFixed(1)}`);
+  }
+  return `M ${pts.join(' L ')}`;
+};
+
+// AE/DaVinci-style per-property easing picker: a curve glyph that opens a menu of curves.
+const EasingPicker: React.FC<{ value: EasingType; onChange: (e: EasingType) => void; color?: string }> = ({ value, onChange, color = '#a1a1aa' }) => (
+  <Popover>
+    <PopoverTrigger
+      title={`Easing: ${EASING_OPTIONS.find((o) => o.value === value)?.label ?? value}`}
+      className="flex size-5 shrink-0 items-center justify-center rounded text-zinc-500 hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+        <path d={easingCurvePath(value)} stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </PopoverTrigger>
+    <PopoverContent align="end" side="top" sideOffset={6} className="w-40 border-white/[0.09] bg-[#15171a] p-1 text-zinc-100">
+      {EASING_OPTIONS.map((o) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[11px] transition-colors ${active ? 'bg-white/[0.1] text-white' : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-100'}`}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
+              <path d={easingCurvePath(o.value)} stroke={active ? '#fff' : '#71717a'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {o.label}
+          </button>
+        );
+      })}
+    </PopoverContent>
+  </Popover>
+);
+
+const EASING_OPTIONS: Array<{ value: EasingType; label: string }> = [
+  { value: 'linear', label: 'Linear' },
+  { value: 'ease-in-out', label: 'Smooth' },
+  { value: 'spring', label: 'Spring' },
+  { value: 'bounce', label: 'Bounce' },
+];
 
 const formatValueLabel = (track: TimelineTrack, value: number) => {
   if (track.id === 'transition') return `${Math.round(value * 100)}%`;
-  if (track.id === 'rotation') return value.toFixed(2);
+  if (track.id === 'rotation') return `${Math.round(value)}°`;
+  if (track.id === 'scale') return `${value.toFixed(2)}x`;
   if (track.id === 'lighting') return value.toFixed(1);
   return value.toFixed(2);
 };
@@ -70,466 +180,805 @@ const bounceEase = (t: number) => {
   }
 };
 
+export const applyEasing = (easing: EasingType, t: number): number => {
+  if (easing === 'ease-in-out') return easeInOut(t);
+  if (easing === 'spring') return springEase(t);
+  if (easing === 'bounce') return bounceEase(t);
+  return t;
+};
+
 export const interpolateKeyframes = (time: number, track: TimelineTrack): number => {
   const keyframes = [...track.keyframes].sort((a, b) => a.time - b.time);
-  
+
   if (keyframes.length === 0) {
     return track.defaultValue;
   }
-  
-  // If time is before first keyframe, return first keyframe's value
+
   if (time <= keyframes[0].time) {
     return keyframes[0].value;
   }
-  
-  // If time is after last keyframe, return last keyframe's value
+
   if (time >= keyframes[keyframes.length - 1].time) {
     return keyframes[keyframes.length - 1].value;
   }
-  
-  // Find surrounding keyframes
+
   let prev = keyframes[0];
   let next = keyframes[0];
   for (let i = 0; i < keyframes.length - 1; i++) {
-    if (time >= keyframes[i].time && time <= keyframes[i+1].time) {
+    if (time >= keyframes[i].time && time <= keyframes[i + 1].time) {
       prev = keyframes[i];
-      next = keyframes[i+1];
+      next = keyframes[i + 1];
       break;
     }
   }
-  
+
   const timeDiff = next.time - prev.time;
   if (timeDiff === 0) return prev.value;
-  
+
   const ratio = (time - prev.time) / timeDiff;
-  
-  // Apply Easing
+
   let easedRatio = ratio;
   if (prev.easing === 'ease-in-out') easedRatio = easeInOut(ratio);
   else if (prev.easing === 'spring') easedRatio = springEase(ratio);
   else if (prev.easing === 'bounce') easedRatio = bounceEase(ratio);
-  
+
   return prev.value + (next.value - prev.value) * easedRatio;
 };
+
+const parseHexColor = (value: string): { r: number; g: number; b: number } | null => {
+  let hex = value.trim().replace(/^#/, '');
+  if (hex.length === 3) {
+    hex = hex.split('').map((char) => char + char).join('');
+  }
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return null;
+  return {
+    r: parseInt(hex.slice(0, 2), 16),
+    g: parseInt(hex.slice(2, 4), 16),
+    b: parseInt(hex.slice(4, 6), 16),
+  };
+};
+
+const toHexColor = ({ r, g, b }: { r: number; g: number; b: number }) => {
+  const channel = (next: number) =>
+    Math.max(0, Math.min(255, Math.round(next))).toString(16).padStart(2, '0');
+  return `#${channel(r)}${channel(g)}${channel(b)}`;
+};
+
+const interpolateColorKeyframes = (
+  time: number,
+  fallback: string,
+  keyframes: Array<{ time: number; value: string; easing: EasingType }> = []
+): string => {
+  const sorted = keyframes
+    .filter((keyframe) => parseHexColor(keyframe.value))
+    .sort((a, b) => a.time - b.time);
+
+  if (sorted.length === 0) return fallback;
+  if (time <= sorted[0].time) return sorted[0].value;
+  if (time >= sorted[sorted.length - 1].time) return sorted[sorted.length - 1].value;
+
+  let prev = sorted[0];
+  let next = sorted[0];
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (time >= sorted[i].time && time <= sorted[i + 1].time) {
+      prev = sorted[i];
+      next = sorted[i + 1];
+      break;
+    }
+  }
+
+  const prevColor = parseHexColor(prev.value);
+  const nextColor = parseHexColor(next.value);
+  if (!prevColor || !nextColor) return fallback;
+
+  const span = next.time - prev.time;
+  const ratio = span > 0 ? (time - prev.time) / span : 0;
+  const eased = applyEasing(prev.easing, ratio);
+
+  return toHexColor({
+    r: prevColor.r + (nextColor.r - prevColor.r) * eased,
+    g: prevColor.g + (nextColor.g - prevColor.g) * eased,
+    b: prevColor.b + (nextColor.b - prevColor.b) * eased,
+  });
+};
+
+export const interpolateFillKeyframes = (
+  time: number,
+  fallback: { color: string; colorSecondary: string; gradientType?: FillGradientType },
+  keyframes: FillKeyframe[] = []
+) => {
+  const sorted = [...keyframes].sort((a, b) => a.time - b.time);
+  const fallbackStops: FillStop[] = [
+    { id: 'start', color: fallback.color, position: 0 },
+    { id: 'end', color: fallback.colorSecondary, position: 1 },
+  ];
+
+  const stopsAt = (index: number) => sorted[index]?.stops?.length ? sorted[index].stops : fallbackStops;
+  const maxStops = Math.max(fallbackStops.length, ...sorted.map((keyframe) => keyframe.stops?.length ?? 0));
+  const stops = Array.from({ length: maxStops }).map((_, index) => {
+    const fallbackStop = fallbackStops[index] ?? fallbackStops[fallbackStops.length - 1];
+    return {
+      id: fallbackStop.id,
+      position: fallbackStop.position,
+      color: interpolateColorKeyframes(
+        time,
+        fallbackStop.color,
+        sorted.map((keyframe, keyframeIndex) => {
+          const stop = stopsAt(keyframeIndex)[index] ?? stopsAt(keyframeIndex)[stopsAt(keyframeIndex).length - 1] ?? fallbackStop;
+          return {
+            time: keyframe.time,
+            value: stop.color,
+            easing: keyframe.easing,
+          };
+        })
+      ),
+    };
+  });
+
+  return {
+    color: stops[0]?.color ?? fallback.color,
+    colorSecondary: stops[1]?.color ?? stops[0]?.color ?? fallback.colorSecondary,
+    gradientType: [...sorted].reverse().find((keyframe) => keyframe.time <= time)?.gradientType ?? fallback.gradientType ?? 'linear',
+    stops,
+  };
+};
+
+const RAIL_WIDTH = 140;
+const SNAP_THRESHOLD_SECONDS = 0.08;
+// Horizontal breathing room so keyframes at t=0 and t=duration aren't clipped at the edges.
+const EDGE_INSET = 12;
+// Map a 0..1 fraction of the timeline to a CSS position inside the inset lane area.
+const xForFrac = (frac: number, offsetPx = 0) =>
+  `calc(${EDGE_INSET}px + (100% - ${EDGE_INSET * 2}px) * ${frac}${offsetPx ? ` + ${offsetPx}px` : ''})`;
+const widthForSpan = (span: number) => `calc((100% - ${EDGE_INSET * 2}px) * ${span})`;
 
 export const Timeline: React.FC<TimelineProps> = ({
   duration,
   currentTime,
-  isPlaying,
   onTimeChange,
-  onPlayToggle,
-  onReset,
+  onScrubStart,
+  loop,
+  onLoopChange,
   tracks,
   onTracksChange,
-  sequenceSlot,
   activeTrackId,
-  onActiveTrackChange
+  onActiveTrackChange,
+  shapes,
+  selectedShapeId,
+  onSelectShape,
+  onShapesChange,
+  onAddShape,
+  onRemoveShape,
+  onShapeEasingChange,
+  shapeOptions,
+  onShapeIconChange,
+  onUploadShape,
+  onShapeBlendChange,
+  openShapePicker,
+  onOpenShapePicker,
+  wipeDirections,
 }) => {
-  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
-  const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null);
-  const [showSequence, setShowSequence] = useState(false);
-  const rulerRef = useRef<HTMLDivElement>(null);
-  const activeTrack = tracks.find((track) => track.id === activeTrackId) ?? tracks[0];
+  const [selectedKeyframe, setSelectedKeyframe] = useState<{ trackId: string; kfId: string } | null>(null);
+  const [openClipEditor, setOpenClipEditor] = useState<string | null>(null);
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const shapeDraggedRef = useRef(false);
+  const laneRef = useRef<HTMLDivElement>(null);
 
+
+  // Clear a stale keyframe selection if the keyframe disappears.
   useEffect(() => {
-    if (!activeTrackId) return;
-    setSelectedTrackId(activeTrackId);
-  }, [activeTrackId]);
+    if (!selectedKeyframe) return;
+    const track = tracks.find((t) => t.id === selectedKeyframe.trackId);
+    if (!track || !track.keyframes.some((k) => k.id === selectedKeyframe.kfId)) {
+      setSelectedKeyframe(null);
+    }
+  }, [tracks, selectedKeyframe]);
 
   const selectTrack = (trackId: string) => {
-    setSelectedTrackId(trackId);
     onActiveTrackChange?.(trackId);
   };
 
-  const timeFromClientX = (clientX: number) => {
-    if (!rulerRef.current) return currentTime;
-    const rect = rulerRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
-    return Number(((x / rect.width) * duration).toFixed(3));
-  };
+  const sortedShapes = [...shapes].sort((a, b) => a.time - b.time);
+  const selectedShape = shapes.find((s) => s.id === selectedShapeId) ?? null;
 
-  // Handle timeline clicking and dragging
-  const handleTimelineScrub = (clientX: number) => {
-    onTimeChange(timeFromClientX(clientX));
-  };
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    handleTimelineScrub(e.clientX);
-    
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      handleTimelineScrub(moveEvent.clientX);
-    };
-    
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-    
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
-
-  // Add Keyframe on current timeline time
-  const addKeyframe = (trackId: string) => {
-    const keyframeTime = Number(currentTime.toFixed(2));
-    let nextSelectedKeyframeId: string | null = null;
-    const updatedTracks = tracks.map((track) => {
-      if (track.id !== trackId) return track;
-      
-      // Determine default added value based on current slider/interpolation state
-      const currentValue = interpolateKeyframes(currentTime, track);
-      
-      // Prevent overlapping keyframes on exact time (keep threshold of 0.05s)
-      const existingKeyframe = track.keyframes.find(k => Math.abs(k.time - keyframeTime) < 0.05);
-      if (existingKeyframe) {
-        nextSelectedKeyframeId = existingKeyframe.id;
-        return track;
-      }
-
-      const newKeyframe: Keyframe = {
-        id: Math.random().toString(36).substr(2, 9),
-        time: keyframeTime,
-        value: currentValue,
-        easing: 'ease-in-out'
-      };
-      nextSelectedKeyframeId = newKeyframe.id;
-
-      return {
-        ...track,
-        keyframes: [...track.keyframes, newKeyframe].sort((a, b) => a.time - b.time)
-      };
+  const breakpointTimes = ({
+    excludeShapeId,
+    excludeKeyframe,
+    excludeTrackId,
+  }: {
+    excludeShapeId?: string;
+    excludeKeyframe?: { trackId: string; kfId: string };
+    excludeTrackId?: string;
+  } = {}) => {
+    const shapeTimes = shapes
+      .filter((shape) => shape.id !== excludeShapeId)
+      .map((shape) => shape.time);
+    const numericKeyframeTimes = tracks.flatMap((track) => {
+      if (track.id === excludeTrackId) return [];
+      return track.keyframes
+        .filter((keyframe) => !(excludeKeyframe?.trackId === track.id && excludeKeyframe.kfId === keyframe.id))
+        .map((keyframe) => keyframe.time);
     });
-    
+    const colorKeyframeTimes = shapes
+      .filter((shape) => shape.id !== excludeShapeId)
+      .flatMap((shape) => (shape.fillKeyframes ?? []).map((keyframe) => keyframe.time));
+
+    return Array.from(new Set([...shapeTimes, ...numericKeyframeTimes, ...colorKeyframeTimes, 0, duration]))
+      .filter((time) => Number.isFinite(time))
+      .sort((a, b) => a - b);
+  };
+
+  const snapTime = (
+    rawTime: number,
+    options: {
+      bypass?: boolean;
+      excludeShapeId?: string;
+      excludeKeyframe?: { trackId: string; kfId: string };
+      excludeTrackId?: string;
+    } = {}
+  ) => {
+    const clamped = Math.max(0, Math.min(duration, rawTime));
+    if (!snapEnabled || options.bypass) return clamped;
+
+    const nearest = breakpointTimes(options).reduce<{ time: number; distance: number } | null>((closest, time) => {
+      const distance = Math.abs(time - clamped);
+      if (distance > SNAP_THRESHOLD_SECONDS) return closest;
+      if (!closest || distance < closest.distance) return { time, distance };
+      return closest;
+    }, null);
+
+    return nearest ? nearest.time : clamped;
+  };
+
+  const rawTimeFromClientX = (clientX: number) => {
+    if (!laneRef.current) return currentTime;
+    const rect = laneRef.current.getBoundingClientRect();
+    const usable = Math.max(1, rect.width - EDGE_INSET * 2);
+    const x = Math.max(0, Math.min(clientX - rect.left - EDGE_INSET, usable));
+    return Number(((x / usable) * duration).toFixed(3));
+  };
+
+  const timeFromClientX = (
+    clientX: number,
+    options: Parameters<typeof snapTime>[1] = {}
+  ) => Number(snapTime(rawTimeFromClientX(clientX), options).toFixed(3));
+
+  const handleScrubStart = (e: React.MouseEvent) => {
+    onScrubStart?.();
+    onTimeChange(timeFromClientX(e.clientX, { bypass: e.altKey }));
+    const move = (ev: MouseEvent) => onTimeChange(timeFromClientX(ev.clientX, { bypass: ev.altKey }));
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  const toggleKeyframeAtPlayhead = (trackId: string) => {
+    const t = Number(currentTime.toFixed(2));
+    let nextSelected: { trackId: string; kfId: string } | null = null;
+    const updated = tracks.map((track) => {
+      if (track.id !== trackId) return track;
+      const existing = track.keyframes.find((k) => Math.abs(k.time - t) < 0.05);
+      if (existing) {
+        return { ...track, keyframes: track.keyframes.filter((k) => k.id !== existing.id) };
+      }
+      const value = interpolateKeyframes(currentTime, track);
+      const prev = [...track.keyframes].sort((a, b) => a.time - b.time).filter((k) => k.time <= t).pop();
+      const kf: Keyframe = {
+        id: Math.random().toString(36).slice(2, 10),
+        time: t,
+        value,
+        easing: prev?.easing ?? 'ease-in-out',
+      };
+      nextSelected = { trackId, kfId: kf.id };
+      return { ...track, keyframes: [...track.keyframes, kf].sort((a, b) => a.time - b.time) };
+    });
     selectTrack(trackId);
-    setSelectedKeyframeId(nextSelectedKeyframeId);
-    onTracksChange(updatedTracks);
+    setSelectedKeyframe(nextSelected);
+    onTracksChange(updated);
   };
 
-  // Delete keyframe
-  const deleteKeyframe = (trackId: string, kfId: string) => {
-    const updatedTracks = tracks.map((track) => {
-      if (track.id !== trackId) return track;
-      return {
-        ...track,
-        keyframes: track.keyframes.filter(k => k.id !== kfId)
-      };
-    });
-    onTracksChange(updatedTracks);
-    setSelectedKeyframeId(null);
-  };
-
-  // Update Easing of active keyframe
-  const changeKeyframeEasing = (trackId: string, kfId: string, easing: EasingType) => {
-    const updatedTracks = tracks.map((track) => {
-      if (track.id !== trackId) return track;
-      return {
-        ...track,
-        keyframes: track.keyframes.map(k => k.id === kfId ? { ...k, easing } : k)
-      };
-    });
-    onTracksChange(updatedTracks);
-  };
-
-  const changeKeyframeValue = (trackId: string, kfId: string, value: number) => {
-    if (!Number.isFinite(value)) return;
-    const updatedTracks = tracks.map((track) => {
-      if (track.id !== trackId) return track;
-      const clampedValue = Math.max(track.min, Math.min(track.max, value));
-      return {
-        ...track,
-        defaultValue: clampedValue,
-        keyframes: track.keyframes.map(k => k.id === kfId ? { ...k, value: clampedValue } : k)
-      };
-    });
-    onTracksChange(updatedTracks);
-  };
-
-  // Dragging keyframe along time axis
-  const handleKeyframeDragStart = (e: React.MouseEvent, trackId: string, kfId: string) => {
+  const handleKeyframeDrag = (e: React.MouseEvent, trackId: string, kfId: string) => {
     e.stopPropagation();
-    if (!rulerRef.current) return;
-    
-    const rect = rulerRef.current.getBoundingClientRect();
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const x = Math.max(0, Math.min(moveEvent.clientX - rect.left, rect.width));
-      const newTime = Number(((x / rect.width) * duration).toFixed(2));
-      
-      // Update keyframe time
-      const updatedTracks = tracks.map((track) => {
-        if (track.id !== trackId) return track;
-        return {
-          ...track,
-          keyframes: track.keyframes.map(k => k.id === kfId ? { ...k, time: newTime } : k)
-        };
-      });
-      onTracksChange(updatedTracks);
+    if (!laneRef.current) return;
+    onScrubStart?.();
+    const rect = laneRef.current.getBoundingClientRect();
+    const usable = Math.max(1, rect.width - EDGE_INSET * 2);
+    const move = (ev: MouseEvent) => {
+      const x = Math.max(0, Math.min(ev.clientX - rect.left - EDGE_INSET, usable));
+      const rawTime = (x / usable) * duration;
+      const newTime = Number(snapTime(rawTime, {
+        bypass: ev.altKey,
+        excludeKeyframe: { trackId, kfId },
+      }).toFixed(2));
+      onTracksChange(
+        tracks.map((track) =>
+          track.id === trackId
+            ? { ...track, keyframes: track.keyframes.map((k) => (k.id === kfId ? { ...k, time: newTime } : k)).sort((a, b) => a.time - b.time) }
+            : track
+        )
+      );
     };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
     };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
   };
 
-  // Dragging the entire transition block (sliding both keyframes together)
-  const handleBlockDragStart = (e: React.MouseEvent, trackId: string, kf1Id: string, kf2Id: string) => {
+  // Drag the whole keyframe span of a track (the "clip") left/right, keeping its shape.
+  const handleBlockDrag = (e: React.MouseEvent, trackId: string) => {
     e.stopPropagation();
-    if (!rulerRef.current) return;
-    
-    const rect = rulerRef.current.getBoundingClientRect();
+    if (!laneRef.current) return;
+    onScrubStart?.();
+    selectTrack(trackId);
+    const rect = laneRef.current.getBoundingClientRect();
+    const usable = Math.max(1, rect.width - EDGE_INSET * 2);
     const startX = e.clientX;
-    
-    const track = tracks.find(t => t.id === trackId);
-    if (!track) return;
-    const kf1 = track.keyframes.find(k => k.id === kf1Id);
-    const kf2 = track.keyframes.find(k => k.id === kf2Id);
-    if (!kf1 || !kf2) return;
-    
-    const initialTime1 = kf1.time;
-    const initialTime2 = kf2.time;
+    const track = tracks.find((t) => t.id === trackId);
+    if (!track || track.keyframes.length === 0) return;
+    const initial = track.keyframes.map((k) => ({ id: k.id, time: k.time }));
+    const minT = Math.min(...initial.map((k) => k.time));
+    const maxT = Math.max(...initial.map((k) => k.time));
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaX = moveEvent.clientX - startX;
-      let deltaTime = (deltaX / rect.width) * duration;
-      
-      // Constrain block movement within timeline range [0, duration]
-      if (initialTime1 + deltaTime < 0) {
-        deltaTime = -initialTime1;
-      } else if (initialTime2 + deltaTime > duration) {
-        deltaTime = duration - initialTime2;
+    const move = (ev: MouseEvent) => {
+      let delta = ((ev.clientX - startX) / usable) * duration;
+      if (minT + delta < 0) delta = -minT;
+      if (maxT + delta > duration) delta = duration - maxT;
+      if (snapEnabled && !ev.altKey) {
+        const movedTimes = initial.map((keyframe) => keyframe.time + delta);
+        const targets = breakpointTimes({ excludeTrackId: trackId });
+        const snapCandidate = movedTimes.reduce<{ delta: number; distance: number } | null>((closest, movedTime) => {
+          const target = targets.reduce<{ time: number; distance: number } | null>((nearest, targetTime) => {
+            const distance = Math.abs(targetTime - movedTime);
+            if (distance > SNAP_THRESHOLD_SECONDS) return nearest;
+            if (!nearest || distance < nearest.distance) return { time: targetTime, distance };
+            return nearest;
+          }, null);
+          if (!target) return closest;
+          const candidateDelta = target.time - movedTime;
+          if (!closest || target.distance < closest.distance) return { delta: candidateDelta, distance: target.distance };
+          return closest;
+        }, null);
+        if (snapCandidate) {
+          delta += snapCandidate.delta;
+          if (minT + delta < 0) delta = -minT;
+          if (maxT + delta > duration) delta = duration - maxT;
+        }
       }
-      
-      const newTime1 = Number((initialTime1 + deltaTime).toFixed(2));
-      const newTime2 = Number((initialTime2 + deltaTime).toFixed(2));
-      
-      const updatedTracks = tracks.map((t) => {
-        if (t.id !== trackId) return t;
-        return {
-          ...t,
-          keyframes: t.keyframes.map(k => {
-            if (k.id === kf1Id) return { ...k, time: newTime1 };
-            if (k.id === kf2Id) return { ...k, time: newTime2 };
-            return k;
-          })
-        };
-      });
-      onTracksChange(updatedTracks);
+      onTracksChange(
+        tracks.map((t) =>
+          t.id !== trackId
+            ? t
+            : {
+                ...t,
+                keyframes: t.keyframes.map((k) => {
+                  const init = initial.find((i) => i.id === k.id);
+                  return init ? { ...k, time: Number((init.time + delta).toFixed(2)) } : k;
+                }),
+              }
+        )
+      );
     };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
     };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
   };
 
-  // Find active keyframe details
-  const activeKf = (() => {
-    if (!selectedTrackId || !selectedKeyframeId) return null;
-    const track = tracks.find(t => t.id === selectedTrackId);
-    if (!track) return null;
-    const kf = track.keyframes.find(k => k.id === selectedKeyframeId);
-    return kf ? { track, trackId: track.id, kf } : null;
-  })();
-  const visibleTracks = activeTrack ? [activeTrack] : [];
+  // Set the easing for an entire effect (all of a track's keyframes share one curve).
+  const setTrackEasing = (trackId: string, easing: EasingType) => {
+    onTracksChange(
+      tracks.map((t) =>
+        t.id === trackId ? { ...t, keyframes: t.keyframes.map((k) => ({ ...k, easing })) } : t
+      )
+    );
+  };
+
+  // Drag a shape stop along the time axis. Sets shapeDraggedRef so a real drag
+  // doesn't also fire the click that would open the picker popover.
+  const handleShapeDrag = (e: React.PointerEvent<HTMLElement>, shapeId: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!laneRef.current) return;
+    try {
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+    } catch {
+      // Synthetic pointer events used by tests may not be eligible for capture.
+    }
+    onSelectShape(shapeId);
+    setSelectedKeyframe(null);
+    shapeDraggedRef.current = false;
+    const rect = laneRef.current.getBoundingClientRect();
+    const usable = Math.max(1, rect.width - EDGE_INSET * 2);
+    const startX = e.clientX;
+    const move = (ev: PointerEvent) => {
+      if (Math.abs(ev.clientX - startX) > 3) {
+        if (!shapeDraggedRef.current) onScrubStart?.();
+        shapeDraggedRef.current = true;
+      }
+      const x = Math.max(0, Math.min(ev.clientX - rect.left - EDGE_INSET, usable));
+      const rawTime = (x / usable) * duration;
+      const newTime = Number(snapTime(rawTime, { bypass: ev.altKey, excludeShapeId: shapeId }).toFixed(2));
+      onShapesChange(shapes.map((s) => (s.id === shapeId ? { ...s, time: newTime } : s)));
+    };
+    const up = (ev: PointerEvent) => {
+      try {
+        e.currentTarget.releasePointerCapture?.(ev.pointerId);
+      } catch {
+        // Ignore release failures when the pointer was never captured.
+      }
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  const playheadX = xForFrac(currentTime / duration);
 
   return (
-    <div className="flex flex-col h-full bg-[#0f1012] select-none shrink-0 overflow-hidden font-sans">
-      
-      {/* 1. Header controls */}
-      <div className="flex items-center justify-between gap-3 px-3 h-9 border-b border-white/[0.055] bg-[#101113] shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="text-[11px] text-zinc-500 font-mono tabular-nums w-[58px] shrink-0">
-            <span className="text-zinc-300">{currentTime.toFixed(2)}s</span>
-          </div>
-          <div className="hidden sm:flex items-center gap-1.5 min-w-0 text-[10px] uppercase tracking-[0.14em] text-zinc-600">
-            <span>Keyframes</span>
-            <span className="text-zinc-700">/</span>
-            <span className="normal-case tracking-normal text-zinc-500 truncate">{activeTrack?.name}</span>
-          </div>
-        </div>
-
-        {/* Keyframe inspector */}
-        {activeKf && (
-          <div className="flex items-center gap-2 text-xs animate-fade-in">
-            <span className="hidden sm:inline text-zinc-500 text-[11px]">{activeKf.track.name}</span>
-            <span className="text-zinc-500 text-[11px]">{activeKf.kf.time.toFixed(2)}s</span>
-            <input
-              type="number"
-              min={activeKf.track.min}
-              max={activeKf.track.max}
-              step={(activeKf.track.max - activeKf.track.min) > 2 ? 0.1 : 0.01}
-              value={Number(activeKf.kf.value.toFixed(2))}
-              onChange={(event) => changeKeyframeValue(activeKf.trackId, activeKf.kf.id, Number.parseFloat(event.target.value))}
-              className="h-6 w-14 rounded-md border border-white/[0.08] bg-black/25 px-1.5 text-right font-mono text-[11px] text-zinc-300 outline-none focus:border-white/20"
-            />
-            <select
-              value={activeKf.kf.easing}
-              className="h-6 bg-black/25 border border-white/[0.08] rounded-md px-1.5 text-zinc-300 outline-none cursor-pointer text-[11px]"
-              onChange={(e) => changeKeyframeEasing(activeKf.trackId, activeKf.kf.id, e.target.value as EasingType)}
-            >
-              <option value="linear">Linear</option>
-              <option value="ease-in-out">Ease In Out</option>
-              <option value="spring">Spring</option>
-              <option value="bounce">Bounce</option>
-            </select>
-            <Button size="icon-xs" variant="ghost" aria-label="Delete keyframe" className="hover:bg-red-500/10 hover:text-red-400 text-zinc-600" onClick={() => deleteKeyframe(activeKf.trackId, activeKf.kf.id)}>
-              <Trash2 size={11} />
-            </Button>
-          </div>
-        )}
-        {!activeKf && sequenceSlot && (
-          <button
-            type="button"
-            onClick={() => setShowSequence((value) => !value)}
-            className={`h-6 shrink-0 rounded-md border px-2 text-[10px] font-medium transition-colors ${
-              showSequence
-                ? 'border-white/[0.14] bg-white/[0.08] text-zinc-100'
-                : 'border-white/[0.07] bg-black/20 text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-200'
-            }`}
-          >
-            Shapes
-          </button>
-        )}
-      </div>
-
-      {sequenceSlot && showSequence && (
-        <div className="h-9 shrink-0 border-b border-white/[0.055] bg-[#111316] flex items-center overflow-hidden">
-          <div className="min-w-0 flex-1 px-3 overflow-x-auto">
-            {sequenceSlot}
-          </div>
-        </div>
-      )}
-
-      {/* 2. Scrollable timeline tracks */}
-      <div className="flex flex-1 overflow-y-auto overflow-x-hidden min-h-0 bg-[#0f1012]">
-        {/* Left Side: Track Names list */}
-        <div className="w-[132px] border-r border-white/[0.055] shrink-0 bg-[#101113]">
-          {visibleTracks.map((track) => {
-            const isActiveTrack = activeTrackId === track.id || selectedTrackId === track.id;
-            return (
-            <div
-              key={track.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                selectTrack(track.id);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  selectTrack(track.id);
-                }
-              }}
-              className={`flex items-center justify-between h-10 px-3 border-b border-white/[0.035] group transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25 ${
-                isActiveTrack ? 'bg-white/[0.055]' : 'hover:bg-white/[0.02]'
+    <div className="flex h-full flex-col overflow-hidden bg-[#0f1012] font-sans select-none">
+      {/* Tracks */}
+      <div className="flex min-h-0 flex-1">
+        {/* Left rail: track names */}
+        <div className="shrink-0 border-r border-white/[0.06] bg-[#101113]" style={{ width: RAIL_WIDTH }}>
+          <div className="flex h-7 items-center gap-2 border-b border-white/[0.05] bg-black/15 px-2 font-mono text-[10px] tabular-nums">
+            <div className="min-w-0 flex-1">
+              <span className="text-zinc-300">{currentTime.toFixed(2)}</span>
+              <span className="px-1 text-zinc-700">/</span>
+              <span className="text-zinc-600">{duration.toFixed(1)}s</span>
+            </div>
+            <button
+              type="button"
+              aria-label={snapEnabled ? 'Disable timeline snapping' : 'Enable timeline snapping'}
+              aria-pressed={snapEnabled}
+              title={snapEnabled ? 'Snapping on · hold Option/Alt to bypass' : 'Snapping off'}
+              onClick={() => setSnapEnabled((enabled) => !enabled)}
+              className={`flex size-5 shrink-0 items-center justify-center rounded transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30 ${
+                snapEnabled
+                  ? 'bg-white/[0.1] text-zinc-100'
+                  : 'text-zinc-600 hover:bg-white/[0.06] hover:text-zinc-300'
               }`}
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <div className={`size-2 rounded-full shrink-0 ${isActiveTrack ? 'ring-2 ring-white/25' : ''}`} style={{ backgroundColor: track.color }} />
-                <div className="min-w-0">
-                  <div className={`text-[11px] font-medium truncate ${isActiveTrack ? 'text-zinc-100' : 'text-zinc-300'}`}>{track.name}</div>
-                  {track.keyframes.length > 0 && (
-                    <div className="text-[9px] leading-none text-zinc-600">{track.keyframes.length} {track.keyframes.length === 1 ? 'key' : 'keys'}</div>
-                  )}
-                </div>
-              </div>
-              <Button
-                size="icon-xs"
-                variant="ghost"
-                aria-label={`Add keyframe to ${track.name}`}
-                className={`${isActiveTrack ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} hover:bg-white/[0.08] transition-opacity text-zinc-500 hover:text-white`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  selectTrack(track.id);
-                  addKeyframe(track.id);
+              <Magnet className="size-3" />
+            </button>
+            <button
+              type="button"
+              aria-label={loop ? 'Disable loop playback' : 'Enable loop playback'}
+              aria-pressed={loop}
+              title={loop ? 'Looping on' : 'Looping off'}
+              onClick={() => onLoopChange(!loop)}
+              className={`flex size-5 shrink-0 items-center justify-center rounded transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30 ${
+                loop
+                  ? 'bg-white/[0.1] text-zinc-100'
+                  : 'text-zinc-600 hover:bg-white/[0.06] hover:text-zinc-300'
+              }`}
+            >
+              <RotateCw className="size-3" />
+            </button>
+          </div>
+          {/* Shape lane label + add */}
+          <div className={`group flex h-9 items-center gap-2 border-b border-white/[0.04] px-3 transition-colors ${selectedShapeId ? 'bg-white/[0.06]' : 'hover:bg-white/[0.025]'}`}>
+            <span className={`flex-1 truncate text-[11px] font-semibold ${selectedShapeId ? 'text-zinc-100' : 'text-zinc-300'}`}>Shape</span>
+            <button
+              type="button"
+              aria-label="Add shape"
+              title="Add shape at playhead"
+              onClick={onAddShape}
+              className="flex size-5 shrink-0 items-center justify-center rounded text-zinc-500 hover:text-white"
+            >
+              <Plus className="size-3.5" />
+            </button>
+          </div>
+          {tracks.map((track) => {
+            const isActive = activeTrackId === track.id;
+            const animated = track.keyframes.length > 0;
+            const keyedAtPlayhead = track.keyframes.some((k) => Math.abs(k.time - Number(currentTime.toFixed(2))) < 0.05);
+            return (
+              <div
+                key={track.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => selectTrack(track.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    selectTrack(track.id);
+                  }
                 }}
+                className={`group flex h-9 items-center gap-2 border-b border-white/[0.04] px-3 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-white/30 ${
+                  isActive ? 'bg-white/[0.06]' : 'hover:bg-white/[0.025]'
+                }`}
               >
-                <Plus size={10} />
-              </Button>
-            </div>
+                <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: track.color }} />
+                <span className={`flex-1 truncate text-[11px] font-medium ${isActive ? 'text-zinc-100' : 'text-zinc-400'}`}>
+                  {track.name}
+                </span>
+                {animated && (
+                  <EasingPicker
+                    value={track.keyframes[0]?.easing ?? 'ease-in-out'}
+                    onChange={(easing) => setTrackEasing(track.id, easing)}
+                    color={track.color}
+                  />
+                )}
+                <button
+                  type="button"
+                  aria-label={keyedAtPlayhead ? `Remove ${track.name} keyframe` : `Add ${track.name} keyframe`}
+                  title={keyedAtPlayhead ? 'Remove keyframe at playhead' : 'Add keyframe at playhead'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleKeyframeAtPlayhead(track.id);
+                  }}
+                  className={`flex size-5 shrink-0 items-center justify-center rounded transition-colors ${
+                    keyedAtPlayhead
+                      ? 'text-white opacity-100'
+                      : animated
+                      ? 'text-zinc-500 opacity-0 hover:text-white group-hover:opacity-100'
+                      : 'text-zinc-600 hover:text-white'
+                  }`}
+                >
+                  <Diamond className="size-3" style={{ fill: keyedAtPlayhead ? track.color : 'transparent', color: keyedAtPlayhead ? track.color : undefined }} />
+                </button>
+              </div>
             );
           })}
         </div>
 
-        {/* Right Side: Keyframe grid editor & scrub ruler */}
-        <div className="flex-1 flex flex-col relative overflow-hidden">
-          {/* Timeline ruler */}
-          <div ref={rulerRef} onMouseDown={handleMouseDown} className="h-6 bg-black/15 border-b border-white/[0.045] relative cursor-col-resize shrink-0">
-            {Array.from({ length: Math.ceil(duration) + 1 }).map((_, i) => (
-              <div key={i} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${(i / duration) * 100}%` }}>
-                <span className="text-[9px] text-zinc-600 font-mono pl-1 absolute top-1">{formatTimeLabel(i)}</span>
-                {i > 0 && <div className="w-px h-full bg-white/[0.025] absolute bottom-0" />}
+        {/* Right: ruler + lanes */}
+        <div className="relative min-w-0 flex-1">
+          {/* Ruler */}
+          <div
+            ref={laneRef}
+            onMouseDown={handleScrubStart}
+            className="relative h-7 cursor-col-resize border-b border-white/[0.05] bg-black/15"
+          >
+            {Array.from({ length: Math.floor(duration) + 1 }).map((_, i) => (
+              <div key={i} className="pointer-events-none absolute top-0 bottom-0" style={{ left: xForFrac(i / duration) }}>
+                {i > 0 && <div className="absolute top-0 bottom-0 w-px bg-white/[0.04]" />}
+                <span className="absolute top-1 pl-1 font-mono text-[9px] text-zinc-600">{i}s</span>
               </div>
             ))}
-            
-            {/* Playhead */}
-            <div className="absolute top-0 bottom-0 w-px bg-white z-10 pointer-events-none" style={{ left: `${(currentTime / duration) * 100}%` }}>
-              <div className="w-2.5 h-2.5 bg-white rounded-full absolute -top-0.5 -left-1 shadow-sm" />
+            <div className="pointer-events-none absolute top-0 bottom-0 z-20 w-px bg-white" style={{ left: playheadX }}>
+              <div className="absolute -top-px -left-[5px] size-2.5 rounded-full bg-white shadow" />
             </div>
           </div>
 
-          {/* Grid tracks container */}
-          <div className="flex-1 relative overflow-y-auto">
-            {visibleTracks.length === 0 && (
-              <div className="h-full flex items-center justify-center text-[11px] text-zinc-600">
-                Select a motion property
-              </div>
-            )}
-            {visibleTracks.map((track) => (
-              <div
-                key={track.id}
-                className={`h-10 border-b border-white/[0.035] relative transition-colors cursor-pointer ${
-                  activeTrackId === track.id || selectedTrackId === track.id ? 'bg-white/[0.025]' : 'hover:bg-white/[0.014]'
-                }`}
-                onClick={(event) => {
-                  selectTrack(track.id);
-                  onTimeChange(timeFromClientX(event.clientX));
-                }}
-                onDoubleClick={(e) => {
-                  e.preventDefault();
-                  addKeyframe(track.id);
-                }}
-              >
-                {/* Horizontal guide line */}
-                <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-white/[0.04] pointer-events-none" />
-
-                {/* Draw Keyframe diamonds */}
-                {track.keyframes.map((kf) => {
-                  const selected = selectedTrackId === track.id && selectedKeyframeId === kf.id;
-                  return (
-                    <div
-                      key={kf.id}
-                      title={`${track.name} ${formatValueLabel(track, kf.value)} at ${kf.time.toFixed(2)}s`}
-                      className="absolute top-1/2 -translate-y-1/2 size-3 rotate-45 border cursor-grab active:cursor-grabbing hover:scale-125 transition-transform duration-100 flex items-center justify-center"
+          {/* Lanes */}
+          <div className="relative">
+            {/* Shape lane: the morph sequence */}
+            <div
+              className={`relative h-9 border-b border-white/[0.04] transition-colors ${selectedShapeId ? 'bg-white/[0.03]' : 'hover:bg-white/[0.015]'}`}
+              onMouseDown={(e) => { onScrubStart?.(); onTimeChange(timeFromClientX(e.clientX)); }}
+            >
+              {/* Transition clips — click to customize that transition */}
+              {sortedShapes.slice(0, -1).map((stop, i) => {
+                const next = sortedShapes[i + 1];
+                return (
+                  <Popover key={`clip-${stop.id}`} open={openClipEditor === stop.id} onOpenChange={(o) => setOpenClipEditor(o ? stop.id : null)}>
+                    <PopoverTrigger
+                      title="Transition — click to edit blend & easing"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      className="group/clip absolute top-1/2 flex h-7 -translate-y-1/2 items-center justify-center focus-visible:outline-none"
                       style={{
-                        left: `calc(${(kf.time / duration) * 100}% - 6px)`,
-                        backgroundColor: selected ? '#ffffff' : track.color,
-                        borderColor: selected ? '#ffffff' : 'rgba(0,0,0,0.9)',
-                        boxShadow: selected ? `0 0 0 3px ${track.color}44` : 'none',
-                        zIndex: selected ? 30 : 20
+                        left: xForFrac(stop.time / duration),
+                        width: widthForSpan((next.time - stop.time) / duration),
                       }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        selectTrack(track.id);
-                        setSelectedKeyframeId(kf.id);
-                      }}
-                      onMouseDown={(e) => handleKeyframeDragStart(e, track.id, kf.id)}
                     >
+                      {/* Track line */}
+                      <span
+                        className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full opacity-45 transition-opacity group-hover/clip:opacity-70"
+                        style={{ background: `linear-gradient(90deg, ${stop.color}, ${next.color})` }}
+                      />
+                      {/* Distinct, always-visible transition badge with the easing curve */}
+                      <span className="relative z-10 flex size-5 items-center justify-center rounded-full border border-white/25 bg-[#0c0d0f] shadow-[0_1px_4px_rgba(0,0,0,0.6)] transition-transform group-hover/clip:scale-110 group-focus-visible/clip:ring-2 group-focus-visible/clip:ring-white/40">
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                          <path d={easingCurvePath(stop.easing)} stroke={stop.color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                    </PopoverTrigger>
+                    <PopoverContent align="center" side="top" sideOffset={10} className="w-56 border-white/[0.09] bg-[#15171a] p-2.5 text-zinc-100 shadow-2xl">
+                      <div className="flex items-center justify-between px-0.5 pb-2">
+                        <span className="text-[11px] font-medium text-zinc-300">Transition</span>
+                        <EasingPicker value={stop.easing} onChange={(easing) => onShapeEasingChange(stop.id, easing)} />
+                      </div>
+                      <div className="flex rounded-md border border-white/[0.07] bg-black/25 p-0.5">
+                        {([['none', 'Dissolve'], ['wipe', 'Wipe']] as const).map(([id, label]) => (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => onShapeBlendChange(stop.id, { transitionType: id })}
+                            className={`h-7 flex-1 rounded text-[11px] font-medium transition-colors ${stop.transitionType === id ? 'bg-white text-zinc-950' : 'text-zinc-500 hover:text-zinc-200'}`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      {stop.transitionType === 'wipe' && (
+                        <div className="mt-2 grid grid-cols-3 gap-1">
+                          {wipeDirections.map((dir) => {
+                            const active = stop.wipeDirection.x === dir.x && stop.wipeDirection.y === dir.y;
+                            return (
+                              <button
+                                key={dir.label}
+                                type="button"
+                                title={dir.tooltip}
+                                onClick={() => onShapeBlendChange(stop.id, { wipeDirection: { x: dir.x, y: dir.y } })}
+                                className={`flex size-8 items-center justify-center rounded-md border text-sm transition-colors ${active ? 'border-white bg-white text-zinc-950' : 'border-white/[0.08] bg-white/[0.035] text-zinc-400 hover:text-white'}`}
+                              >
+                                {dir.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </PopoverContent>
+                  </Popover>
+                );
+              })}
+              {/* Shape handles — drag to retime, click to pick/upload/remove */}
+              {sortedShapes.map((stop) => {
+                const selected = stop.id === selectedShapeId;
+                return (
+                  <Popover
+                    key={stop.id}
+                    open={openShapePicker === stop.id}
+                    onOpenChange={(o) => {
+                      if (o && shapeDraggedRef.current) { shapeDraggedRef.current = false; return; }
+                      onOpenShapePicker(o ? stop.id : null);
+                    }}
+                  >
+                    <PopoverTrigger
+                      title={`Shape @ ${stop.time.toFixed(2)}s — drag to retime, click to edit`}
+                      onPointerDown={(e) => handleShapeDrag(e, stop.id)}
+                      className="absolute top-1/2 flex size-6 -translate-y-1/2 touch-none cursor-grab items-center justify-center rounded-md border bg-[#0c0d0f] transition-transform hover:scale-110 active:cursor-grabbing focus-visible:outline-none"
+                      style={{
+                        left: xForFrac(stop.time / duration, -12),
+                        borderColor: selected ? '#ffffff' : 'rgba(255,255,255,0.22)',
+                        boxShadow: selected ? `0 0 0 2px ${stop.color}` : 'none',
+                        zIndex: selected ? 30 : 16,
+                      }}
+                    >
+                      <div
+                        className="size-4 [&_svg]:h-full [&_svg]:w-full [&_svg]:fill-current [&_svg]:stroke-current"
+                        style={{ color: stop.color }}
+                        dangerouslySetInnerHTML={{ __html: stop.svgContent }}
+                      />
+                    </PopoverTrigger>
+                    <PopoverContent align="center" side="top" sideOffset={10} className="w-72 border-white/[0.09] bg-[#15171a] p-2.5 text-zinc-100 shadow-2xl">
+                      <div className="flex items-center justify-between px-1 pb-2">
+                        <span className="text-[11px] font-medium text-zinc-300">Shape</span>
+                        <div className="flex items-center gap-1">
+                          <button type="button" onClick={() => { onUploadShape(stop.id); onOpenShapePicker(null); }} className="h-6 rounded-md px-2 text-[10px] text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200">Upload SVG</button>
+                          {shapes.length > 1 && (
+                            <button type="button" aria-label="Remove shape" title="Remove shape" onClick={() => { onRemoveShape(stop.id); onOpenShapePicker(null); }} className="flex size-6 items-center justify-center rounded-md text-zinc-500 hover:bg-red-500/10 hover:text-red-400">
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {shapeOptions.map((opt) => {
+                          const active = stop.iconId === opt.id;
+                          return (
+                            <button
+                              key={`pick-${stop.id}-${opt.id}`}
+                              type="button"
+                              title={opt.name}
+                              onClick={() => { onShapeIconChange(stop.id, opt); onOpenShapePicker(null); }}
+                              className={`aspect-square rounded-md border p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${active ? 'bg-white/[0.08]' : 'border-white/[0.08] bg-white/[0.035] text-zinc-400 hover:border-white/[0.18] hover:bg-white/[0.06]'}`}
+                              style={active ? { borderColor: opt.defaultTint } : undefined}
+                            >
+                              <div className="size-5 mx-auto [&_svg]:h-full [&_svg]:w-full [&_svg]:fill-current [&_svg]:stroke-current" style={{ color: opt.defaultTint }} dangerouslySetInnerHTML={{ __html: opt.svgContent }} />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                );
+              })}
+            </div>
+
+            {tracks.map((track) => {
+              const isActive = activeTrackId === track.id;
+              const animated = track.keyframes.length > 0;
+              const sorted = [...track.keyframes].sort((a, b) => a.time - b.time);
+              const first = sorted[0];
+              const last = sorted[sorted.length - 1];
+              return (
+                <div
+                  key={track.id}
+                  className={`relative h-9 border-b border-white/[0.04] transition-colors ${
+                    isActive ? 'bg-white/[0.03]' : 'hover:bg-white/[0.015]'
+                  }`}
+                  onMouseDown={(e) => {
+                    onScrubStart?.();
+                    selectTrack(track.id);
+                    onTimeChange(timeFromClientX(e.clientX));
+                  }}
+                  onDoubleClick={(e) => {
+                    e.preventDefault();
+                    // Add a keyframe exactly where the user double-clicked.
+                    const t = timeFromClientX(e.clientX);
+                    const exists = track.keyframes.some((k) => Math.abs(k.time - t) < 0.05);
+                    if (exists) return;
+                    const value = interpolateKeyframes(t, track);
+                    const prev = [...track.keyframes].sort((a, b) => a.time - b.time).filter((k) => k.time <= t).pop();
+                    const kf: Keyframe = {
+                      id: Math.random().toString(36).slice(2, 10),
+                      time: Number(t.toFixed(2)),
+                      value,
+                      easing: prev?.easing ?? 'ease-in-out',
+                    };
+                    selectTrack(track.id);
+                    setSelectedKeyframe({ trackId: track.id, kfId: kf.id });
+                    onTracksChange(
+                      tracks.map((tr) => (tr.id === track.id ? { ...tr, keyframes: [...tr.keyframes, kf].sort((a, b) => a.time - b.time) } : tr))
+                    );
+                  }}
+                >
+                  {/* Draggable "clip" spanning first→last keyframe: drag body to move the whole window */}
+                  {animated && first && last && last.time > first.time && (
+                    <div
+                      title="Drag to move · drag the diamonds to resize"
+                      className="absolute top-1/2 h-2 -translate-y-1/2 cursor-grab rounded-full opacity-55 transition-opacity hover:opacity-80 active:cursor-grabbing"
+                      style={{
+                        left: xForFrac(first.time / duration),
+                        width: widthForSpan((last.time - first.time) / duration),
+                        backgroundColor: track.color,
+                      }}
+                      onMouseDown={(e) => handleBlockDrag(e, track.id)}
+                    />
+                  )}
+
+                  {/* Constant (un-animated) hint */}
+                  {!animated && (
+                    <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 items-center">
+                      <div className="h-px w-full bg-white/[0.05]" />
+                      <span className="absolute left-2 rounded bg-[#0f1012] pr-1 text-[10px] text-zinc-600">
+                        {formatValueLabel(track, track.defaultValue)} · constant
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-            ))}
-            
-            {/* Playhead line across tracks */}
-            <div className="absolute top-0 bottom-0 w-px bg-white/15 pointer-events-none" style={{ left: `${(currentTime / duration) * 100}%` }} />
+                  )}
+
+                  {/* Keyframe diamonds */}
+                  {track.keyframes.map((kf) => {
+                    const selected = selectedKeyframe?.trackId === track.id && selectedKeyframe?.kfId === kf.id;
+                    const startMouseDown = (e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      selectTrack(track.id);
+                      setSelectedKeyframe({ trackId: track.id, kfId: kf.id });
+                      handleKeyframeDrag(e, track.id, kf.id);
+                    };
+
+                    return (
+                      <div
+                        key={kf.id}
+                        title={`${track.name} · ${formatValueLabel(track, kf.value)} @ ${kf.time.toFixed(2)}s`}
+                        className="absolute top-1/2 size-3 -translate-y-1/2 rotate-45 cursor-grab border transition-transform hover:scale-125 active:cursor-grabbing"
+                        style={{
+                          left: xForFrac(kf.time / duration, -6),
+                          backgroundColor: selected ? '#ffffff' : track.color,
+                          borderColor: selected ? '#ffffff' : 'rgba(0,0,0,0.85)',
+                          boxShadow: selected ? `0 0 0 3px ${track.color}55` : 'none',
+                          zIndex: selected ? 30 : 15,
+                        }}
+                        onMouseDown={startMouseDown}
+                      />
+                    );
+                  })}
+                </div>
+              );
+            })}
+
+            {/* Playhead across all lanes */}
+            <div className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-white/25" style={{ left: playheadX }} />
           </div>
         </div>
       </div>

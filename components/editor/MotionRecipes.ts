@@ -31,8 +31,7 @@ export interface MotionRecipe {
   
   transitionType: 'none' | 'wipe';
   wipeDirection: { x: number; y: number };
-  
-  rotationSpeed: { x: number; y: number; z: number };
+
   keyLightIntensity: number;
   
   // Custom pre-configured timeline tracks
@@ -57,7 +56,7 @@ export const MOTION_RECIPES: MotionRecipe[] = [
     clearcoat: 1.0,
     transmission: 0.9,
     emissiveIntensity: 0.0,
-    extrusionDepth: 1.1,
+    extrusionDepth: 10,
     bevelEnabled: true,
     bevelThickness: 0.14,
     bevelSize: 0.07,
@@ -65,7 +64,6 @@ export const MOTION_RECIPES: MotionRecipe[] = [
     layerSpacing: 0.7,
     transitionType: 'wipe',
     wipeDirection: { x: 0, y: 0 }, // Cinematic cross-fade
-    rotationSpeed: { x: 0.1, y: 0.4, z: 0 },
     keyLightIntensity: 1.3,
     tracks: [
       {
@@ -85,12 +83,12 @@ export const MOTION_RECIPES: MotionRecipe[] = [
         name: 'Depth',
         color: '#00f5ff',
         min: 0.2,
-        max: 3.0,
-        defaultValue: 1.1,
+        max: 20,
+        defaultValue: 10,
         keyframes: [
-          { id: 'kf-sg-e1', time: 0.6, value: 1.1, easing: 'spring' },
-          { id: 'kf-sg-e2', time: 2.4, value: 2.2, easing: 'spring' },
-          { id: 'kf-sg-e3', time: 4.2, value: 1.1, easing: 'spring' }
+          { id: 'kf-sg-e1', time: 0.6, value: 10, easing: 'spring' },
+          { id: 'kf-sg-e2', time: 2.4, value: 12, easing: 'spring' },
+          { id: 'kf-sg-e3', time: 4.2, value: 10, easing: 'spring' }
         ]
       },
       {
@@ -111,7 +109,7 @@ export const MOTION_RECIPES: MotionRecipe[] = [
         name: 'Light',
         color: '#ff5b9a',
         min: 0.0,
-        max: 3.0,
+        max: 10,
         defaultValue: 1.3,
         keyframes: []
       }
@@ -134,7 +132,7 @@ export const MOTION_RECIPES: MotionRecipe[] = [
     clearcoat: 0.0,
     transmission: 0.0,
     emissiveIntensity: 2.5,
-    extrusionDepth: 1.4,
+    extrusionDepth: 10,
     bevelEnabled: true,
     bevelThickness: 0.16,
     bevelSize: 0.08,
@@ -142,7 +140,6 @@ export const MOTION_RECIPES: MotionRecipe[] = [
     layerSpacing: 0.9,
     transitionType: 'wipe',
     wipeDirection: { x: 1, y: 0 }, // Left to Right
-    rotationSpeed: { x: 0.15, y: 0.6, z: 0 },
     keyLightIntensity: 1.0,
     tracks: [
       {
@@ -162,8 +159,8 @@ export const MOTION_RECIPES: MotionRecipe[] = [
         name: 'Depth',
         color: '#ffb703',
         min: 0.2,
-        max: 3.0,
-        defaultValue: 1.4,
+        max: 20,
+        defaultValue: 10,
         keyframes: []
       },
       {
@@ -183,7 +180,7 @@ export const MOTION_RECIPES: MotionRecipe[] = [
         name: 'Light',
         color: '#00ff7f',
         min: 0.0,
-        max: 3.0,
+        max: 10,
         defaultValue: 1.0,
         keyframes: [
           { id: 'kf-cp-l1', time: 0.8, value: 0.8, easing: 'ease-in-out' },
@@ -210,7 +207,7 @@ export const MOTION_RECIPES: MotionRecipe[] = [
     clearcoat: 0.5,
     transmission: 0.0,
     emissiveIntensity: 0.0,
-    extrusionDepth: 1.2,
+    extrusionDepth: 10,
     bevelEnabled: true,
     bevelThickness: 0.12,
     bevelSize: 0.06,
@@ -218,7 +215,6 @@ export const MOTION_RECIPES: MotionRecipe[] = [
     layerSpacing: 0.75,
     transitionType: 'wipe',
     wipeDirection: { x: 0.707, y: -0.707 }, // Bottom Right to Top Left
-    rotationSpeed: { x: 0.05, y: 0.35, z: 0 },
     keyLightIntensity: 1.8,
     tracks: [
       {
@@ -238,12 +234,12 @@ export const MOTION_RECIPES: MotionRecipe[] = [
         name: 'Depth',
         color: '#ffffff',
         min: 0.2,
-        max: 3.0,
-        defaultValue: 1.2,
+        max: 20,
+        defaultValue: 10,
         keyframes: [
-          { id: 'kf-lg-e1', time: 1.0, value: 1.2, easing: 'ease-in-out' },
-          { id: 'kf-lg-e2', time: 2.5, value: 0.6, easing: 'ease-in-out' },
-          { id: 'kf-lg-e3', time: 4.0, value: 1.2, easing: 'ease-in-out' }
+          { id: 'kf-lg-e1', time: 1.0, value: 10, easing: 'ease-in-out' },
+          { id: 'kf-lg-e2', time: 2.5, value: 8, easing: 'ease-in-out' },
+          { id: 'kf-lg-e3', time: 4.0, value: 10, easing: 'ease-in-out' }
         ]
       },
       {
@@ -260,7 +256,7 @@ export const MOTION_RECIPES: MotionRecipe[] = [
         name: 'Light',
         color: '#fb8500',
         min: 0.0,
-        max: 3.0,
+        max: 10,
         defaultValue: 1.8,
         keyframes: []
       }

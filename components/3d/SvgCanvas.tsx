@@ -22,6 +22,7 @@ export interface SvgCanvasProps {
   colorASecondary?: string;
   colorBSecondary?: string;
   enableGradient?: boolean;
+  gradientType?: 'linear' | 'radial' | 'conic';
   roughness: number;
   metalness: number;
   clearcoat: number;
@@ -39,19 +40,21 @@ export interface SvgCanvasProps {
   transitionType: 'none' | 'wipe';
   wipeDirection: { x: number; y: number }; // (0,0) means Crossfade / Dissolve
   transitionProgress: number; // 0 to 1
-  rotationSpeed: { x: number; y: number; z: number };
   rotationOffset: { x: number; y: number; z: number };
+  objectScale: number;
   isPlaying: boolean;
   ambientColor: string;
   ambientIntensity: number;
   keyLightColor: string;
   keyLightIntensity: number;
+  keyLightPosition: { x: number; y: number; z: number };
   rimLightColor: string;
   rimLightIntensity: number;
   zoom: number;
   pathOverridesA?: PathOverride[];
   pathOverridesB?: PathOverride[];
   onZoomChange?: (zoom: number) => void;
+  onViewRotationCommit?: (rotationDelta: { x: number; y: number; z: number }) => void;
 }
 
 export interface SvgCanvasRef {
@@ -83,8 +86,8 @@ const containsInvalidPositions = (geometry: THREE.BufferGeometry) => {
   return false;
 };
 
-const getOrCreateGradientTexture = (color1: string, color2: string): THREE.CanvasTexture => {
-  const key = `${color1}_${color2}`;
+const getOrCreateGradientTexture = (color1: string, color2: string, type: 'linear' | 'radial' | 'conic' = 'linear'): THREE.CanvasTexture => {
+  const key = `${type}_${color1}_${color2}`;
   if (gradientCache.has(key)) {
     return gradientCache.get(key)!;
   }
@@ -94,7 +97,11 @@ const getOrCreateGradientTexture = (color1: string, color2: string): THREE.Canva
   canvas.height = 256;
   const ctx = canvas.getContext('2d');
   if (ctx) {
-    const grad = ctx.createLinearGradient(0, 0, 0, 256);
+    const grad = type === 'radial'
+      ? ctx.createRadialGradient(88, 88, 8, 128, 128, 170)
+      : type === 'conic' && typeof ctx.createConicGradient === 'function'
+        ? ctx.createConicGradient(Math.PI / 4, 128, 128)
+        : ctx.createLinearGradient(0, 0, 256, 256);
     grad.addColorStop(0, color1);
     grad.addColorStop(1, color2);
     ctx.fillStyle = grad;
@@ -133,12 +140,13 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
   const previousPointerPositionRef = useRef({ x: 0, y: 0 });
   const targetRotationRef = useRef({ ...DEFAULT_VIEW_ROTATION });
   const currentRotationRef = useRef({ ...DEFAULT_VIEW_ROTATION });
+  const onViewRotationCommitRef = useRef(props.onViewRotationCommit);
   const liveRenderPropsRef = useRef({
     transitionType: props.transitionType,
     transitionProgress: props.transitionProgress,
     wipeDirection: props.wipeDirection,
     rotationOffset: props.rotationOffset,
-    rotationSpeed: props.rotationSpeed,
+    objectScale: props.objectScale,
     isPlaying: props.isPlaying,
     keyLightIntensity: props.keyLightIntensity
   });
@@ -168,10 +176,11 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     transitionProgress: props.transitionProgress,
     wipeDirection: props.wipeDirection,
     rotationOffset: props.rotationOffset,
-    rotationSpeed: props.rotationSpeed,
+    objectScale: props.objectScale,
     isPlaying: props.isPlaying,
     keyLightIntensity: props.keyLightIntensity
   };
+  onViewRotationCommitRef.current = props.onViewRotationCommit;
 
   // Handle outside actions via ref
   useImperativeHandle(ref, () => ({
@@ -322,7 +331,8 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
 
       const textureMap = props.enableGradient ? getOrCreateGradientTexture(
         isIconA ? props.colorA : props.colorB,
-        isIconA ? (props.colorASecondary || props.colorA) : (props.colorBSecondary || props.colorB)
+        isIconA ? (props.colorASecondary || props.colorA) : (props.colorBSecondary || props.colorB),
+        props.gradientType ?? 'linear'
       ) : null;
 
       const pathMaterial = createThreeMaterial(props.materialPreset, {
@@ -695,7 +705,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     ambientLightRef.current = ambientLight;
 
     const keyLight = new THREE.DirectionalLight(props.keyLightColor, props.keyLightIntensity);
-    keyLight.position.set(5, 5, 4);
+    keyLight.position.set(props.keyLightPosition.x, props.keyLightPosition.y, props.keyLightPosition.z);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.width = 1024;
     keyLight.shadow.mapSize.height = 1024;
@@ -733,6 +743,16 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     const handlePointerUp = (e: PointerEvent) => {
       isDraggingRef.current = false;
       currentRotationRef.current = { ...targetRotationRef.current };
+      const rotationDelta = {
+        x: THREE.MathUtils.radToDeg(currentRotationRef.current.x),
+        y: THREE.MathUtils.radToDeg(currentRotationRef.current.y),
+        z: 0
+      };
+      if (Math.abs(rotationDelta.x) > 0.1 || Math.abs(rotationDelta.y) > 0.1) {
+        onViewRotationCommitRef.current?.(rotationDelta);
+        targetRotationRef.current = { ...DEFAULT_VIEW_ROTATION };
+        currentRotationRef.current = { ...DEFAULT_VIEW_ROTATION };
+      }
       try {
         canvas.releasePointerCapture(e.pointerId);
       } catch (err) {}
@@ -800,6 +820,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     if (keyLightRef.current) {
       keyLightRef.current.color.set(props.keyLightColor);
       keyLightRef.current.intensity = props.keyLightIntensity;
+      keyLightRef.current.position.set(props.keyLightPosition.x, props.keyLightPosition.y, props.keyLightPosition.z);
     }
     if (rimLightRef.current) {
       rimLightRef.current.color.set(props.rimLightColor);
@@ -808,7 +829,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     if (rendererRef.current) {
       rendererRef.current.toneMappingExposure = Math.max(0.45, Math.min(1.8, 0.75 + props.keyLightIntensity * 0.22));
     }
-  }, [props.ambientColor, props.ambientIntensity, props.keyLightColor, props.keyLightIntensity, props.rimLightColor, props.rimLightIntensity]);
+  }, [props.ambientColor, props.ambientIntensity, props.keyLightColor, props.keyLightIntensity, props.keyLightPosition, props.rimLightColor, props.rimLightIntensity]);
 
   // Effect: Rebuilds SVG 3D models when properties change
   useEffect(() => {
@@ -842,6 +863,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     props.colorASecondary,
     props.colorBSecondary,
     props.enableGradient,
+    props.gradientType,
     props.roughness,
     props.metalness,
     props.clearcoat,
@@ -868,7 +890,6 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       if (!scene || !renderer || !camera) return;
 
       const liveProps = liveRenderPropsRef.current;
-      const elapsed = (performance.now() - animationStartRef.current) / 1000;
       const progress = liveProps.transitionProgress;
 
       // 1. Use direct view rotation while editing. Drag release should freeze exactly where the pointer left it.
@@ -887,6 +908,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
         pivotGroupRef.current.rotation.x = displayRotation.x;
         pivotGroupRef.current.rotation.y = displayRotation.y;
         pivotGroupRef.current.rotation.z = displayRotation.z;
+        pivotGroupRef.current.scale.setScalar(Math.max(0.05, finiteNumber(liveProps.objectScale, 1)));
       }
 
       // 2. Smoothly damp the scroll-wheel camera zoom
@@ -896,17 +918,8 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       // 3. Update the 2D SVG Orientation Gizmo
       updateGizmo(displayRotation.x, displayRotation.y, displayRotation.z);
 
-      // Apply automatic spin only during preview playback. Idle editing should stay still.
-      if (iconAGroupRef.current) {
-        iconAGroupRef.current.rotation.y = liveProps.isPlaying ? elapsed * liveProps.rotationSpeed.y * 0.15 : 0;
-        iconAGroupRef.current.rotation.x = liveProps.isPlaying ? elapsed * liveProps.rotationSpeed.x * 0.15 : 0;
-        iconAGroupRef.current.rotation.z = liveProps.isPlaying ? elapsed * liveProps.rotationSpeed.z * 0.15 : 0;
-      }
-      if (iconBGroupRef.current) {
-        iconBGroupRef.current.rotation.y = liveProps.isPlaying ? elapsed * liveProps.rotationSpeed.y * 0.15 : 0;
-        iconBGroupRef.current.rotation.x = liveProps.isPlaying ? elapsed * liveProps.rotationSpeed.x * 0.15 : 0;
-        iconBGroupRef.current.rotation.z = liveProps.isPlaying ? elapsed * liveProps.rotationSpeed.z * 0.15 : 0;
-      }
+      // All rotation is driven by the timeline via the pivot group (rotationOffset),
+      // so the inner shape groups stay neutral and spin together with the pivot.
 
       // 4. Compute Transition Wipe boundaries
       const isWipeActive = liveProps.transitionType === 'wipe' && (liveProps.wipeDirection.x !== 0 || liveProps.wipeDirection.y !== 0);

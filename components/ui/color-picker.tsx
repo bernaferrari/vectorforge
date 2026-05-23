@@ -81,46 +81,42 @@ interface ColorPickerProps {
   value: string
   onChange: (hex: string) => void
   className?: string
+  // Optional gradient support — when onGradientToggle is provided, the popover
+  // shows a Solid/Gradient toggle and (in gradient mode) two editable stops.
+  gradient?: boolean
+  onGradientToggle?: (on: boolean) => void
+  gradientType?: "linear" | "radial" | "conic"
+  onGradientTypeChange?: (type: "linear" | "radial" | "conic") => void
+  secondaryValue?: string
+  onSecondaryChange?: (hex: string) => void
 }
 
-const SWATCH_GROUPS = [
-  {
-    name: "Monochrome & Slate",
-    swatches: [
-      { name: "White", hex: "#ffffff" },
-      { name: "Zinc 200", hex: "#e4e4e7" },
-      { name: "Zinc 400", hex: "#a1a1aa" },
-      { name: "Zinc 600", hex: "#52525b" },
-      { name: "Zinc 800", hex: "#27272a" },
-      { name: "Black", hex: "#09090b" }
-    ]
-  },
-  {
-    name: "Electric & Neon",
-    swatches: [
-      { name: "Neon Violet", hex: "#8b5cf6" },
-      { name: "Electric Indigo", hex: "#6366f1" },
-      { name: "Sunset Pink", hex: "#f43f5e" },
-      { name: "Teal Glow", hex: "#14b8a6" },
-      { name: "Emerald Mint", hex: "#10b981" },
-      { name: "Lime Punch", hex: "#84cc16" }
-    ]
-  },
-  {
-    name: "Satin Pastels",
-    swatches: [
-      { name: "Blossom Pink", hex: "#ffb3c6" },
-      { name: "Warm Peach", hex: "#ffe5ec" },
-      { name: "Vanilla Sand", hex: "#fde2e4" },
-      { name: "Sky Mist", hex: "#b3e5fc" },
-      { name: "Mint Foam", hex: "#c8e6c9" },
-      { name: "Lavender Glow", hex: "#e1bee7" }
-    ]
-  }
+const GRADIENT_TYPES: Array<{ id: "linear" | "radial" | "conic"; label: string }> = [
+  { id: "linear", label: "Linear" },
+  { id: "radial", label: "Radial" },
+  { id: "conic", label: "Conic" },
 ]
 
-export function ColorPicker({ value, onChange, className }: ColorPickerProps) {
-  const hex = value.startsWith("#") ? value : `#${value}`
+export function ColorPicker({ value, onChange, className, gradient, onGradientToggle, gradientType = "linear", onGradientTypeChange, secondaryValue, onSecondaryChange }: ColorPickerProps) {
+  const supportsGradient = !!onGradientToggle
+  const isGradient = !!gradient
+  const [activeStop, setActiveStop] = React.useState<0 | 1>(0)
+  React.useEffect(() => { if (!isGradient) setActiveStop(0) }, [isGradient])
+
+  // The stop currently being edited (stop 1 only exists in gradient mode).
+  const editingSecondary = isGradient && activeStop === 1 && !!onSecondaryChange
+  const activeValue = editingSecondary ? (secondaryValue ?? value) : value
+  const activeOnChange = editingSecondary ? onSecondaryChange! : onChange
+
+  const hex = activeValue.startsWith("#") ? activeValue : `#${activeValue}`
+  const primaryHex = value.startsWith("#") ? value : `#${value}`
+  const secondaryHex = (secondaryValue ?? value).startsWith("#") ? (secondaryValue ?? value) : `#${secondaryValue ?? value}`
+  const gradientCss =
+    gradientType === "radial"
+      ? `radial-gradient(circle at 35% 35%, ${primaryHex}, ${secondaryHex})`
+      : gradientType === "conic"
+        ? `conic-gradient(from 45deg, ${primaryHex}, ${secondaryHex}, ${primaryHex})`
+        : `linear-gradient(90deg, ${primaryHex}, ${secondaryHex})`
 
   // Parse HSV color model dynamically
   const { h, s, v } = React.useMemo(() => {
@@ -150,8 +146,8 @@ export function ColorPicker({ value, onChange, className }: ColorPickerProps) {
     
     const newS = Math.round(x * 100)
     const newV = Math.round(y * 100)
-    onChange(hsvToHex(h, newS, newV))
-  }, [h, onChange])
+    activeOnChange(hsvToHex(h, newS, newV))
+  }, [h, activeOnChange])
 
   const handleCanvasStart = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault()
@@ -184,8 +180,8 @@ export function ColorPicker({ value, onChange, className }: ColorPickerProps) {
     const rect = hueRef.current.getBoundingClientRect()
     const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
     const newH = Math.round(x * 360)
-    onChange(hsvToHex(newH, s, v))
-  }, [s, v, onChange])
+    activeOnChange(hsvToHex(newH, s, v))
+  }, [s, v, activeOnChange])
 
   const handleHueStart = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault()
@@ -218,7 +214,7 @@ export function ColorPicker({ value, onChange, className }: ColorPickerProps) {
       formatted = `#${formatted}`
     }
     if (/^#[0-9A-Fa-f]{6}$/.test(formatted)) {
-      onChange(formatted)
+      activeOnChange(formatted)
     }
   }
 
@@ -229,7 +225,7 @@ export function ColorPicker({ value, onChange, className }: ColorPickerProps) {
         formatted = `#${formatted}`
       }
       if (/^#[0-9A-Fa-f]{6}$/.test(formatted)) {
-        onChange(formatted)
+        activeOnChange(formatted)
       } else {
         setInputText(hex) // revert
       }
@@ -243,7 +239,7 @@ export function ColorPicker({ value, onChange, className }: ColorPickerProps) {
       formatted = `#${formatted}`
     }
     if (/^#[0-9A-Fa-f]{6}$/.test(formatted)) {
-      onChange(formatted)
+      activeOnChange(formatted)
     } else {
       setInputText(hex) // revert
     }
@@ -259,37 +255,103 @@ export function ColorPicker({ value, onChange, className }: ColorPickerProps) {
       >
         <div
           className="w-4 h-4 rounded-md shadow-sm border border-white/10 shrink-0"
-          style={{ backgroundColor: hex }}
+          style={{ background: isGradient ? gradientCss : primaryHex }}
         />
         <span className="font-mono text-[11px] text-zinc-300 font-semibold tracking-wider uppercase flex-1">
-          {hex}
+          {isGradient ? "Gradient" : primaryHex}
         </span>
       </PopoverTrigger>
-      
-      <PopoverContent 
-        className="w-[268px] p-4 bg-zinc-950 border border-zinc-850 rounded-2xl shadow-2xl text-white select-none flex flex-col gap-4 z-50 animate-fade-in backdrop-blur-xl bg-zinc-950/95"
+
+      <PopoverContent
+        className="w-[260px] rounded-xl border border-white/[0.1] bg-[#141518]/95 p-3 text-white shadow-2xl backdrop-blur-xl z-50 animate-fade-in select-none"
         align="start"
         sideOffset={6}
       >
-        {/* Header Title */}
-        <div className="flex items-center justify-between border-b border-zinc-900 pb-2 mb-0.5">
-          <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Color Studio</span>
-          <span className="text-[9px] font-mono text-zinc-500 bg-zinc-900/60 border border-zinc-800 rounded px-1.5 py-0.5 uppercase">{hex}</span>
-        </div>
+        {supportsGradient && (
+          <div className="flex items-center gap-1 rounded-lg border border-white/[0.07] bg-black/25 p-0.5">
+            <button
+              type="button"
+              onClick={() => onGradientToggle?.(false)}
+              className={cn(
+                "h-7 flex-1 rounded-md text-[10px] font-medium transition-colors",
+                !isGradient ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-200"
+              )}
+            >
+              Solid
+            </button>
+            {GRADIENT_TYPES.map((type) => (
+              <button
+                key={type.id}
+                type="button"
+                onClick={() => {
+                  onGradientToggle?.(true)
+                  onGradientTypeChange?.(type.id)
+                }}
+                className={cn(
+                  "h-7 flex-1 rounded-md text-[10px] font-medium transition-colors",
+                  isGradient && gradientType === type.id ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-200"
+                )}
+              >
+                {type.label}
+              </button>
+            ))}
+          </div>
+        )}
 
-        {/* Saturation-Value Canvas Area */}
+        {isGradient && (
+          <div className="mt-3 rounded-lg border border-white/[0.07] bg-black/20 p-2">
+            <div
+              className="relative mb-2 h-8 rounded-md border border-white/[0.08]"
+              style={{ background: gradientCss }}
+            >
+              {([0, 1] as const).map((stop) => (
+                <button
+                  key={`gradient-stop-${stop}`}
+                  type="button"
+                  aria-label={stop === 0 ? "Edit first gradient stop" : "Edit second gradient stop"}
+                  onClick={() => setActiveStop(stop)}
+                  className={cn(
+                    "absolute top-1/2 size-4 -translate-y-1/2 rounded-full border-2 shadow-[0_1px_6px_rgba(0,0,0,0.45)] transition-transform",
+                    activeStop === stop ? "scale-110 border-white" : "border-black/55 hover:scale-105"
+                  )}
+                  style={{
+                    left: stop === 0 ? 8 : "auto",
+                    right: stop === 1 ? 8 : "auto",
+                    backgroundColor: stop === 0 ? primaryHex : secondaryHex,
+                  }}
+                />
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+            {([0, 1] as const).map((stop) => (
+              <button
+                key={stop}
+                type="button"
+                onClick={() => setActiveStop(stop)}
+                className={cn(
+                  "flex h-8 flex-1 items-center gap-2 rounded-md border px-2 transition-colors",
+                  activeStop === stop ? "border-white/50 bg-white/[0.08]" : "border-white/[0.07] bg-black/20 hover:border-white/20"
+                )}
+              >
+                <span className="size-4 rounded border border-white/10" style={{ backgroundColor: stop === 0 ? primaryHex : secondaryHex }} />
+                <span className="font-mono text-[10px] text-zinc-400">{stop === 0 ? "Start" : "End"}</span>
+              </button>
+            ))}
+            </div>
+          </div>
+        )}
+
         <div
           ref={canvasRef}
           onMouseDown={handleCanvasStart}
           onTouchStart={handleCanvasStart}
-          className="h-32 w-full relative rounded-lg overflow-hidden cursor-crosshair select-none border border-white/5 shadow-inner"
+          className="mt-3 h-36 w-full relative rounded-lg overflow-hidden cursor-crosshair select-none border border-white/[0.08] shadow-inner"
           style={{
             backgroundColor: `hsl(${h}, 100%, 50%)`,
             backgroundImage: "linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent)",
             backgroundBlendMode: "multiply"
           }}
         >
-          {/* Draggable indicator dot (Precise transparent hairline cursor) */}
           <div
             className="absolute w-4 h-4 rounded-full border border-white shadow-[0_0_0_1px_rgba(0,0,0,0.8),0_1px_5px_rgba(0,0,0,0.5)] -translate-x-1/2 -translate-y-1/2 pointer-events-none transition-[transform] duration-75 flex items-center justify-center"
             style={{
@@ -297,15 +359,13 @@ export function ColorPicker({ value, onChange, className }: ColorPickerProps) {
               top: `${100 - v}%`,
             }}
           >
-            {/* Inner tiny dot for center alignment */}
             <div className="w-1 h-1 rounded-full bg-white/60" />
           </div>
         </div>
 
-        {/* Hue Slider */}
         <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between text-[9px] text-zinc-500 font-bold uppercase tracking-wider pl-0.5">
-            <span>Spectrum Hue</span>
+          <div className="mt-3 flex items-center justify-between text-[9px] text-zinc-500 font-bold uppercase tracking-wider pl-0.5">
+            <span>Hue</span>
             <span className="font-mono text-zinc-400 font-semibold">{h}°</span>
           </div>
           <div
@@ -317,7 +377,6 @@ export function ColorPicker({ value, onChange, className }: ColorPickerProps) {
               background: "linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)"
             }}
           >
-            {/* Hue Slider Thumb (Glassmorphic ring thumb) */}
             <div
               className="absolute w-4 h-4 rounded-full border-2 border-white bg-zinc-950/20 backdrop-blur-sm shadow-[0_1px_4px_rgba(0,0,0,0.6)] -translate-x-1/2 top-1/2 -translate-y-1/2 pointer-events-none"
               style={{
@@ -327,9 +386,8 @@ export function ColorPicker({ value, onChange, className }: ColorPickerProps) {
           </div>
         </div>
 
-        {/* Input HEX field */}
-        <div className="flex items-center justify-between gap-3 border-t border-zinc-900 pt-3.5">
-          <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 flex-1">
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/[0.07] pt-3">
+          <div className="flex items-center gap-2 bg-black/25 border border-white/[0.08] rounded-lg px-3 py-2 flex-1">
             <span className="text-[10px] text-zinc-500 font-mono font-bold select-none">#</span>
             <input
               type="text"
@@ -342,44 +400,9 @@ export function ColorPicker({ value, onChange, className }: ColorPickerProps) {
             />
           </div>
           <div
-            className="w-8 h-8 rounded-xl border border-white/10 shadow-inner shrink-0"
+            className="w-8 h-8 rounded-lg border border-white/10 shadow-inner shrink-0"
             style={{ backgroundColor: hex }}
           />
-        </div>
-
-        {/* Curated Palette Sections */}
-        <div className="flex flex-col gap-3 border-t border-zinc-900 pt-3.5">
-          {SWATCH_GROUPS.map((group) => (
-            <div key={group.name} className="flex flex-col gap-1.5">
-              <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest pl-0.5">
-                {group.name}
-              </span>
-              <div className="flex items-center gap-2">
-                {group.swatches.map((swatch) => {
-                  const isSelected = hex.toLowerCase() === swatch.hex.toLowerCase();
-                  return (
-                    <button
-                      key={swatch.hex + swatch.name}
-                      onClick={() => {
-                        onChange(swatch.hex)
-                        setInputText(swatch.hex)
-                      }}
-                      className={cn(
-                        "w-5 h-5 rounded-md cursor-pointer border border-white/5 hover:scale-110 active:scale-95 transition-all shadow-inner focus:outline-none shrink-0 relative",
-                        isSelected && "ring-1 ring-white/80 ring-offset-1 ring-offset-zinc-950 scale-105"
-                      )}
-                      style={{ backgroundColor: swatch.hex }}
-                      title={swatch.name}
-                    >
-                      {isSelected && (
-                        <div className="absolute inset-0 border border-white rounded-md pointer-events-none" />
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
         </div>
       </PopoverContent>
     </Popover>

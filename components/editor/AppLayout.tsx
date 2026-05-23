@@ -1,94 +1,23 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Play, Pause, Layers, Sliders,
-  Upload, Plus, Download, RefreshCw, Undo2,
-  Eye, EyeOff,
+import {
+  Play, Pause, Sliders,
+  Upload, Download, RefreshCw, Undo2,
   ArrowUpLeft, ArrowUp, ArrowUpRight, ArrowLeft, ArrowRight, ArrowDownLeft, ArrowDown, ArrowDownRight, Compass,
-  Box, Wand2, Palette, Cuboid, Orbit, SunMedium, PanelLeftClose, PanelLeftOpen, Rows3, UploadCloud, Blend
+  Box, Wand2, Palette, Cuboid, Orbit, PanelLeftClose, PanelLeftOpen, Rows3, Blend, ChevronDown,
+  Sun, Maximize2, ChevronLeft, ChevronRight, SkipBack, SkipForward
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Slider } from '@/components/ui/slider';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { ColorPicker } from '@/components/ui/color-picker';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { PRESET_ICONS, PresetIcon } from './IconLibrary';
-import { SvgCanvas, SvgCanvasRef, PathOverride } from '../3d/SvgCanvas';
+import { SvgCanvas, SvgCanvasRef } from '../3d/SvgCanvas';
 import { MaterialPresetId } from '../3d/MaterialPresets';
-import { Timeline, TimelineTrack, interpolateKeyframes } from './Timeline';
+import { Timeline, TimelineTrack, interpolateKeyframes, interpolateFillKeyframes, applyEasing, EasingType, ShapeStop, FillStop, FillGradientType } from './Timeline';
 import { ExportModal } from './ExportModal';
 import { MOTION_RECIPES } from './MotionRecipes';
-
-interface DecomposedPath {
-  id: string;
-  d: string;
-  fill: string;
-  nodeName: string;
-}
-
-// Utility: Parses a raw SVG content XML string and decomposes it into individual visual paths
-const parseSvgPaths = (svgContent: string): DecomposedPath[] => {
-  if (typeof window === 'undefined' || !svgContent) return [];
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(svgContent, 'image/svg+xml');
-  if (doc.querySelector('parsererror')) return [];
-  
-  const pathElements = doc.querySelectorAll('path, circle, rect, polygon, polyline, ellipse');
-  const results: DecomposedPath[] = [];
-
-  pathElements.forEach((el, index) => {
-    let d = '';
-    const nodeName = el.nodeName.toLowerCase();
-    
-    if (nodeName === 'path') {
-      d = el.getAttribute('d') || '';
-    } else if (nodeName === 'circle') {
-      const cx = parseFloat(el.getAttribute('cx') || '0');
-      const cy = parseFloat(el.getAttribute('cy') || '0');
-      const r = parseFloat(el.getAttribute('r') || '0');
-      d = `M ${cx - r}, ${cy} a ${r},${r} 0 1,0 ${r * 2},0 a ${r},${r} 0 1,0 -${r * 2},0`;
-    } else if (nodeName === 'rect') {
-      const x = parseFloat(el.getAttribute('x') || '0');
-      const y = parseFloat(el.getAttribute('y') || '0');
-      const w = parseFloat(el.getAttribute('width') || '0');
-      const h = parseFloat(el.getAttribute('height') || '0');
-      d = `M ${x},${y} h ${w} v ${h} h -${w} Z`;
-    } else if (nodeName === 'polygon' || nodeName === 'polyline') {
-      const ptsAttr = el.getAttribute('points') || '';
-      const pts = ptsAttr.trim().split(/\s+|,/);
-      if (pts.length >= 4) {
-        d = `M ${pts[0]},${pts[1]} ` + pts.slice(2).reduce((acc, p, i) => acc + (i % 2 === 0 ? `L ${p}` : `,${p} `), '') + ' Z';
-      }
-    } else if (nodeName === 'ellipse') {
-      const cx = parseFloat(el.getAttribute('cx') || '0');
-      const cy = parseFloat(el.getAttribute('cy') || '0');
-      const rx = parseFloat(el.getAttribute('rx') || '0');
-      const ry = parseFloat(el.getAttribute('ry') || '0');
-      d = `M ${cx - rx}, ${cy} a ${rx},${ry} 0 1,0 ${rx * 2},0 a ${rx},${ry} 0 1,0 -${rx * 2},0`;
-    }
-
-    if (!d) return;
-
-    let fill = el.getAttribute('fill') || '';
-    if (fill === 'none' || !fill) {
-      fill = el.getAttribute('stroke') || '';
-    }
-    if (!fill || fill === 'none') {
-      fill = 'currentColor';
-    }
-
-    results.push({
-      id: index.toString(),
-      d,
-      fill,
-      nodeName: nodeName.toUpperCase()
-    });
-  });
-
-  return results;
-};
 
 const directions = [
   { label: '↖', x: -0.707, y: 0.707, tooltip: 'Top Left to Bottom Right' },
@@ -139,6 +68,16 @@ const MATERIAL_METADATA: Record<MaterialPresetId, { name: string; subtitle: stri
     description: "Access the absolute parameter level. Fine-tune your own physical finish using roughness, metalness, clearcoat, and transmission.",
     glowColor: "rgba(124, 92, 255, 0.25)"
   }
+};
+
+// Sphere-like preview gradients so each material reads at a glance.
+const MATERIAL_PREVIEW: Record<MaterialPresetId, string> = {
+  clay: 'radial-gradient(circle at 33% 27%, #fafafa, #d4d4d8 55%, #9ca3af)',
+  glass: 'radial-gradient(circle at 33% 27%, #ffffff, #7dd3fc 45%, #0284c7)',
+  chrome: 'radial-gradient(circle at 33% 27%, #ffffff, #d4d4d8 38%, #52525b 78%, #18181b)',
+  gold: 'radial-gradient(circle at 33% 27%, #fff7cc, #facc15 45%, #a16207)',
+  glow: 'radial-gradient(circle at 33% 27%, #fecdd3, #fb7185 42%, #e11d48)',
+  custom: 'radial-gradient(circle at 33% 27%, #ede9fe, #a78bfa 45%, #6d28d9)',
 };
 
 interface CuratedPalette {
@@ -225,19 +164,62 @@ const finiteNumber = (value: number | undefined | null, fallback = 0) =>
 const clampNumber = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
+const normalizeDegrees = (value: number) => ((value % 360) + 360) % 360;
+
 type FillMode = 'solid' | 'gradient';
-type MotionTrackId = 'transition' | 'extrusion' | 'rotation' | 'lighting';
+type MotionTrackId = 'extrusion' | 'rotation' | 'scale' | 'lighting';
+type LightPosition = { x: number; y: number; z: number };
+type LightPositionKeyframe = {
+  id: string;
+  time: number;
+  value: LightPosition;
+  easing: EasingType;
+};
 
 const FILL_MODES: Array<{ id: FillMode; label: string }> = [
   { id: 'solid', label: 'Solid' },
   { id: 'gradient', label: 'Gradient' },
 ];
 
+const EXTRUDE_DEFAULT = 10;
+const EXTRUDE_MAX = 20;
+const SCALE_DEFAULT = 1;
+const SCALE_MAX = 3;
+const LIGHT_MAX = 10;
+
 const MOTION_TRACK_NAMES: Record<MotionTrackId, string> = {
-  transition: 'Shape Blend',
   extrusion: 'Extrude',
-  rotation: 'Rotation',
-  lighting: 'Lighting',
+  rotation: 'Spin',
+  scale: 'Scale',
+  lighting: 'Brightness',
+};
+
+const makeFillStops = (color: string, colorSecondary: string, solid = false): FillStop[] => [
+  { id: 'start', color, position: 0 },
+  { id: 'end', color: solid ? color : colorSecondary, position: 1 },
+];
+
+const interpolateLightPositionKeyframes = (
+  time: number,
+  fallback: LightPosition,
+  keyframes: LightPositionKeyframe[]
+): LightPosition => {
+  if (keyframes.length === 0) return fallback;
+  const sorted = [...keyframes].sort((a, b) => a.time - b.time);
+  if (time <= sorted[0].time) return sorted[0].value;
+  if (time >= sorted[sorted.length - 1].time) return sorted[sorted.length - 1].value;
+
+  const next = sorted.find((keyframe) => keyframe.time >= time);
+  const previous = [...sorted].reverse().find((keyframe) => keyframe.time <= time);
+  if (!previous || !next || previous.id === next.id) return previous?.value ?? next?.value ?? fallback;
+
+  const rawProgress = (time - previous.time) / (next.time - previous.time);
+  const eased = applyEasing(previous.easing, rawProgress);
+  return {
+    x: previous.value.x + (next.value.x - previous.value.x) * eased,
+    y: previous.value.y + (next.value.y - previous.value.y) * eased,
+    z: previous.value.z + (next.value.z - previous.value.z) * eased,
+  };
 };
 
 function NumberField({
@@ -247,6 +229,8 @@ function NumberField({
   step,
   suffix = '',
   precision = 1,
+  className = 'w-[62px]',
+  inputClassName = 'text-right',
   onChange,
 }: {
   value: number;
@@ -255,9 +239,12 @@ function NumberField({
   step: number;
   suffix?: string;
   precision?: number;
+  className?: string;
+  inputClassName?: string;
   onChange: (value: number) => void;
 }) {
   const [draft, setDraft] = useState(() => value.toFixed(precision));
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setDraft(value.toFixed(precision));
@@ -272,15 +259,47 @@ function NumberField({
     onChange(clampNumber(parsed, min, max));
   };
 
+  // Figma-style scrub: drag horizontally to change the value; a clean click focuses for typing.
+  const startScrub = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startValue = value;
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      if (Math.abs(dx) > 3) moved = true;
+      if (!moved) return;
+      document.body.style.cursor = 'ew-resize';
+      const next = clampNumber(startValue + Math.round(dx / 4) * step, min, max);
+      const rounded = Number(next.toFixed(precision));
+      setDraft(rounded.toFixed(precision));
+      onChange(rounded);
+    };
+    const up = () => {
+      document.body.style.cursor = '';
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (!moved) inputRef.current?.focus();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
   return (
-    <div className="flex h-7 w-[62px] items-center rounded-md border border-white/[0.08] bg-black/20 px-1.5 focus-within:border-white/20">
+    <div
+      onPointerDown={startScrub}
+      title="Drag to adjust · click to type"
+      className={`flex h-7 cursor-ew-resize items-center rounded-md border border-white/[0.08] bg-black/20 px-1.5 focus-within:border-white/20 ${className}`}
+    >
       <input
-        type="number"
+        ref={inputRef}
+        type="text"
         value={draft}
         inputMode="decimal"
-        min={min}
-        max={max}
-        step={step}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={value}
         onChange={(event) => setDraft(event.target.value)}
         onFocus={(event) => event.currentTarget.select()}
         onBlur={commit}
@@ -295,183 +314,372 @@ function NumberField({
             onChange(clampNumber(value + step * direction, min, max));
           }
         }}
-        className="min-w-0 flex-1 bg-transparent text-right font-mono text-[10px] text-zinc-300 outline-none"
+        className={`min-w-0 flex-1 cursor-ew-resize bg-transparent font-mono text-[10px] text-zinc-300 outline-none focus:cursor-text ${inputClassName}`}
       />
       {suffix && <span className="pl-0.5 text-[10px] text-zinc-600">{suffix}</span>}
     </div>
   );
 }
 
-export default function AppLayout() {
-  // --- 1. Selection & Assets State ---
-  const [iconA, setIconA] = useState<string>('heart');
-  const [iconB, setIconB] = useState<string>('star');
-  const [iconAContent, setIconAContent] = useState<string>('');
-  const [iconBContent, setIconBContent] = useState<string>('');
-  const [activePanelTab, setActivePanelTab] = useState<'library' | 'presets' | 'layers'>('presets');
-  const [activeLayersIcon, setActiveLayersIcon] = useState<'A' | 'B'>('A');
-  const [activeRecipeId, setActiveRecipeId] = useState<string | null>('spring-glass');
-  const [activeColorTab, setActiveColorTab] = useState<'A' | 'B'>('A');
+const LIGHT_RANGE = 9;
+const LIGHT_TEMPERATURES: Array<{ label: string; color: string }> = [
+  { label: 'Warm', color: '#ffd9a0' },
+  { label: 'Neutral', color: '#ffffff' },
+  { label: 'Cool', color: '#cfe3ff' },
+];
 
-  // Decomposed parts & path-level overrides
-  const [decomposedPathsA, setDecomposedPathsA] = useState<DecomposedPath[]>([]);
-  const [decomposedPathsB, setDecomposedPathsB] = useState<DecomposedPath[]>([]);
-  const [pathOverridesA, setPathOverridesA] = useState<PathOverride[]>([]);
-  const [pathOverridesB, setPathOverridesB] = useState<PathOverride[]>([]);
+// A draggable mini "lit sphere": the highlight marks where the key light sits,
+// so dragging it visually orbits the light around the icon. Only mounts inside its popover.
+function LightDirectionPicker({
+  position,
+  color,
+  onDirectionChange,
+  onColorChange,
+  isKeyed,
+  onToggleKeyframe,
+}: {
+  position: { x: number; y: number; z: number };
+  color: string;
+  onDirectionChange: (x: number, y: number) => void;
+  onColorChange: (color: string) => void;
+  isKeyed: boolean;
+  onToggleKeyframe: () => void;
+}) {
+  const padRef = useRef<HTMLDivElement>(null);
+  const nx = clampNumber(position.x / LIGHT_RANGE, -1, 1);
+  const ny = clampNumber(position.y / LIGHT_RANGE, -1, 1);
+  // Screen-space highlight (Y inverted so "up" on screen raises the light).
+  const hx = 50 + nx * 42;
+  const hy = 50 - ny * 42;
 
-  const normalizeRecipeTracks = (recipe: typeof MOTION_RECIPES[0], timelineDuration = 5): TimelineTrack[] => {
-    return recipe.tracks.map((track) => {
-      const trackName = MOTION_TRACK_NAMES[track.id as MotionTrackId] ?? track.name;
-      if (track.id === 'transition') {
-        const first = track.keyframes[0];
-        const last = track.keyframes[track.keyframes.length - 1] || first;
-        return {
-          ...track,
-          name: trackName,
-          defaultValue: 0,
-          keyframes: [
-            {
-              id: `${track.id}-start`,
-              time: 0,
-              value: 0,
-              easing: first?.easing || 'ease-in-out'
-            },
-            {
-              id: `${track.id}-end`,
-              time: timelineDuration,
-              value: 1,
-              easing: last?.easing || first?.easing || 'ease-in-out'
-            }
-          ]
-        };
-      }
-
-      if (track.id === 'extrusion') {
-        return { ...track, name: trackName, defaultValue: recipe.extrusionDepth, keyframes: [] };
-      }
-
-      if (track.id === 'rotation') {
-        return { ...track, name: trackName, min: -180, max: 180, defaultValue: 0, keyframes: [] };
-      }
-
-      if (track.id === 'lighting') {
-        return { ...track, name: trackName, defaultValue: recipe.keyLightIntensity, keyframes: [] };
-      }
-
-      return { ...track, name: trackName, keyframes: [] };
-    });
+  const setFromPointer = (clientX: number, clientY: number) => {
+    const rect = padRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    let px = ((clientX - rect.left) / rect.width) * 2 - 1;
+    let py = -(((clientY - rect.top) / rect.height) * 2 - 1);
+    const len = Math.hypot(px, py);
+    if (len > 1) { px /= len; py /= len; }
+    onDirectionChange(Number((px * LIGHT_RANGE).toFixed(2)), Number((py * LIGHT_RANGE).toFixed(2)));
   };
 
-  // Function to apply a recipe's exact styling & animation parameters
-  const applyRecipe = (recipe: typeof MOTION_RECIPES[0]) => {
+  const handlePadDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    setFromPointer(e.clientX, e.clientY);
+    const move = (ev: PointerEvent) => setFromPointer(ev.clientX, ev.clientY);
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  const triggerSphere = `radial-gradient(circle at ${hx}% ${hy}%, #ffffff, ${color} 30%, #3f3f46 72%, #18181b)`;
+
+  return (
+    <Popover>
+      <PopoverTrigger
+        title="Light direction"
+        className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-white/[0.08] bg-black/20 px-1.5 transition-colors hover:border-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+      >
+        <span className="size-4 rounded-full border border-white/15 shadow-inner" style={{ background: triggerSphere }} />
+        <ChevronDown className="size-3 text-zinc-500" />
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={6}
+        className="w-[196px] rounded-xl border border-white/[0.1] bg-[#141518]/95 p-3 text-white shadow-2xl backdrop-blur-xl"
+      >
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-500">Light Source</span>
+          <button
+            type="button"
+            aria-label={`${isKeyed ? 'Remove' : 'Add'} light keyframe`}
+            title={`${isKeyed ? 'Remove' : 'Add'} light keyframe`}
+            onClick={onToggleKeyframe}
+            className={`flex size-5 items-center justify-center rounded border transition-colors ${
+              isKeyed ? 'border-white/30 bg-white/[0.09]' : 'border-white/[0.08] bg-black/20 hover:bg-white/[0.05]'
+            }`}
+          >
+            <span className="size-2 rotate-45 border border-white/30" style={{ backgroundColor: isKeyed ? '#ffd9a0' : 'transparent' }} />
+          </button>
+        </div>
+
+        <div
+          ref={padRef}
+          onPointerDown={handlePadDown}
+          className="relative mt-2.5 aspect-square w-full cursor-grab touch-none overflow-hidden rounded-full border border-white/10 shadow-inner active:cursor-grabbing"
+          style={{ background: `radial-gradient(circle at ${hx}% ${hy}%, #ffffff, ${color} 24%, #27272a 68%, #0b0b0d)` }}
+        >
+          <span
+            className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_8px_2px_rgba(255,255,255,0.7)] ring-1 ring-black/40"
+            style={{ left: `${hx}%`, top: `${hy}%` }}
+          />
+        </div>
+        <p className="mt-2 text-center text-[10px] text-zinc-500">Drag to move the light</p>
+
+        <div className="mt-2.5 flex items-center gap-1.5">
+          {LIGHT_TEMPERATURES.map((temp) => {
+            const active = color.toLowerCase() === temp.color.toLowerCase();
+            return (
+              <button
+                key={temp.label}
+                type="button"
+                title={temp.label}
+                onClick={() => onColorChange(temp.color)}
+                className={`h-7 flex-1 rounded-md border transition-all ${
+                  active ? 'border-white/60 ring-1 ring-white/30' : 'border-white/10 hover:border-white/30'
+                }`}
+                style={{ background: temp.color }}
+              />
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+export default function AppLayout() {
+  // --- 1. Shape sequence (the morph is a timeline of shapes) ---
+  const makeStop = (icon: PresetIcon, time: number): ShapeStop => ({
+    id: `shape-${Math.random().toString(36).slice(2, 9)}`,
+    time,
+    iconId: icon.id,
+    svgContent: icon.svgContent,
+    color: icon.defaultTint,
+    colorSecondary: '#7c5cff',
+    fillGradientType: 'linear',
+    fillKeyframes: [],
+    easing: 'ease-in-out',
+    transitionType: 'wipe',
+    wipeDirection: { x: 0, y: 0 },
+  });
+
+  const [shapes, setShapes] = useState<ShapeStop[]>([]);
+  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
+  const [openShapePicker, setOpenShapePicker] = useState<string | null>(null);
+  const [activeRecipeId, setActiveRecipeId] = useState<string | null>('spring-glass');
+
+  const markCustom = () => setActiveRecipeId(null);
+
+  // Apply a recipe's palette + transition style to a sequence (alternating its two color pairs).
+  const recolorShapes = (list: ShapeStop[], recipe: typeof MOTION_RECIPES[0]): ShapeStop[] =>
+    list.map((stop, index) => ({
+      ...stop,
+      color: index % 2 === 0 ? recipe.colorA : recipe.colorB,
+      colorSecondary: index % 2 === 0 ? recipe.colorASecondary : recipe.colorBSecondary,
+      fillGradientType: 'linear',
+      fillKeyframes: [],
+      transitionType: recipe.transitionType,
+      wipeDirection: recipe.wipeDirection,
+    }));
+
+  const normalizeRecipeTracks = (recipe: typeof MOTION_RECIPES[0], timelineDuration = 5): TimelineTrack[] => {
+    const normalized: TimelineTrack[] = recipe.tracks
+      .filter((track) => track.id !== 'transition') // the morph now lives on the Shape track
+      .map((track) => {
+        const trackName = MOTION_TRACK_NAMES[track.id as MotionTrackId] ?? track.name;
+        if (track.id === 'extrusion') {
+          return { ...track, name: trackName, max: EXTRUDE_MAX, defaultValue: recipe.extrusionDepth, keyframes: [] };
+        }
+        if (track.id === 'rotation') {
+          // Hero motion: a full, seamless 360° spin across the loop.
+          return {
+            ...track,
+            name: trackName,
+            min: 0,
+            max: 360,
+            defaultValue: 0,
+            keyframes: [
+              { id: `${track.id}-start`, time: 0, value: 0, easing: 'linear' as const },
+              { id: `${track.id}-end`, time: timelineDuration, value: 360, easing: 'linear' as const },
+            ],
+          };
+        }
+        if (track.id === 'lighting') {
+          return { ...track, name: trackName, max: LIGHT_MAX, defaultValue: recipe.keyLightIntensity, keyframes: [] };
+        }
+        return { ...track, name: trackName, keyframes: [] };
+      });
+    if (!normalized.some((track) => track.id === 'scale')) {
+      normalized.splice(2, 0, {
+        id: 'scale',
+        name: 'Scale',
+        color: '#a78bfa',
+        min: 0.1,
+        max: SCALE_MAX,
+        defaultValue: SCALE_DEFAULT,
+        keyframes: [],
+      });
+    }
+    return normalized;
+  };
+
+  // Apply a recipe's styling & animation. Recolors the existing shape sequence.
+  const applyRecipe = (recipe: typeof MOTION_RECIPES[0], shapeList?: ShapeStop[]) => {
     setActiveRecipeId(recipe.id);
     setMaterialPreset(recipe.materialPreset);
     setEnableGradient(recipe.enableGradient);
     setFillMode(recipe.enableGradient ? 'gradient' : 'solid');
-    setColorA(recipe.colorA);
-    previousColorARef.current = recipe.colorA;
-    setColorASecondary(recipe.colorASecondary);
-    setColorB(recipe.colorB);
-    previousColorBRef.current = recipe.colorB;
-    setColorBSecondary(recipe.colorBSecondary);
-    
+    setShapes((prev) => recolorShapes(shapeList ?? prev, recipe));
+
     setRoughness(recipe.roughness);
     setMetalness(recipe.metalness);
     setClearcoat(recipe.clearcoat);
     setTransmission(recipe.transmission);
     setEmissiveIntensity(recipe.emissiveIntensity);
-    
+
     setExtrusionDepth(recipe.extrusionDepth);
     setBevelEnabled(recipe.bevelEnabled);
     setBevelThickness(recipe.bevelThickness);
     setBevelSize(recipe.bevelSize);
     setBevelSegments(recipe.bevelSegments);
     setLayerSpacing(recipe.layerSpacing);
-    
-    setTransitionType(recipe.transitionType);
-    setWipeDirection(recipe.wipeDirection);
-    setRotationSpeed(recipe.rotationSpeed);
+
+    setRotationOffset({ x: 0, y: 0, z: 0 });
+    setObjectScale(SCALE_DEFAULT);
     setKeyLightIntensity(recipe.keyLightIntensity);
-    
-    setTracks(normalizeRecipeTracks(recipe));
-    setSelectedMotionTrackId('transition');
+    setKeyLightPosition({ x: 5, y: 5, z: 4 });
+    setKeyLightPositionKeyframes([]);
+
+    setTracks(normalizeRecipeTracks(recipe, duration));
+    setSelectedMotionTrackId('rotation');
     setCurrentTime(0);
     setIsPlaying(false);
   };
 
   const handleResetRecipe = () => {
-    const targetRecipeId = activeRecipeId || 'spring-glass';
-    const recipe = MOTION_RECIPES.find(r => r.id === targetRecipeId);
-    if (recipe) {
-      applyRecipe(recipe);
-    }
+    const recipe = MOTION_RECIPES.find((r) => r.id === (activeRecipeId || 'spring-glass'));
+    if (recipe) applyRecipe(recipe);
   };
 
-  // Load default icon contents on mount and apply default spring-glass recipe
+  // Seed the default heart→star sequence and apply the default look on mount.
   useEffect(() => {
-    const defaultA = PRESET_ICONS.find(i => i.id === 'heart')?.svgContent || '';
-    const defaultB = PRESET_ICONS.find(i => i.id === 'star')?.svgContent || '';
-    setIconAContent(defaultA);
-    setIconBContent(defaultB);
-
-    const initialRecipe = MOTION_RECIPES.find(r => r.id === 'spring-glass');
-    if (initialRecipe) {
-      applyRecipe(initialRecipe);
-    }
+    const heart = PRESET_ICONS.find((i) => i.id === 'heart');
+    const star = PRESET_ICONS.find((i) => i.id === 'star');
+    if (!heart || !star) return;
+    const initial = [makeStop(heart, 1.0), makeStop(star, 4.0)];
+    setShapes(initial);
+    setSelectedShapeId(initial[0].id);
+    const recipe = MOTION_RECIPES.find((r) => r.id === 'spring-glass');
+    if (recipe) applyRecipe(recipe, initial);
   }, []);
 
-  // Parse paths whenever active contents change
-  useEffect(() => {
-    setDecomposedPathsA(parseSvgPaths(iconAContent));
-  }, [iconAContent]);
+  // --- Shape sequence operations ---
+  const setShapeIcon = (shapeId: string, icon: PresetIcon) => {
+    markCustom();
+    setShapes((prev) => prev.map((s) => s.id === shapeId ? { ...s, iconId: icon.id, svgContent: icon.svgContent } : s));
+  };
 
-  useEffect(() => {
-    setDecomposedPathsB(parseSvgPaths(iconBContent));
-  }, [iconBContent]);
+  const updateSelectedShapeColor = (value: string, secondary = false) => {
+    if (!selectedShapeId) return;
+    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    markCustom();
+    setShapes((prev) => prev.map((s) => {
+      if (s.id !== selectedShapeId) return s;
+      const keyframes = s.fillKeyframes ?? [];
+      const activeFill = interpolateFillKeyframes(
+        currentTime,
+        { color: s.color, colorSecondary: s.colorSecondary },
+        s.fillKeyframes
+      );
+      const nextColor = secondary ? activeFill.color : value;
+      const nextColorSecondary = secondary ? value : activeFill.colorSecondary;
+      const nextStops = makeFillStops(nextColor, nextColorSecondary, fillMode === 'solid');
 
-  // --- 2. Sliders & Rendering Tweak Suite State ---
+      if (keyframes.length === 0) {
+        return {
+          ...s,
+          color: nextColor,
+          colorSecondary: nextStops[1].color,
+        };
+      }
+
+      const existing = keyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+      const nextKeyframes = existing
+        ? keyframes.map((keyframe) => keyframe.id === existing.id
+          ? { ...keyframe, stops: nextStops }
+          : keyframe)
+        : [
+            ...keyframes,
+            {
+              id: `${s.id}-fill-${Date.now().toString(36)}`,
+              time: playheadTime,
+              stops: nextStops,
+              gradientType: s.fillGradientType ?? 'linear',
+              easing: [...keyframes].sort((a, b) => a.time - b.time).filter((keyframe) => keyframe.time <= playheadTime).pop()?.easing ?? 'ease-in-out' as const,
+            },
+          ].sort((a, b) => a.time - b.time);
+
+      return {
+        ...s,
+        color: nextColor,
+        colorSecondary: nextStops[1].color,
+        fillKeyframes: nextKeyframes,
+      };
+    }));
+  };
+
+  const updateSelectedShapeGradientType = (gradientType: FillGradientType) => {
+    if (!selectedShapeId) return;
+    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    markCustom();
+    setShapes((prev) => prev.map((shape) => {
+      if (shape.id !== selectedShapeId) return shape;
+      const keyframes = shape.fillKeyframes ?? [];
+      const activeFill = interpolateFillKeyframes(
+        currentTime,
+        { color: shape.color, colorSecondary: shape.colorSecondary, gradientType: shape.fillGradientType },
+        shape.fillKeyframes
+      );
+
+      if (keyframes.length === 0) {
+        return { ...shape, fillGradientType: gradientType };
+      }
+
+      const existing = keyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+      const nextKeyframes = existing
+        ? keyframes.map((keyframe) => keyframe.id === existing.id ? { ...keyframe, gradientType } : keyframe)
+        : [
+            ...keyframes,
+            {
+              id: `${shape.id}-fill-${Date.now().toString(36)}`,
+              time: playheadTime,
+              stops: makeFillStops(activeFill.color, activeFill.colorSecondary, fillMode === 'solid'),
+              gradientType,
+              easing: [...keyframes].sort((a, b) => a.time - b.time).filter((keyframe) => keyframe.time <= playheadTime).pop()?.easing ?? 'ease-in-out' as const,
+            },
+          ].sort((a, b) => a.time - b.time);
+
+      return { ...shape, fillGradientType: gradientType, fillKeyframes: nextKeyframes };
+    }));
+  };
+
+  const addShapeAtPlayhead = () => {
+    markCustom();
+    setShapes((prev) => {
+      const icon = PRESET_ICONS[prev.length % PRESET_ICONS.length];
+      const t = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+      const stop = makeStop(icon, t);
+      setSelectedShapeId(stop.id);
+      setOpenShapePicker(stop.id);
+      return [...prev, stop].sort((a, b) => a.time - b.time);
+    });
+  };
+
+  const removeShape = (shapeId: string) => {
+    setShapes((prev) => {
+      if (prev.length <= 1) return prev;
+      const next = prev.filter((s) => s.id !== shapeId);
+      if (selectedShapeId === shapeId) setSelectedShapeId(next[0]?.id ?? null);
+      return next;
+    });
+  };
+
+  // --- 2. Appearance & geometry state ---
   const [materialPreset, setMaterialPreset] = useState<MaterialPresetId>('glass');
-  const [colorA, setColorA] = useState<string>('#ff5b9a');
-  const [colorB, setColorB] = useState<string>('#ffcc4d');
-  const previousColorARef = useRef('#ff5b9a');
-  const previousColorBRef = useRef('#ffcc4d');
 
-  const markCustom = () => setActiveRecipeId(null);
-
-  const updatePrimaryColor = (shape: 'A' | 'B', value: string) => {
-    markCustom();
-    if (shape === 'A') {
-      const previous = previousColorARef.current;
-      setColorA(value);
-      previousColorARef.current = value;
-      setPathOverridesA((overrides) => overrides.map((override) =>
-        override.color === previous ? { ...override, color: value } : override
-      ));
-    } else {
-      const previous = previousColorBRef.current;
-      setColorB(value);
-      previousColorBRef.current = value;
-      setPathOverridesB((overrides) => overrides.map((override) =>
-        override.color === previous ? { ...override, color: value } : override
-      ));
-    }
-  };
-
-  const selectPresetIcon = (shape: 'A' | 'B', icon: PresetIcon) => {
-    markCustom();
-    if (shape === 'A') {
-      setIconA(icon.id);
-      setIconAContent(icon.svgContent);
-      setActiveColorTab('A');
-      updatePrimaryColor('A', icon.defaultTint);
-    } else {
-      setIconB(icon.id);
-      setIconBContent(icon.svgContent);
-      setActiveColorTab('B');
-      updatePrimaryColor('B', icon.defaultTint);
-    }
-  };
-  
   // Custom Advanced Material Finish parameters
   const [roughness, setRoughness] = useState<number>(0.15);
   const [metalness, setMetalness] = useState<number>(0.4);
@@ -482,58 +690,30 @@ export default function AppLayout() {
   const [emissiveIntensity, setEmissiveIntensity] = useState<number>(0.0);
 
   const [wireframe, setWireframe] = useState<boolean>(false);
-  const [extrusionDepth, setExtrusionDepth] = useState<number>(1.2);
+  const [extrusionDepth, setExtrusionDepth] = useState<number>(EXTRUDE_DEFAULT);
   const [bevelEnabled, setBevelEnabled] = useState<boolean>(true);
   const [bevelThickness, setBevelThickness] = useState<number>(0.15);
   const [bevelSize, setBevelSize] = useState<number>(0.08);
   const [bevelSegments, setBevelSegments] = useState<number>(3);
   const [layerSpacing, setLayerSpacing] = useState<number>(0.8);
+  const [objectScale, setObjectScale] = useState<number>(SCALE_DEFAULT);
 
-  const [transitionType, setTransitionType] = useState<'none' | 'wipe'>('wipe');
   const [enableGradient, setEnableGradient] = useState<boolean>(false);
   const [fillMode, setFillMode] = useState<FillMode>('solid');
-  const [colorASecondary, setColorASecondary] = useState<string>('#7c5cff');
-  const [colorBSecondary, setColorBSecondary] = useState<string>('#4ee2a3');
-  const [wipeDirection, setWipeDirection] = useState<{ x: number; y: number }>({ x: 1, y: 0 });
-  const [rotationSpeed, setRotationSpeed] = useState<{ x: number; y: number; z: number }>({ x: 0.1, y: 0.4, z: 0 });
-  const [rotationOffset, setRotationOffset] = useState<{ x: number; y: number; z: number }>({ x: 0, y: 0, z: 0 });
+  const [rotationOffset, setRotationOffset] = useState<LightPosition>({ x: 0, y: 0, z: 0 });
 
   // Lighting & perspective
   const [ambientColor] = useState<string>('#ffffff');
   const [ambientIntensity] = useState<number>(0.6);
-  const [keyLightColor] = useState<string>('#ffffff');
+  const [keyLightColor, setKeyLightColor] = useState<string>('#ffffff');
   const [keyLightIntensity, setKeyLightIntensity] = useState<number>(1.2);
+  const [keyLightPosition, setKeyLightPosition] = useState<LightPosition>({ x: 5, y: 5, z: 4 });
+  const [keyLightPositionKeyframes, setKeyLightPositionKeyframes] = useState<LightPositionKeyframe[]>([]);
   const [rimLightColor] = useState<string>('#a48bff');
   const [rimLightIntensity] = useState<number>(0.8);
   const [zoom, setZoom] = useState<number>(1.0);
   const [zenMode, setZenMode] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
-  const [dragOverHalf, setDragOverHalf] = useState<'left' | 'right' | null>(null);
-
-  // Initialize path overrides dynamically
-  useEffect(() => {
-    setPathOverridesA((previous) => decomposedPathsA.map((path) => {
-      const existing = previous.find((override) => override.id === path.id);
-      return existing ?? {
-        id: path.id,
-        visible: true,
-        color: path.fill === 'currentColor' ? colorA : path.fill,
-        depthMultiplier: 1.0
-      };
-    }));
-  }, [decomposedPathsA]);
-
-  useEffect(() => {
-    setPathOverridesB((previous) => decomposedPathsB.map((path) => {
-      const existing = previous.find((override) => override.id === path.id);
-      return existing ?? {
-        id: path.id,
-        visible: true,
-        color: path.fill === 'currentColor' ? colorB : path.fill,
-        depthMultiplier: 1.0
-      };
-    }));
-  }, [decomposedPathsB]);
 
   // Synchronize presets with customized sliders when a predefined preset is clicked
   useEffect(() => {
@@ -573,16 +753,20 @@ export default function AppLayout() {
   }, [materialPreset]);
 
   // --- 3. Timeline Playback & Keyframe Tracks State ---
-  const [duration] = useState<number>(5.0); 
+  const [duration, setDuration] = useState<number>(5.0);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [selectedMotionTrackId, setSelectedMotionTrackId] = useState<MotionTrackId>('transition');
+  const [loop, setLoop] = useState<boolean>(true);
+  const [selectedMotionTrackId, setSelectedMotionTrackId] = useState<MotionTrackId>('rotation');
 
+  // Single predictable rule for editing a property value:
+  //  - If the track is NOT animated (no keyframes) → set a constant value.
+  //  - If the track IS animated → update the keyframe under the playhead, or add one there.
+  // This removes the old "dragging silently rewrites the whole animation" surprise.
   const setTrackValue = (
     trackId: MotionTrackId,
     nextValue: number,
-    syncStaticValue?: (value: number) => void,
-    mode: 'property' | 'morph' = 'property'
+    syncStaticValue?: (value: number) => void
   ) => {
     setSelectedMotionTrackId(trackId);
     setActiveRecipeId(null);
@@ -594,30 +778,30 @@ export default function AppLayout() {
     setTracks((prevTracks) => prevTracks.map((track) => {
       if (track.id !== trackId) return track;
 
-      const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
-      const exactKeyframe = track.keyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
-
+      // Constant (un-animated) property: just move the single value.
       if (track.keyframes.length === 0) {
         return { ...track, defaultValue: clampedValue };
       }
 
+      const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+      const exactKeyframe = track.keyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+
+      // Edit the keyframe already at the playhead.
       if (exactKeyframe) {
         return {
           ...track,
           defaultValue: clampedValue,
           keyframes: track.keyframes.map((keyframe) =>
             keyframe.id === exactKeyframe.id ? { ...keyframe, value: clampedValue } : keyframe
-        )
-      };
-    }
-
-      if (mode === 'property') {
-        return {
-          ...track,
-          defaultValue: clampedValue,
-          keyframes: track.keyframes.map((keyframe) => ({ ...keyframe, value: clampedValue }))
+          )
         };
       }
+
+      // Otherwise drop a new keyframe at the playhead, inheriting easing from the previous one.
+      const previousKeyframe = [...track.keyframes]
+        .sort((a, b) => a.time - b.time)
+        .filter((keyframe) => keyframe.time <= playheadTime)
+        .pop();
 
       return {
         ...track,
@@ -628,15 +812,11 @@ export default function AppLayout() {
             id: `${track.id}-${Date.now().toString(36)}`,
             time: playheadTime,
             value: clampedValue,
-            easing: 'ease-in-out' as const
+            easing: previousKeyframe?.easing ?? 'ease-in-out'
           }
         ].sort((a, b) => a.time - b.time)
       };
     }));
-  };
-
-  const handleMorphChange = (newValue: number) => {
-    setTrackValue('transition', newValue, undefined, 'morph');
   };
 
   const handleDepthChange = (newValue: number) => {
@@ -647,6 +827,20 @@ export default function AppLayout() {
     setTrackValue('rotation', newValue, (value) => setRotationOffset((prev) => ({ ...(prev ?? { x: 0, y: 0, z: 0 }), y: value })));
   };
 
+  const handleScaleChange = (newValue: number) => {
+    setTrackValue('scale', newValue, setObjectScale);
+  };
+
+  const handleViewRotationCommit = (delta: { x: number; y: number; z: number }) => {
+    const nextY = normalizeDegrees(activeRotationY + delta.y);
+    setRotationOffset((prev) => ({
+      x: normalizeDegrees(prev.x + delta.x),
+      y: nextY,
+      z: normalizeDegrees(prev.z + delta.z)
+    }));
+    handleSpinChange(nextY);
+  };
+
   const handleBrightnessChange = (newValue: number) => {
     setTrackValue('lighting', newValue, setKeyLightIntensity);
   };
@@ -654,58 +848,113 @@ export default function AppLayout() {
   const playheadRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
 
-  // Keyframe timeline tracks
+  // Keyframe timeline tracks (the morph itself lives on the separate Shape track)
   const [tracks, setTracks] = useState<TimelineTrack[]>([
-    {
-      id: 'transition',
-      name: 'Shape Blend',
-      color: '#7c5cff',
-      min: 0,
-      max: 1.0,
-      defaultValue: 0.0,
-      keyframes: [
-        { id: 'kf-tr1', time: 1.0, value: 0.0, easing: 'ease-in-out' },
-        { id: 'kf-tr2', time: 3.5, value: 1.0, easing: 'ease-in-out' }
-      ]
-    },
     {
       id: 'extrusion',
       name: 'Extrude',
       color: '#4ee2a3',
       min: 0.2,
-      max: 3.0,
-      defaultValue: 1.2,
+      max: EXTRUDE_MAX,
+      defaultValue: EXTRUDE_DEFAULT,
       keyframes: []
     },
     {
       id: 'rotation',
-      name: 'Rotation',
+      name: 'Spin',
       color: '#ffd23f',
-      min: -180,
-      max: 180,
+      min: 0,
+      max: 360,
       defaultValue: 0,
+      keyframes: [
+        { id: 'kf-rot1', time: 0, value: 0, easing: 'linear' },
+        { id: 'kf-rot2', time: 5.0, value: 360, easing: 'linear' }
+      ]
+    },
+    {
+      id: 'scale',
+      name: 'Scale',
+      color: '#a78bfa',
+      min: 0.1,
+      max: SCALE_MAX,
+      defaultValue: SCALE_DEFAULT,
       keyframes: []
     },
     {
       id: 'lighting',
-      name: 'Lighting',
+      name: 'Brightness',
       color: '#ff5b9a',
       min: 0.0,
-      max: 3.0,
+      max: LIGHT_MAX,
       defaultValue: 1.2,
       keyframes: []
     }
   ]);
 
-  const transitionTrack = tracks.find((track) => track.id === 'transition') ?? tracks[0];
-  const extrusionTrack = tracks.find((track) => track.id === 'extrusion') ?? tracks[1];
-  const rotationTrack = tracks.find((track) => track.id === 'rotation') ?? tracks[2];
+  const extrusionTrack = tracks.find((track) => track.id === 'extrusion') ?? tracks[0];
+  const rotationTrack = tracks.find((track) => track.id === 'rotation') ?? tracks[1];
+  const scaleTrack = tracks.find((track) => track.id === 'scale') ?? tracks[2];
   const lightingTrack = tracks.find((track) => track.id === 'lighting') ?? tracks[3];
 
-  // Interpolated variables resulting from timeline position
-  const activeTransitionProgress = transitionTrack.keyframes.length > 0
-    ? interpolateKeyframes(currentTime, transitionTrack)
-    : transitionTrack.defaultValue;
+  // --- Derived morph state: which two shapes surround the playhead, and the blend between them ---
+  const sortedShapes = [...shapes].sort((a, b) => a.time - b.time);
+  const morph = (() => {
+    const fallback: ShapeStop = {
+      id: 'empty', time: 0, iconId: '', svgContent: '', color: '#ffffff', colorSecondary: '#ffffff',
+      fillGradientType: 'linear', fillKeyframes: [],
+      easing: 'ease-in-out', transitionType: 'wipe', wipeDirection: { x: 0, y: 0 },
+    };
+    if (sortedShapes.length === 0) return { from: fallback, to: fallback, progress: 0 };
+    const first = sortedShapes[0];
+    const last = sortedShapes[sortedShapes.length - 1];
+    if (sortedShapes.length === 1 || currentTime <= first.time) return { from: first, to: first, progress: 0 };
+    if (currentTime >= last.time) return { from: last, to: last, progress: 1 };
+    let i = 0;
+    while (i < sortedShapes.length - 1 && !(currentTime >= sortedShapes[i].time && currentTime <= sortedShapes[i + 1].time)) i++;
+    const from = sortedShapes[i];
+    const to = sortedShapes[i + 1];
+    const span = to.time - from.time;
+    const raw = span > 0 ? (currentTime - from.time) / span : 1;
+    return { from, to, progress: clampNumber(applyEasing(from.easing, raw), 0, 1) };
+  })();
+
+  const selectedShape = shapes.find((s) => s.id === selectedShapeId) ?? sortedShapes[0] ?? null;
+  const shapeName = (stop: ShapeStop | null) =>
+    stop ? (PRESET_ICONS.find((i) => i.id === stop.iconId)?.name ?? 'Custom') : 'Shape';
+
+  const selectedShapeFillValue = selectedShape
+    ? interpolateFillKeyframes(
+        currentTime,
+        { color: selectedShape.color, colorSecondary: selectedShape.colorSecondary, gradientType: selectedShape.fillGradientType },
+        selectedShape.fillKeyframes
+      )
+    : { color: '#ffffff', colorSecondary: '#ffffff', gradientType: 'linear' as const };
+  const selectedShapeFill = selectedShapeFillValue.color;
+  const selectedShapeFillSecondary = selectedShapeFillValue.colorSecondary;
+  const selectedShapeGradientType = selectedShapeFillValue.gradientType ?? selectedShape?.fillGradientType ?? 'linear';
+
+  // Engine-facing values derived from the surrounding shapes (SvgCanvas keeps its 2-shape crossfade).
+  const iconAContent = morph.from.svgContent;
+  const iconBContent = morph.to.svgContent;
+  const fillA = interpolateFillKeyframes(
+    currentTime,
+    { color: morph.from.color, colorSecondary: morph.from.colorSecondary, gradientType: morph.from.fillGradientType },
+    morph.from.fillKeyframes
+  );
+  const fillB = interpolateFillKeyframes(
+    currentTime,
+    { color: morph.to.color, colorSecondary: morph.to.colorSecondary, gradientType: morph.to.fillGradientType },
+    morph.to.fillKeyframes
+  );
+  const colorA = fillA.color;
+  const colorASecondary = fillA.colorSecondary;
+  const colorB = fillB.color;
+  const colorBSecondary = fillB.colorSecondary;
+  const activeGradientType = fillA.gradientType ?? morph.from.fillGradientType ?? 'linear';
+  const activeTransitionProgress = morph.progress;
+  // The active transition's blend style comes from the shape we're morphing FROM.
+  const transitionType = morph.from.transitionType;
+  const wipeDirection = morph.from.wipeDirection;
 
   const activeExtrusionDepth = extrusionTrack.keyframes.length > 0
     ? interpolateKeyframes(currentTime, extrusionTrack)
@@ -715,11 +964,16 @@ export default function AppLayout() {
     ? interpolateKeyframes(currentTime, rotationTrack)
     : rotationOffset.y;
 
+  const activeObjectScale = scaleTrack.keyframes.length > 0
+    ? interpolateKeyframes(currentTime, scaleTrack)
+    : objectScale;
+
   const activeKeyLightIntensity = lightingTrack.keyframes.length > 0
     ? interpolateKeyframes(currentTime, lightingTrack)
     : keyLightIntensity;
+  const activeKeyLightPosition = interpolateLightPositionKeyframes(currentTime, keyLightPosition, keyLightPositionKeyframes);
 
-  const hasLayerGapControls = Math.max(decomposedPathsA.length, decomposedPathsB.length) > 1;
+  const hasLayerGapControls = false;
 
   const keyframeAtPlayhead = (track: TimelineTrack) => {
     const playheadTime = Number(currentTime.toFixed(2));
@@ -757,6 +1011,118 @@ export default function AppLayout() {
     }));
   };
 
+  const lightPositionKeyframeAtPlayhead = () => {
+    const playheadTime = Number(currentTime.toFixed(2));
+    return keyLightPositionKeyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+  };
+
+  const toggleLightPositionKeyframeAtPlayhead = () => {
+    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    setActiveRecipeId(null);
+    setKeyLightPositionKeyframes((prev) => {
+      const existing = prev.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+      if (existing) return prev.filter((keyframe) => keyframe.id !== existing.id);
+
+      const previousKeyframe = [...prev]
+        .sort((a, b) => a.time - b.time)
+        .filter((keyframe) => keyframe.time <= playheadTime)
+        .pop();
+
+      return [
+        ...prev,
+        {
+          id: `light-position-${Date.now().toString(36)}`,
+          time: playheadTime,
+          value: activeKeyLightPosition,
+          easing: previousKeyframe?.easing ?? 'ease-in-out',
+        }
+      ].sort((a, b) => a.time - b.time);
+    });
+  };
+
+  const updateLightPositionAxis = (axis: keyof LightPosition, value: number) => {
+    const clamped = clampNumber(value, -12, 12);
+    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const nextPosition = { ...activeKeyLightPosition, [axis]: clamped };
+    setActiveRecipeId(null);
+    setKeyLightPosition(nextPosition);
+    setKeyLightPositionKeyframes((prev) => {
+      if (prev.length === 0) return prev;
+      const existing = prev.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+      if (existing) {
+        return prev.map((keyframe) => keyframe.id === existing.id ? { ...keyframe, value: nextPosition } : keyframe);
+      }
+      const previousKeyframe = [...prev]
+        .sort((a, b) => a.time - b.time)
+        .filter((keyframe) => keyframe.time <= playheadTime)
+        .pop();
+      return [
+        ...prev,
+        {
+          id: `light-position-${Date.now().toString(36)}`,
+          time: playheadTime,
+          value: nextPosition,
+          easing: previousKeyframe?.easing ?? 'ease-in-out',
+        }
+      ].sort((a, b) => a.time - b.time);
+    });
+  };
+
+  // Drag-the-orb light control sets X and Y together (Z is left untouched).
+  const updateLightPositionXY = (x: number, y: number) => {
+    const clampedX = clampNumber(x, -12, 12);
+    const clampedY = clampNumber(y, -12, 12);
+    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const nextPosition = { ...activeKeyLightPosition, x: clampedX, y: clampedY };
+    setActiveRecipeId(null);
+    setKeyLightPosition(nextPosition);
+    setKeyLightPositionKeyframes((prev) => {
+      if (prev.length === 0) return prev;
+      const existing = prev.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+      if (existing) {
+        return prev.map((keyframe) => keyframe.id === existing.id ? { ...keyframe, value: nextPosition } : keyframe);
+      }
+      const previousKeyframe = [...prev]
+        .sort((a, b) => a.time - b.time)
+        .filter((keyframe) => keyframe.time <= playheadTime)
+        .pop();
+      return [
+        ...prev,
+        {
+          id: `light-position-${Date.now().toString(36)}`,
+          time: playheadTime,
+          value: nextPosition,
+          easing: previousKeyframe?.easing ?? 'ease-in-out',
+        }
+      ].sort((a, b) => a.time - b.time);
+    });
+  };
+
+  const renderLightPositionKeyframeControl = () => {
+    const isKeyedHere = Boolean(lightPositionKeyframeAtPlayhead());
+    return (
+      <button
+        type="button"
+        aria-label={`${isKeyedHere ? 'Remove' : 'Add'} light position keyframe at current time`}
+        title={`${isKeyedHere ? 'Remove' : 'Add'} light position keyframe`}
+        onClick={(event) => {
+          event.stopPropagation();
+          toggleLightPositionKeyframeAtPlayhead();
+        }}
+        className={`size-6 shrink-0 rounded-md border flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+          isKeyedHere
+            ? 'border-white/30 bg-white/[0.09]'
+            : 'border-white/[0.08] bg-black/20 hover:bg-white/[0.05]'
+        }`}
+      >
+        <span
+          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-black/80' : 'border-white/20'}`}
+          style={{ backgroundColor: isKeyedHere ? '#ff5b9a' : 'transparent' }}
+        />
+      </button>
+    );
+  };
+
   const motionPropertyRowClass = (trackId: MotionTrackId) =>
     `flex items-center gap-3 rounded-md -mx-1 px-1 py-1 transition-colors ${
       selectedMotionTrackId === trackId ? 'bg-white/[0.055]' : 'hover:bg-white/[0.025]'
@@ -787,6 +1153,79 @@ export default function AppLayout() {
     );
   };
 
+  const colorKeyframeAtPlayhead = () => {
+    if (!selectedShape) return undefined;
+    const playheadTime = Number(currentTime.toFixed(2));
+    return selectedShape.fillKeyframes?.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+  };
+
+  const toggleSelectedShapeColorKeyframe = () => {
+    if (!selectedShape) return;
+    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const currentKeyframe = colorKeyframeAtPlayhead();
+    markCustom();
+
+    setShapes((prev) => prev.map((shape) => {
+      if (shape.id !== selectedShape.id) return shape;
+      const keyframes = shape.fillKeyframes ?? [];
+
+      if (currentKeyframe) {
+        return {
+          ...shape,
+          fillKeyframes: keyframes.filter((keyframe) => keyframe.id !== currentKeyframe.id),
+        };
+      }
+
+      const previousKeyframe = [...keyframes]
+        .sort((a, b) => a.time - b.time)
+        .filter((keyframe) => keyframe.time <= playheadTime)
+        .pop();
+
+      return {
+        ...shape,
+        fillKeyframes: [
+          ...keyframes,
+          {
+            id: `${shape.id}-fill-${Date.now().toString(36)}`,
+            time: playheadTime,
+            stops: makeFillStops(selectedShapeFill, selectedShapeFillSecondary, fillMode === 'solid'),
+            easing: previousKeyframe?.easing ?? 'ease-in-out',
+          },
+        ].sort((a, b) => a.time - b.time),
+      };
+    }));
+  };
+
+  const renderColorKeyframeControl = () => {
+    const isKeyedHere = Boolean(colorKeyframeAtPlayhead());
+
+    return (
+      <button
+        type="button"
+        aria-label={`${isKeyedHere ? 'Remove' : 'Add'} Fill keyframe at current time`}
+        title={`${isKeyedHere ? 'Remove' : 'Add'} Fill keyframe`}
+        onClick={(event) => {
+          event.stopPropagation();
+          toggleSelectedShapeColorKeyframe();
+        }}
+        className={`size-6 shrink-0 rounded-md border flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+          isKeyedHere
+            ? 'border-white/30 bg-white/[0.09]'
+            : 'border-white/[0.08] bg-black/20 hover:bg-white/[0.05]'
+        }`}
+      >
+        <span
+          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-black/80' : 'border-white/20'}`}
+          style={{
+            background: isKeyedHere
+              ? `linear-gradient(135deg, ${selectedShapeFill}, ${selectedShapeFillSecondary})`
+              : 'transparent',
+          }}
+        />
+      </button>
+    );
+  };
+
   // Real-time playhead progress loop
   useEffect(() => {
     if (isPlaying) {
@@ -799,7 +1238,12 @@ export default function AppLayout() {
         setCurrentTime((prev) => {
           let next = prev + delta;
           if (next >= duration) {
-            next = 0; 
+            if (loop) {
+              next = next % duration;
+            } else {
+              next = duration;
+              setIsPlaying(false);
+            }
           }
           return Number(next.toFixed(3));
         });
@@ -818,28 +1262,64 @@ export default function AppLayout() {
     return () => {
       if (playheadRef.current) cancelAnimationFrame(playheadRef.current);
     };
-  }, [isPlaying, duration]);
+  }, [isPlaying, duration, loop]);
 
-  const handlePlayToggle = () => setIsPlaying(!isPlaying);
+  const handlePlayToggle = () => {
+    // Restart from the top if we're paused at the very end.
+    if (!isPlaying && currentTime >= duration - 0.001) {
+      setCurrentTime(0);
+    }
+    setIsPlaying(!isPlaying);
+  };
   const handleReset = () => {
     setIsPlaying(false);
     setCurrentTime(0);
   };
+
+  const timelineBreakpoints = Array.from(new Set([
+    0,
+    duration,
+    ...shapes.map((shape) => shape.time),
+    ...shapes.flatMap((shape) => (shape.fillKeyframes ?? []).map((keyframe) => keyframe.time)),
+    ...tracks.flatMap((track) => track.keyframes.map((keyframe) => keyframe.time)),
+    ...keyLightPositionKeyframes.map((keyframe) => keyframe.time),
+  ].map((time) => Number(clampNumber(time, 0, duration).toFixed(2)))))
+    .sort((a, b) => a - b);
+
+  const goToTime = (time: number) => {
+    setIsPlaying(false);
+    setCurrentTime(clampNumber(Number(time.toFixed(3)), 0, duration));
+  };
+
+  const previousBreakpoint = [...timelineBreakpoints].reverse().find((time) => time < currentTime - 0.04);
+  const nextBreakpoint = timelineBreakpoints.find((time) => time > currentTime + 0.04);
+  const atTimelineStart = currentTime <= 0.04;
+  const atTimelineEnd = currentTime >= duration - 0.04;
+
+  const goToPreviousBreakpoint = () => {
+    if (previousBreakpoint !== undefined) goToTime(previousBreakpoint);
+  };
+
+  const goToNextBreakpoint = () => {
+    if (nextBreakpoint !== undefined) goToTime(nextBreakpoint);
+  };
+
+  const goToEnd = () => goToTime(duration);
 
   const handleTracksChange = (nextTracks: TimelineTrack[]) => {
     setTracks(nextTracks);
     setActiveRecipeId(null);
   };
 
+  const handleScrubStart = () => setIsPlaying(false);
+
   // --- 4. Exporter modal ---
   const [isExportOpen, setIsExportOpen] = useState(false);
   const canvas3DRef = useRef<SvgCanvasRef>(null);
 
   // --- 5. File input loader for custom SVGs ---
-  const fileInputARef = useRef<HTMLInputElement>(null);
-  const fileInputBRef = useRef<HTMLInputElement>(null);
-
-  const handleSvgFileUpload = (e: React.ChangeEvent<HTMLInputElement>, isIconA: boolean) => {
+  // Upload a custom SVG into a specific shape stop.
+  const uploadSvgToShape = (e: React.ChangeEvent<HTMLInputElement>, shapeId: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.type && file.type !== 'image/svg+xml') {
@@ -847,49 +1327,41 @@ export default function AppLayout() {
       return;
     }
     markCustom();
-
     const reader = new FileReader();
     reader.onload = (event) => {
       const content = event.target?.result as string;
-      if (isIconA) {
-        setIconA('custom-a');
-        setIconAContent(content);
-        setActiveColorTab('A');
-      } else {
-        setIconB('custom-b');
-        setIconBContent(content);
-        setActiveColorTab('B');
+      if (content) {
+        setShapes((prev) => prev.map((s) => s.id === shapeId ? { ...s, iconId: 'custom', svgContent: content } : s));
       }
       e.target.value = '';
     };
     reader.readAsText(file);
   };
 
-  const handleDragDropSvg = (e: React.DragEvent, isIconA: boolean) => {
+  const handleDropSvg = (e: React.DragEvent) => {
     const file = e.dataTransfer.files[0];
-    if (file && file.type === 'image/svg+xml') {
-      markCustom();
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const text = event.target?.result as string;
-        if (text) {
-          if (isIconA) {
-            setIconA('custom-a');
-            setIconAContent(text);
-            setActiveColorTab('A');
-          } else {
-            setIconB('custom-b');
-            setIconBContent(text);
-            setActiveColorTab('B');
-          }
-        }
-      };
-      reader.readAsText(file);
-    }
+    if (!file || file.type !== 'image/svg+xml' || !selectedShapeId) return;
+    markCustom();
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (text) setShapes((prev) => prev.map((s) => s.id === selectedShapeId ? { ...s, iconId: 'custom', svgContent: text } : s));
+    };
+    reader.readAsText(file);
   };
 
-  const iconAName = PRESET_ICONS.find((icon) => icon.id === iconA)?.name || 'Shape 1';
-  const iconBName = PRESET_ICONS.find((icon) => icon.id === iconB)?.name || 'Shape 2';
+  const uploadFileRef = useRef<HTMLInputElement>(null);
+  const uploadTargetRef = useRef<string | null>(null);
+  const triggerShapeUpload = (shapeId: string) => {
+    uploadTargetRef.current = shapeId;
+    uploadFileRef.current?.click();
+  };
+
+  // Customize the transition leaving a given shape (blend style / direction).
+  const setShapeBlend = (shapeId: string, patch: Partial<Pick<ShapeStop, 'transitionType' | 'wipeDirection'>>) => {
+    markCustom();
+    setShapes((prev) => prev.map((s) => s.id === shapeId ? { ...s, ...patch } : s));
+  };
 
   return (
     <div className="w-screen h-screen flex flex-col overflow-hidden bg-zinc-950 text-zinc-50 font-sans select-none antialiased">
@@ -917,7 +1389,7 @@ export default function AppLayout() {
                 <span className="hidden sm:inline text-[10px] uppercase tracking-[0.18em] text-zinc-600">3D Motion Studio</span>
               </div>
               <div className="text-[11px] text-zinc-500 truncate">
-                {iconAName} to {iconBName} · {activeRecipeId ? MOTION_RECIPES.find(r => r.id === activeRecipeId)?.name : 'Custom setup'}
+                {sortedShapes.map((s) => shapeName(s)).join(' → ')} · {activeRecipeId ? MOTION_RECIPES.find(r => r.id === activeRecipeId)?.name : 'Custom setup'}
               </div>
             </div>
           </div>
@@ -939,326 +1411,12 @@ export default function AppLayout() {
       </div>
 
       <div className="flex-1 flex min-h-0 bg-[#111214]">
-        
-        {/* LEFT PANEL: Layers & Library */}
-        <div className={`transition-[width,opacity] duration-300 ease-out bg-[#0f1012] flex flex-col shrink-0 overflow-hidden ${
-          zenMode ? 'w-0 opacity-0 border-r-0 pointer-events-none' : 'w-[304px] border-r border-white/[0.07]'
-        }`}>
-          <Tabs value={activePanelTab} onValueChange={(val) => setActivePanelTab(val as any)} className="flex-1 flex flex-col min-h-0 gap-0">
-            <div className="shrink-0 border-b border-white/[0.055] px-3 py-3">
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-[12px] font-semibold tracking-tight text-zinc-100">Source</div>
-                  <div className="mt-0.5 text-[11px] text-zinc-600">
-                    {decomposedPathsA.length + decomposedPathsB.length} paths
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveColorTab('A');
-                    setActivePanelTab('library');
-                  }}
-                  className="h-7 rounded-md border border-white/[0.08] bg-white/[0.035] px-2 text-[11px] text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-                >
-                  Replace
-                </button>
-              </div>
-
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveColorTab('A');
-                    setActivePanelTab('library');
-                  }}
-                  className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-white/[0.075] bg-white/[0.035] px-2 text-left hover:bg-white/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-                >
-                  <div className="size-6 shrink-0 [&_svg]:h-full [&_svg]:w-full [&_svg]:fill-current [&_svg]:stroke-current" style={{ color: colorA }} dangerouslySetInnerHTML={{ __html: iconAContent }} />
-                  <div className="min-w-0">
-                    <div className="truncate text-[11px] font-medium text-zinc-200">{iconAName}</div>
-                    <div className="text-[10px] text-zinc-600">Current</div>
-                  </div>
-                </button>
-                <Blend className="size-3.5 text-zinc-600" />
-                <button
-                  type="button"
-                  onClick={() => setActivePanelTab('library')}
-                  className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-white/[0.075] bg-white/[0.035] px-2 text-left hover:bg-white/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-                >
-                  <div className="size-6 shrink-0 [&_svg]:h-full [&_svg]:w-full [&_svg]:fill-current [&_svg]:stroke-current" style={{ color: colorB }} dangerouslySetInnerHTML={{ __html: iconBContent }} />
-                  <div className="min-w-0">
-                    <div className="truncate text-[11px] font-medium text-zinc-200">{iconBName}</div>
-                    <div className="text-[10px] text-zinc-600">Next</div>
-                  </div>
-                </button>
-              </div>
-
-              <TabsList className="mt-3 grid grid-cols-2 w-full bg-transparent p-0 rounded-none border-0">
-                <TabsTrigger value="presets" className="h-8 rounded-md text-[11px] font-medium text-zinc-500 data-[state=active]:bg-white/[0.075] data-[state=active]:text-zinc-100 gap-1"><Wand2 className="size-3" /> Looks</TabsTrigger>
-                <TabsTrigger value="layers" className="h-8 rounded-md text-[11px] font-medium text-zinc-500 data-[state=active]:bg-white/[0.075] data-[state=active]:text-zinc-100 gap-1"><Layers className="size-3" /> Parts</TabsTrigger>
-              </TabsList>
-            </div>
-
-            <TabsContent value="presets" className="flex-1 overflow-y-auto px-2 py-2 outline-none flex flex-col gap-1 animate-fade-in">
-              {MOTION_RECIPES.map((recipe) => {
-                const isActive = activeRecipeId === recipe.id;
-                return (
-                  <button 
-                    key={recipe.id}
-                    type="button"
-                    onClick={() => applyRecipe(recipe)}
-                    className={`group text-left w-full cursor-pointer rounded-md px-2.5 py-2 flex items-center gap-2.5 transition-[background,border-color,color] duration-150 border focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
-                      isActive 
-                        ? "bg-white/[0.075] border-white/[0.12] text-zinc-50"
-                        : "bg-transparent border-transparent hover:bg-white/[0.04] text-zinc-400"
-                    }`}
-                  >
-                    <div className="flex h-8 w-11 shrink-0 items-center justify-center">
-                      <div className="flex items-center gap-0.5">
-                        <span className="h-5 w-3 rounded-sm border border-white/10" style={{ background: recipe.enableGradient ? `linear-gradient(180deg, ${recipe.colorA}, ${recipe.colorASecondary})` : recipe.colorA }} />
-                        <span className="h-5 w-3 rounded-sm border border-white/10" style={{ background: recipe.enableGradient ? `linear-gradient(180deg, ${recipe.colorB}, ${recipe.colorBSecondary})` : recipe.colorB }} />
-                      </div>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium text-white text-[12px] truncate">{recipe.name}</span>
-                        <span className="text-[9px] font-medium uppercase tracking-[0.08em] text-zinc-600 shrink-0">{recipe.tag}</span>
-                      </div>
-                      <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/[0.06]">
-                        <div
-                          className="h-full w-full"
-                          style={{ background: `linear-gradient(90deg, ${recipe.colorA}, ${recipe.colorB})` }}
-                        />
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </TabsContent>
-
-            <TabsContent value="library" className="flex-1 overflow-y-auto px-3 py-3 outline-none flex flex-col gap-4 animate-fade-in">
-              {/* Upload */}
-              <div className="flex flex-col gap-2.5">
-                <div className="flex items-center justify-between px-0.5">
-                  <span className="text-[11px] font-medium text-zinc-500">Import</span>
-                  <span className="text-[10px] text-zinc-700">SVG only</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button 
-                    type="button"
-                    onClick={() => fileInputARef.current?.click()}
-                    className="h-9 rounded-md border border-dashed border-white/[0.12] px-2 hover:bg-white/[0.04] transition-colors flex items-center justify-center gap-1.5 text-[11px] text-zinc-500 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-                  >
-                    <UploadCloud className="size-3.5" />
-                    <span>Start</span>
-                    <input ref={fileInputARef} type="file" accept=".svg" className="hidden" onChange={(e) => handleSvgFileUpload(e, true)} />
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => fileInputBRef.current?.click()}
-                    className="h-9 rounded-md border border-dashed border-white/[0.12] px-2 hover:bg-white/[0.04] transition-colors flex items-center justify-center gap-1.5 text-[11px] text-zinc-500 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-                  >
-                    <UploadCloud className="size-3.5" />
-                    <span>End</span>
-                    <input ref={fileInputBRef} type="file" accept=".svg" className="hidden" onChange={(e) => handleSvgFileUpload(e, false)} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Built-in Vector Registry (With Premium SVG Swatches instead of letter shorthand) */}
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-2">
-                  <span className="text-[11px] font-medium text-zinc-500 px-0.5">Start</span>
-                  
-                  <div className="flex flex-col gap-1.5">
-                    <div className="grid grid-cols-6 gap-1">
-                      {PRESET_ICONS.map((icon) => {
-                        const isActive = iconA === icon.id;
-                        return (
-                          <button
-                            key={`A-${icon.id}`}
-                            type="button"
-                            aria-label={`Set ${icon.name} as start shape`}
-                            onClick={() => {
-                              selectPresetIcon('A', icon);
-                            }}
-                            className={`aspect-square rounded-md p-2 flex items-center justify-center border transition-[background,border-color] duration-150 group/swatch relative cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
-                              isActive
-                                ? 'border-[var(--glow-color)] text-white'
-                                : 'bg-white/[0.035] border-white/[0.07] text-zinc-400 hover:text-zinc-100 hover:border-white/[0.16]'
-                            }`}
-                            style={{
-                              '--glow-color': icon.defaultTint,
-                              borderColor: isActive ? icon.defaultTint : undefined,
-                              backgroundColor: isActive ? `${icon.defaultTint}1a` : undefined,
-                            } as React.CSSProperties}
-                            title={icon.name}
-                          >
-                            <div 
-                              className="size-5 shrink-0 [&_svg]:h-full [&_svg]:w-full [&_svg]:fill-current [&_svg]:stroke-current"
-                              style={{ 
-                                color: isActive ? icon.defaultTint : 'currentColor',
-                              }} 
-                              dangerouslySetInnerHTML={{ __html: icon.svgContent }} 
-                            />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <span className="text-[11px] font-medium text-zinc-500 px-0.5">End</span>
-                  <div className="flex flex-col gap-1.5">
-                    <div className="grid grid-cols-6 gap-1">
-                      {PRESET_ICONS.map((icon) => {
-                        const isActive = iconB === icon.id;
-                        return (
-                          <button
-                            key={`B-${icon.id}`}
-                            type="button"
-                            aria-label={`Set ${icon.name} as end shape`}
-                            onClick={() => {
-                              selectPresetIcon('B', icon);
-                            }}
-                            className={`aspect-square rounded-md p-2 flex items-center justify-center border transition-[background,border-color] duration-150 group/swatch relative cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
-                              isActive
-                                ? 'border-[var(--glow-color)] text-white'
-                                : 'bg-white/[0.035] border-white/[0.07] text-zinc-400 hover:text-zinc-100 hover:border-white/[0.16]'
-                            }`}
-                            style={{
-                              '--glow-color': icon.defaultTint,
-                              borderColor: isActive ? icon.defaultTint : undefined,
-                              backgroundColor: isActive ? `${icon.defaultTint}1a` : undefined,
-                            } as React.CSSProperties}
-                            title={icon.name}
-                          >
-                            <div 
-                              className="size-5 shrink-0 [&_svg]:h-full [&_svg]:w-full [&_svg]:fill-current [&_svg]:stroke-current"
-                              style={{ 
-                                color: isActive ? icon.defaultTint : 'currentColor',
-                              }} 
-                              dangerouslySetInnerHTML={{ __html: icon.svgContent }} 
-                            />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="layers" className="flex-1 overflow-y-auto px-3 py-3 outline-none flex flex-col gap-3 animate-fade-in">
-              <div className="flex bg-white/[0.035] p-0.5 rounded-md border border-white/[0.07]">
-                <button
-                  type="button"
-                  onClick={() => setActiveLayersIcon('A')}
-                  className={`flex-1 py-1.5 text-center text-[11px] font-medium rounded transition-colors ${
-                    activeLayersIcon === 'A' 
-                      ? 'bg-white/[0.09] text-zinc-50' 
-                      : 'text-zinc-500 hover:text-white'
-                  }`}
-                >
-                  Start ({decomposedPathsA.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveLayersIcon('B')}
-                  className={`flex-1 py-1.5 text-center text-[11px] font-medium rounded transition-colors ${
-                    activeLayersIcon === 'B' 
-                      ? 'bg-white/[0.09] text-zinc-50' 
-                      : 'text-zinc-500 hover:text-white'
-                  }`}
-                >
-                  End ({decomposedPathsB.length})
-                </button>
-              </div>
-              
-              {/* Decomposed path layers list */}
-              <div className="flex flex-col gap-2">
-                {(activeLayersIcon === 'A' ? decomposedPathsA : decomposedPathsB).length === 0 && (
-                  <div className="rounded-md border border-dashed border-white/[0.1] px-3 py-8 text-center">
-                    <div className="mx-auto mb-2 flex size-8 items-center justify-center rounded-md bg-white/[0.035] text-zinc-600">
-                      <Layers className="size-4" />
-                    </div>
-                    <div className="text-[11px] font-medium text-zinc-400">No parts yet</div>
-                    <div className="mt-1 text-[10px] text-zinc-600">Choose or import an SVG shape.</div>
-                  </div>
-                )}
-                {(activeLayersIcon === 'A' ? decomposedPathsA : decomposedPathsB).map((path, idx) => {
-                  const overrides = activeLayersIcon === 'A' ? pathOverridesA : pathOverridesB;
-                  const setOverrides = activeLayersIcon === 'A' ? setPathOverridesA : setPathOverridesB;
-                  const override = overrides.find(o => o.id === path.id);
-                  if (!override) return null;
-
-                  return (
-                    <div 
-                      key={`${activeLayersIcon}-${path.id}`}
-                      className="bg-white/[0.03] border border-white/[0.07] rounded-md p-2.5 flex flex-col gap-2 transition-colors hover:border-white/[0.14]"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <svg className="w-6 h-6 rounded bg-black/30 border border-white/[0.07] p-0.5 shrink-0" viewBox="0 0 24 24">
-                            <path d={path.d} fill={override.color} />
-                          </svg>
-                          <span className="text-[11px] font-medium text-zinc-300">Layer {idx + 1}</span>
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            aria-label={override.visible ? 'Hide part' : 'Show part'}
-                            onClick={() => {
-                              setOverrides(overrides.map(o => o.id === path.id ? { ...o, visible: !o.visible } : o));
-                            }}
-                            className={`p-1 rounded hover:bg-zinc-800 transition-colors ${
-                              override.visible ? 'text-zinc-300' : 'text-zinc-600'
-                            }`}
-                          >
-                            {override.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                          </button>
-                          <ColorPicker
-                            value={override.color}
-                            onChange={(val) => {
-                              setOverrides(overrides.map(o => o.id === path.id ? { ...o, color: val } : o));
-                            }}
-                            className="w-20 px-1 py-0.5 rounded border-zinc-800"
-                          />
-                        </div>
-                      </div>
-
-                      {override.visible && (
-                        <div className="flex items-center gap-2 pl-8">
-                          <span className="text-[10px] text-zinc-500 shrink-0">Extrude</span>
-                          <Slider
-                            value={[override.depthMultiplier]}
-                            min={0.2}
-                            max={3.0}
-                            step={0.1}
-                            onValueChange={(val) => {
-                              setOverrides(overrides.map(o => o.id === path.id ? { ...o, depthMultiplier: (val as number[])[0] } : o));
-                            }}
-                            className="flex-1"
-                          />
-                          <span className="text-[10px] font-mono text-zinc-500 w-8 text-right">{finiteNumber(override.depthMultiplier, 1).toFixed(1)}</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </TabsContent>
-          </Tabs>
-        </div>
 
         {/* MIDDLE SECTION: Interactive WebGL Viewport Canvas */}
         <div className={`transition-all duration-300 ease-out flex-1 flex flex-col min-w-0 ${
           zenMode ? 'p-0 gap-0' : 'p-4 gap-2'
         }`}>
-          <div 
+          <div
             onDragOver={(e) => {
               e.preventDefault();
               setIsDragging(true);
@@ -1266,12 +1424,14 @@ export default function AppLayout() {
             onDragLeave={(e) => {
               e.preventDefault();
               const rect = e.currentTarget.getBoundingClientRect();
-              const x = e.clientX;
-              const y = e.clientY;
-              if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+              if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
                 setIsDragging(false);
-                setDragOverHalf(null);
               }
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+              handleDropSvg(e);
             }}
             className={`flex-1 min-h-0 relative transition-all duration-300 ease-out ${
               zenMode ? 'rounded-none border-0' : 'rounded-lg border border-white/[0.07] overflow-hidden bg-[#0b0c0e]'
@@ -1287,6 +1447,7 @@ export default function AppLayout() {
               colorASecondary={colorASecondary}
               colorBSecondary={colorBSecondary}
               enableGradient={enableGradient}
+              gradientType={activeGradientType}
               roughness={roughness}
               metalness={metalness}
               clearcoat={clearcoat}
@@ -1304,85 +1465,29 @@ export default function AppLayout() {
               transitionType={transitionType}
               wipeDirection={wipeDirection}
               transitionProgress={activeTransitionProgress}
-              rotationSpeed={rotationSpeed}
-              rotationOffset={{ ...rotationOffset, y: activeRotationY }}
+              rotationOffset={{ x: rotationOffset.x, y: activeRotationY, z: rotationOffset.z }}
+              objectScale={activeObjectScale}
               isPlaying={isPlaying}
               ambientColor={ambientColor}
               ambientIntensity={ambientIntensity}
               keyLightColor={keyLightColor}
               keyLightIntensity={activeKeyLightIntensity}
+              keyLightPosition={activeKeyLightPosition}
               rimLightColor={rimLightColor}
               rimLightIntensity={rimLightIntensity}
               zoom={zoom}
-              pathOverridesA={pathOverridesA}
-              pathOverridesB={pathOverridesB}
               onZoomChange={setZoom}
+              onViewRotationCommit={handleViewRotationCommit}
             />
 
-            {/* Drag & Drop Visual Split Overlay */}
+            {/* Drag & drop an SVG to replace the selected shape */}
             {isDragging && (
-              <div className="absolute inset-0 bg-black/75 backdrop-blur-md z-30 flex animate-fade-in transition-all">
-                {/* Left Drop Zone */}
-                <div 
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setDragOverHalf('left');
-                  }}
-                  onDragLeave={() => setDragOverHalf(null)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setIsDragging(false);
-                    setDragOverHalf(null);
-                    handleDragDropSvg(e, true);
-                  }}
-                  className={`flex-1 flex flex-col items-center justify-center gap-4 transition-all duration-300 relative border-r border-white/10 ${
-                    dragOverHalf === 'left' 
-                      ? 'bg-[oklch(0.7_0.15_280)]/15 scale-[0.99] rounded-l-2xl' 
-                      : 'bg-transparent'
-                  }`}
-                >
-                  <div className={`p-6 rounded-2xl border-2 border-dashed transition-all duration-300 ${
-                    dragOverHalf === 'left' 
-                      ? 'border-[oklch(0.7_0.15_280)] bg-[oklch(0.7_0.15_280)]/10 shadow-[0_0_30px_oklch(0.7_0.15_280)/20]' 
-                      : 'border-white/20'
-                  } flex flex-col items-center gap-3 animate-pulse`}>
-                    <Upload className={`w-8 h-8 ${dragOverHalf === 'left' ? 'text-[oklch(0.7_0.15_280)] scale-110' : 'text-white/60'} transition-transform`} />
-                    <div className="text-center">
-                      <span className="block font-bold text-white text-sm">Drop SVG here</span>
-                      <span className="block text-[10px] text-muted-foreground uppercase font-bold tracking-wider mt-1">Set as Start Icon A</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right Drop Zone */}
-                <div 
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setDragOverHalf('right');
-                  }}
-                  onDragLeave={() => setDragOverHalf(null)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setIsDragging(false);
-                    setDragOverHalf(null);
-                    handleDragDropSvg(e, false);
-                  }}
-                  className={`flex-1 flex flex-col items-center justify-center gap-4 transition-all duration-300 relative ${
-                    dragOverHalf === 'right' 
-                      ? 'bg-emerald-500/10 scale-[0.99] rounded-r-2xl' 
-                      : 'bg-transparent'
-                  }`}
-                >
-                  <div className={`p-6 rounded-2xl border-2 border-dashed transition-all duration-300 ${
-                    dragOverHalf === 'right' 
-                      ? 'border-emerald-400 bg-emerald-400/5 shadow-[0_0_30px_rgba(52,211,153,0.15)]' 
-                      : 'border-white/20'
-                  } flex flex-col items-center gap-3 animate-pulse`}>
-                    <Upload className={`w-8 h-8 ${dragOverHalf === 'right' ? 'text-emerald-400 scale-110' : 'text-white/60'} transition-transform`} />
-                    <div className="text-center">
-                      <span className="block font-bold text-white text-sm">Drop SVG here</span>
-                      <span className="block text-[10px] text-muted-foreground uppercase font-bold tracking-wider mt-1">Set as End Icon B</span>
-                    </div>
+              <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/75 backdrop-blur-md animate-fade-in">
+                <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-white/25 p-8">
+                  <Upload className="size-8 text-white/70" />
+                  <div className="text-center">
+                    <span className="block text-sm font-semibold text-white">Drop SVG here</span>
+                    <span className="mt-1 block text-[10px] uppercase tracking-wider text-zinc-500">Replaces the selected shape</span>
                   </div>
                 </div>
               </div>
@@ -1412,249 +1517,160 @@ export default function AppLayout() {
               </Button>
             </div>
 
-            {/* Floating Zen Transport Pill Overlay */}
-            {zenMode && (
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 px-4 py-2.5 bg-black/60 border border-white/10 hover:border-white/20 rounded-full shadow-2xl backdrop-blur-xl z-20 transition-all duration-300 animate-fade-in">
-                <Button 
-                  size="icon" 
-                  variant="ghost" 
-                  onClick={handlePlayToggle}
-                  className="w-8 h-8 rounded-full text-white hover:bg-white/10 animate-hover"
-                >
-                  {isPlaying ? <Pause size={14} className="fill-white" /> : <Play size={14} className="fill-white" />}
-                </Button>
-                <Button 
-                  size="icon" 
-                  variant="ghost" 
-                  onClick={handleReset}
-                  className="w-8 h-8 rounded-full text-white hover:bg-white/10 animate-hover"
-                >
-                  <Undo2 size={14} />
-                </Button>
-                <div className="text-xs text-white/95 font-mono">
-                  <span>{currentTime.toFixed(2)}s</span>
-                  <span className="text-white/40 mx-1">/</span>
-                  <span>{duration.toFixed(1)}s</span>
-                </div>
-                
-                {/* Mini scrub progress bar */}
-                <div className="w-32 h-1 bg-white/20 rounded-full overflow-hidden relative cursor-pointer group"
-                  onClick={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const pct = (e.clientX - rect.left) / rect.width;
-                    setCurrentTime(pct * duration);
-                  }}
-                >
-                  <div 
-                    className="h-full bg-gradient-to-r from-[oklch(0.7_0.15_280)] to-[#a48bff] transition-all"
-                    style={{ width: `${(currentTime / duration) * 100}%` }}
-                  />
-                </div>
-                
+            <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-black/65 px-3 py-2 shadow-2xl backdrop-blur-xl transition-colors hover:border-white/20">
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={handleReset}
+                disabled={atTimelineStart}
+                aria-label="Go to start"
+                title="Go to start"
+                className="size-8 rounded-full text-zinc-400 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-30"
+              >
+                <SkipBack size={14} />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={goToPreviousBreakpoint}
+                disabled={previousBreakpoint === undefined}
+                aria-label="Previous breakpoint"
+                title="Previous breakpoint"
+                className="size-8 rounded-full text-zinc-400 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-30"
+              >
+                <ChevronLeft size={16} />
+              </Button>
+              <Button
+                size="icon"
+                onClick={handlePlayToggle}
+                aria-label={isPlaying ? 'Pause' : 'Play'}
+                className="size-10 rounded-full bg-white text-zinc-950 hover:bg-zinc-200"
+              >
+                {isPlaying ? <Pause size={16} className="fill-current" /> : <Play size={16} className="fill-current" />}
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={goToNextBreakpoint}
+                disabled={nextBreakpoint === undefined}
+                aria-label="Next breakpoint"
+                title="Next breakpoint"
+                className="size-8 rounded-full text-zinc-400 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-30"
+              >
+                <ChevronRight size={16} />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={goToEnd}
+                disabled={atTimelineEnd}
+                aria-label="Go to end"
+                title="Go to end"
+                className="size-8 rounded-full text-zinc-400 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-30"
+              >
+                <SkipForward size={14} />
+              </Button>
+              {zenMode && (
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={() => setZenMode(false)}
-                  className="text-[11px] text-zinc-500 hover:text-white px-2 py-1 h-6 rounded-md hover:bg-white/5"
+                  className="h-7 rounded-full px-2 text-[11px] text-zinc-500 hover:bg-white/10 hover:text-white"
                 >
                   Exit
                 </Button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
-          {!zenMode && (
-            <div className="h-11 shrink-0 rounded-lg border border-white/[0.07] bg-[#15171a] px-3 flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <Button size="icon-sm" variant="ghost" aria-label={isPlaying ? "Pause preview" : "Play preview"} onClick={handlePlayToggle} className="text-zinc-200 hover:text-white hover:bg-white/[0.08]">
-                  {isPlaying ? <Pause className="size-3.5 fill-current" /> : <Play className="size-3.5 fill-current" />}
-                </Button>
-                <Button size="icon-sm" variant="ghost" aria-label="Reset preview" onClick={handleReset} className="text-zinc-500 hover:text-white hover:bg-white/[0.08]">
-                  <Undo2 className="size-3.5" />
-                </Button>
-                <div className="ml-2 text-[11px] font-mono tabular-nums text-zinc-500">
-                  <span className="text-zinc-200">{currentTime.toFixed(2)}</span>
-                  <span className="px-1 text-zinc-700">/</span>
-                  <span>{duration.toFixed(1)}s</span>
-                </div>
-              </div>
-
-              <div
-                className="mx-4 hidden sm:block h-1 flex-1 max-w-[420px] rounded-full bg-black/40 overflow-hidden cursor-pointer"
-                onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  setCurrentTime(((e.clientX - rect.left) / rect.width) * duration);
-                }}
-              >
-                <div className="h-full bg-white/70" style={{ width: `${(currentTime / duration) * 100}%` }} />
-              </div>
-
-              <div className="hidden md:flex items-center gap-2 text-[11px] text-zinc-500">
-                <span className="font-mono tabular-nums text-zinc-300">{Math.round(activeTransitionProgress * 100)}%</span>
-                <span>{transitionType === 'wipe' ? 'wipe' : 'dissolve'}</span>
-              </div>
-            </div>
-          )}
         </div>
 
         <div className={`transition-all duration-300 ease-out flex flex-col shrink-0 overflow-y-auto bg-[#0f1012] ${
           zenMode ? 'w-0 opacity-0 border-l-0 pointer-events-none p-0' : 'w-[328px] border-l border-white/[0.07] px-4 py-4 gap-5'
         }`}>
-          
-          {/* Material Presets */}
-          <div className="flex items-center justify-between gap-3 border-b border-white/[0.07] pb-4">
+
+          {/* Looks — quick-start style presets */}
+          <div className="flex flex-col gap-2.5 border-b border-white/[0.07] pb-4">
+            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
+              <Wand2 className="size-3.5" />
+              Looks
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {MOTION_RECIPES.map((recipe) => {
+                const isActive = activeRecipeId === recipe.id;
+                return (
+                  <button
+                    key={recipe.id}
+                    type="button"
+                    title={recipe.name}
+                    onClick={() => applyRecipe(recipe)}
+                    className={`group relative flex flex-col gap-1.5 rounded-xl p-1 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+                      isActive ? 'bg-white/[0.08] ring-1 ring-white/40' : 'hover:bg-white/[0.04]'
+                    }`}
+                  >
+                    <span
+                      className="relative block h-12 w-full overflow-hidden rounded-lg border border-white/10 shadow-inner"
+                      style={{ background: `linear-gradient(135deg, ${recipe.colorA}, ${recipe.colorASecondary} 50%, ${recipe.colorB})` }}
+                    >
+                      <span className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+                    </span>
+                    <span className="truncate px-1 pb-0.5 text-[10px] font-medium text-zinc-300">{recipe.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Material — preview chips */}
+          <div className="flex flex-col gap-2.5 border-b border-white/[0.07] pb-4">
             <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
               <Palette className="size-3.5" />
               Material
             </div>
-            <Popover>
-              <PopoverTrigger className="h-8 min-w-36 rounded-md border border-white/[0.08] bg-white/[0.035] px-2.5 text-left text-[11px] text-zinc-200 hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30">
-                {MATERIAL_METADATA[materialPreset].name}
-              </PopoverTrigger>
-              <PopoverContent align="end" side="bottom" sideOffset={6} className="w-56 border-white/[0.09] bg-[#15171a] p-1.5 text-zinc-100">
-                {(Object.keys(MATERIAL_METADATA) as MaterialPresetId[]).map((preset) => {
-                  const meta = MATERIAL_METADATA[preset];
-                  const isActive = materialPreset === preset;
-                  return (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => {
-                        setMaterialPreset(preset);
-                        setActiveRecipeId(null);
-                      }}
-                      className={`flex h-8 w-full items-center justify-between rounded-md px-2 text-left text-[11px] transition-colors ${
-                        isActive ? 'bg-white/[0.09] text-white' : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-100'
-                      }`}
-                    >
-                      <span>{meta.name}</span>
-                      {isActive && <span className="size-1.5 rounded-full bg-white" />}
-                    </button>
-                  );
-                })}
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          <div className="flex flex-col gap-3 border-b border-white/[0.07] pb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
-                <Rows3 className="size-3.5" />
-                Fill
-              </div>
-              <div className="flex items-center rounded-md border border-white/[0.07] bg-black/25 p-0.5">
-                {(['A', 'B'] as const).map((shape) => {
-                  const isActive = activeColorTab === shape;
-                  const swatchColor = shape === 'A' ? colorA : colorB;
-                  return (
-                    <button
-                      key={shape}
-                      type="button"
-                      aria-label={`Edit ${shape === 'A' ? iconAName : iconBName} fill`}
-                      onClick={() => setActiveColorTab(shape)}
-                      className={`h-6 px-2 rounded text-[10px] font-medium transition-colors ${
-                        isActive ? 'bg-white/[0.1] text-white' : 'text-zinc-500 hover:text-zinc-200'
-                      }`}
-                    >
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="size-2 rounded-full" style={{ backgroundColor: swatchColor }} />
-                        {shape === 'A' ? iconAName : iconBName}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-white/[0.08] bg-black/20 p-2.5 flex flex-col gap-2.5">
-              <div className="flex items-center gap-1 rounded-md bg-black/25 p-0.5">
-                {FILL_MODES.map((mode) => {
-                  const isActive = fillMode === mode.id;
-                  return (
-                    <button
-                      key={mode.id}
-                      type="button"
-                      onClick={() => {
-                        setFillMode(mode.id);
-                        setEnableGradient(mode.id !== 'solid');
-                        markCustom();
-                      }}
-                      className={`h-7 flex-1 rounded text-[11px] font-medium transition-colors ${
-                        isActive ? 'bg-white text-zinc-950' : 'text-zinc-500 hover:text-zinc-200'
-                      }`}
-                    >
-                      {mode.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div
-                className="h-10 rounded-md border border-white/[0.08]"
-                style={{
-                  background: fillMode === 'solid'
-                    ? (activeColorTab === 'A' ? colorA : colorB)
-                    : `linear-gradient(90deg, ${activeColorTab === 'A' ? colorA : colorB}, ${activeColorTab === 'A' ? colorASecondary : colorBSecondary})`
-                }}
-              />
-
-              <div className={`grid gap-2 ${fillMode === 'solid' ? 'grid-cols-1' : 'grid-cols-2'}`}>
-                <ColorPicker
-                  value={activeColorTab === 'A' ? colorA : colorB}
-                  onChange={(val) => {
-                    updatePrimaryColor(activeColorTab, val);
-                  }}
-                  className="rounded-md bg-white/[0.035] border-white/[0.08]"
-                />
-                {fillMode !== 'solid' && (
-                  <ColorPicker
-                    value={activeColorTab === 'A' ? colorASecondary : colorBSecondary}
-                    onChange={(val) => {
-                      if (activeColorTab === 'A') setColorASecondary(val);
-                      else setColorBSecondary(val);
-                      markCustom();
-                    }}
-                    className="rounded-md bg-white/[0.035] border-white/[0.08]"
-                  />
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-6 gap-1.5">
-              {CURATED_PALETTES.map((palette) => {
-                const isCurrent =
-                  fillMode !== 'solid'
-                    ? activeColorTab === 'A'
-                      ? colorA === palette.colorA && colorASecondary === (palette.colorASecondary || palette.colorA)
-                      : colorB === palette.colorB && colorBSecondary === (palette.colorBSecondary || palette.colorB)
-                    : activeColorTab === 'A'
-                      ? colorA === palette.colorA
-                      : colorB === palette.colorB;
-
+            <div className="grid grid-cols-3 gap-2">
+              {(Object.keys(MATERIAL_METADATA) as MaterialPresetId[]).map((preset) => {
+                const isActive = materialPreset === preset;
                 return (
                   <button
-                    key={palette.name}
+                    key={preset}
                     type="button"
-                    title={palette.name}
-                    onClick={() => {
-                      const nextMode: FillMode = palette.enableGradient ? 'gradient' : 'solid';
-                      setFillMode(nextMode);
-                      setEnableGradient(nextMode !== 'solid');
-                      if (activeColorTab === 'A') {
-                        updatePrimaryColor('A', palette.colorA);
-                        setColorASecondary(palette.colorASecondary || palette.colorA);
-                      } else {
-                        updatePrimaryColor('B', palette.colorB);
-                        setColorBSecondary(palette.colorBSecondary || palette.colorB);
-                      }
-                    }}
-                    className={`h-6 rounded-md border transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
-                      isCurrent ? 'border-white/80' : 'border-white/[0.09]'
+                    title={MATERIAL_METADATA[preset].name}
+                    onClick={() => { setMaterialPreset(preset); setActiveRecipeId(null); }}
+                    className={`flex flex-col items-center gap-1.5 rounded-xl p-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+                      isActive ? 'bg-white/[0.08] ring-1 ring-white/40' : 'hover:bg-white/[0.04]'
                     }`}
-                    style={{ background: palette.glowColor }}
-                  />
+                  >
+                    <span className="size-8 rounded-full border border-white/10 shadow-[0_2px_6px_rgba(0,0,0,0.5)]" style={{ background: MATERIAL_PREVIEW[preset] }} />
+                    <span className={`truncate text-[10px] font-medium ${isActive ? 'text-zinc-100' : 'text-zinc-400'}`}>{MATERIAL_METADATA[preset].name}</span>
+                  </button>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Fill — solid or gradient (type lives inside the swatch popover) */}
+          <div className="flex items-center justify-between gap-3 border-b border-white/[0.07] pb-4">
+            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
+              <Rows3 className="size-3.5" />
+              Fill
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-[150px]">
+              <ColorPicker
+                value={selectedShapeFill}
+                onChange={(val) => updateSelectedShapeColor(val)}
+                gradient={fillMode === 'gradient'}
+                onGradientToggle={(on) => { setFillMode(on ? 'gradient' : 'solid'); setEnableGradient(on); markCustom(); }}
+                gradientType={selectedShapeGradientType}
+                onGradientTypeChange={updateSelectedShapeGradientType}
+                secondaryValue={selectedShapeFillSecondary}
+                onSecondaryChange={(val) => updateSelectedShapeColor(val, true)}
+                className="rounded-lg bg-white/[0.035] border-white/[0.08]"
+              />
+              </div>
+              <div className="flex shrink-0 flex-col gap-1">
+                {renderColorKeyframeControl()}
+              </div>
             </div>
           </div>
 
@@ -1665,7 +1681,7 @@ export default function AppLayout() {
                 Material
               </div>
 
-              {/* Clean Apple-style property rows: Label [slider] Value */}
+              {/* Compact property rows: label + direct value, closer to Figma/Framer inspectors. */}
               {[
                 { label: 'Smoothness', value: roughness, set: setRoughness, min: 0, max: 1, step: 0.02, fmt: (v: number) => v.toFixed(2) },
                 { label: 'Metallic', value: metalness, set: setMetalness, min: 0, max: 1, step: 0.02, fmt: (v: number) => v.toFixed(2) },
@@ -1673,17 +1689,9 @@ export default function AppLayout() {
                 { label: 'Transparency', value: transmission, set: setTransmission, min: 0, max: 1, step: 0.05, fmt: (v: number) => v.toFixed(2) },
                 { label: 'Glow', value: emissiveIntensity, set: setEmissiveIntensity, min: 0, max: 5, step: 0.1, fmt: (v: number) => v.toFixed(1) },
               ].map(({ label, value, set, min, max, step, fmt }) => (
-                <div key={label} className="flex items-center gap-3">
+                <div key={label} className="flex items-center justify-between gap-3">
                   <span className="text-[11px] text-zinc-400 w-24 shrink-0">{label}</span>
-                  <Slider 
-                    value={[value]} 
-                    min={min} 
-                    max={max} 
-                    step={step} 
-                    onValueChange={(val) => { set((val as number[])[0]); setActiveRecipeId(null); }}
-                    className="flex-1"
-                  />
-                  <span className="text-[10px] font-mono text-zinc-500 w-8 text-right">{fmt(value)}</span>
+                  <NumberField value={value} min={min} max={max} step={step} precision={fmt(value).includes('.') ? fmt(value).split('.')[1].length : 0} onChange={(next) => { set(next); setActiveRecipeId(null); }} />
                 </div>
               ))}
             </div>
@@ -1705,21 +1713,11 @@ export default function AppLayout() {
                 {extrusionTrack.keyframes.length > 0 && <span className="inline-block w-1 h-1 rounded-full bg-emerald-500 ml-1 align-middle" />}
               </span>
               {(() => {
-                const depthValue = finiteNumber(extrusionTrack.keyframes.length > 0 ? activeExtrusionDepth : extrusionDepth, 1.2);
+                const depthValue = finiteNumber(extrusionTrack.keyframes.length > 0 ? activeExtrusionDepth : extrusionDepth, EXTRUDE_DEFAULT);
                 return (
                   <>
-              <Slider
-                value={[depthValue]}
-                min={0.2}
-                max={3.0}
-                step={0.05}
-                onValueChange={(val) => {
-                  handleDepthChange((val as number[])[0]);
-                  setActiveRecipeId(null);
-                }}
-                className="flex-1"
-              />
-                    <NumberField value={depthValue} min={0.2} max={3} step={0.05} precision={2} onChange={(value) => { handleDepthChange(value); setActiveRecipeId(null); }} />
+                    <span className="flex-1" />
+                    <NumberField value={depthValue} min={0.2} max={EXTRUDE_MAX} step={0.25} precision={2} onChange={(value) => { handleDepthChange(value); setActiveRecipeId(null); }} />
                     {renderKeyframeControl(extrusionTrack, depthValue)}
                   </>
                 );
@@ -1727,20 +1725,13 @@ export default function AppLayout() {
             </div>
 
             {hasLayerGapControls && (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center justify-between gap-3">
                 <span className="text-[11px] text-zinc-400 w-24 shrink-0">Layer Gap</span>
                 {(() => {
                   const gapValue = finiteNumber(layerSpacing, 0);
                   return (
                     <>
-                      <Slider
-                        value={[gapValue]}
-                        min={0.0}
-                        max={2.0}
-                        step={0.05}
-                        onValueChange={(val) => { setLayerSpacing((val as number[])[0]); setActiveRecipeId(null); }}
-                        className="flex-1"
-                      />
+                      <span className="flex-1" />
                       <NumberField value={gapValue} min={0} max={2} step={0.05} precision={2} onChange={(value) => { setLayerSpacing(value); setActiveRecipeId(null); }} />
                     </>
                   );
@@ -1774,217 +1765,103 @@ export default function AppLayout() {
             </div>
           </div>
 
-          {/* Shape Blend */}
-          <div className="flex flex-col gap-2.5 border-b border-white/[0.07] pb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
-                <Blend className="size-3.5" />
-                Shape Blend
-              </div>
-              <span className="text-[10px] font-mono tabular-nums text-zinc-500">{Math.round(activeTransitionProgress * 100)}%</span>
-            </div>
-
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex rounded-md border border-white/[0.07] bg-black/25 p-0.5">
-                {[
-                  { id: 'none' as const, label: 'Dissolve' },
-                  { id: 'wipe' as const, label: 'Wipe' },
-                ].map((mode) => (
-                  <button
-                    key={mode.id}
-                    type="button"
-                    onClick={() => { setTransitionType(mode.id); setActiveRecipeId(null); }}
-                    className={`h-7 rounded px-3 text-[11px] font-medium transition-colors ${
-                      transitionType === mode.id ? 'bg-white text-zinc-950' : 'text-zinc-500 hover:text-zinc-200'
-                    }`}
-                  >
-                    {mode.label}
-                  </button>
-                ))}
-              </div>
-
-              {transitionType === 'wipe' && (
-                <Popover>
-                  <PopoverTrigger className="h-8 rounded-md border border-white/[0.08] bg-white/[0.035] px-2.5 text-zinc-300 hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30">
-                    {getDirectionIcon(directions.find((dir) => dir.x === wipeDirection.x && dir.y === wipeDirection.y)?.label || '•', 'size-3.5')}
-                  </PopoverTrigger>
-                  <PopoverContent align="end" side="top" sideOffset={6} className="w-auto border-white/[0.09] bg-[#15171a] p-2">
-                    <div className="grid grid-cols-3 gap-1">
-                      {directions.map((dir) => {
-                        const isActive = wipeDirection.x === dir.x && wipeDirection.y === dir.y;
-                        return (
-                          <button
-                            key={dir.label}
-                            type="button"
-                            title={dir.tooltip}
-                            onClick={() => { setWipeDirection({ x: dir.x, y: dir.y }); setActiveRecipeId(null); }}
-                            className={`size-8 rounded-md flex items-center justify-center border transition-colors ${
-                              isActive
-                                ? 'bg-white border-white text-zinc-950'
-                                : 'bg-white/[0.035] border-white/[0.08] text-zinc-500 hover:text-white hover:border-white/[0.16]'
-                            }`}
-                          >
-                            {getDirectionIcon(dir.label, 'size-3.5')}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              )}
-            </div>
-
-            <div className={motionPropertyRowClass('transition')} onClick={() => setSelectedMotionTrackId('transition')}>
-              <span className="text-[11px] text-zinc-400 w-24 shrink-0">
-                Blend
-                {transitionTrack.keyframes.length > 0 && <span className="inline-block w-1 h-1 rounded-full bg-emerald-500 ml-1 align-middle" />}
-              </span>
-              <Slider
-                value={[finiteNumber(activeTransitionProgress, 0)]}
-                min={0}
-                max={1}
-                step={0.01}
-                onValueChange={(val) => {
-                  handleMorphChange((val as number[])[0]);
-                  setActiveRecipeId(null);
-                }}
-                className="flex-1"
-              />
-              <NumberField
-                value={finiteNumber(activeTransitionProgress, 0)}
-                min={0}
-                max={1}
-                step={0.01}
-                precision={2}
-                onChange={(value) => {
-                  handleMorphChange(value);
-                  setActiveRecipeId(null);
-                }}
-              />
-              {renderKeyframeControl(transitionTrack, finiteNumber(activeTransitionProgress, 0))}
-            </div>
-          </div>
-
-          {/* Camera */}
+          {/* Motion & View */}
           <div className="flex flex-col gap-3 pb-4">
             <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
-              <SunMedium className="size-3.5" />
-              View & Lighting
+              <Orbit className="size-3.5" />
+              Motion &amp; View
             </div>
 
-            {[
-              { label: 'X Rotation', axis: 'x' as const },
-              { label: 'Y Rotation', axis: 'y' as const },
-              { label: 'Z Rotation', axis: 'z' as const },
-            ].map(({ label, axis }) => {
-              const isAnimatedRotation = axis === 'y';
-              const axisValue = isAnimatedRotation
-                ? finiteNumber(activeRotationY, 0)
-                : finiteNumber(rotationOffset?.[axis], 0);
-              const updateAxis = (value: number) => {
-                if (isAnimatedRotation) {
-                  handleSpinChange(value);
-                } else {
-                  setRotationOffset((prev) => ({ ...(prev ?? { x: 0, y: 0, z: 0 }), [axis]: value }));
-                }
-                setActiveRecipeId(null);
-              };
-              return (
-                <div
-                  key={axis}
-                  className={isAnimatedRotation ? motionPropertyRowClass('rotation') : 'flex items-center gap-3'}
-                  onClick={() => {
-                    if (isAnimatedRotation) setSelectedMotionTrackId('rotation');
-                  }}
-                >
-                  <span className="text-[11px] text-zinc-400 w-24 shrink-0">
-                    {label}
-                    {isAnimatedRotation && rotationTrack.keyframes.length > 0 && <span className="inline-block w-1 h-1 rounded-full bg-emerald-500 ml-1 align-middle" />}
-                  </span>
-                  <Slider
-                    value={[axisValue]}
-                    min={-180}
-                    max={180}
-                    step={1}
-                    onValueChange={(val) => {
-                      const value = (val as number[])[0] ?? 0;
-                      updateAxis(value);
-                    }}
-                    className="flex-1"
-                  />
-                  <NumberField
-                    value={axisValue}
-                    min={-180}
-                    max={180}
-                    step={1}
-                    suffix="°"
-                    precision={0}
-                    onChange={(value) => {
-                      updateAxis(value);
-                    }}
-                  />
-                  {isAnimatedRotation && renderKeyframeControl(rotationTrack, axisValue)}
-                </div>
-              );
-            })}
+            <div className={motionPropertyRowClass('rotation')} onClick={() => setSelectedMotionTrackId('rotation')}>
+              <div className="flex flex-1 items-center gap-1">
+                {([
+                  { label: 'X', axis: 'x' as const, value: normalizeDegrees(rotationOffset.x) },
+                  { label: 'Y', axis: 'y' as const, value: normalizeDegrees(activeRotationY), animated: true },
+                  { label: 'Z', axis: 'z' as const, value: normalizeDegrees(rotationOffset.z) },
+                ]).map(({ label, axis, value, animated }) => (
+                  <div key={axis} className="flex h-7 min-w-0 items-center rounded-md border border-white/[0.07] bg-black/20 px-1.5">
+                    <span className="shrink-0 text-[9px] font-medium text-zinc-500">{label}</span>
+                    <NumberField
+                      value={value}
+                      min={0}
+                      max={360}
+                      step={1}
+                      suffix="°"
+                      precision={0}
+                      className="h-6 w-[38px] border-0 bg-transparent px-0"
+                      inputClassName="text-left"
+                      onChange={(nextValue) => {
+                        const normalized = normalizeDegrees(nextValue);
+                        if (animated) {
+                          handleSpinChange(normalized);
+                        } else {
+                          setRotationOffset((prev) => ({ ...prev, [axis]: normalized }));
+                          setActiveRecipeId(null);
+                        }
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+              {renderKeyframeControl(rotationTrack, normalizeDegrees(activeRotationY))}
+            </div>
 
-            {/* Brightness */}
-            <div className={motionPropertyRowClass('lighting')} onClick={() => setSelectedMotionTrackId('lighting')}>
-              <span className="text-[11px] text-zinc-400 w-24 shrink-0">
-                Brightness
-                {lightingTrack.keyframes.length > 0 && <span className="inline-block w-1 h-1 rounded-full bg-emerald-500 ml-1 align-middle" />}
+            <div className={motionPropertyRowClass('scale')} onClick={() => setSelectedMotionTrackId('scale')}>
+              <span className="w-16 shrink-0 text-[11px] text-zinc-300">
+                Scale
+                {scaleTrack.keyframes.length > 0 && <span className="inline-block w-1 h-1 rounded-full bg-emerald-500 ml-1 align-middle" />}
               </span>
               {(() => {
-                const brightnessValue = finiteNumber(lightingTrack.keyframes.length > 0 ? activeKeyLightIntensity : keyLightIntensity, 1);
+                const scaleValue = finiteNumber(scaleTrack.keyframes.length > 0 ? activeObjectScale : objectScale, SCALE_DEFAULT);
                 return (
                   <>
-              <Slider
-                value={[brightnessValue]}
-                min={0.0}
-                max={3.0}
-                step={0.1}
-                onValueChange={(val) => {
-                  handleBrightnessChange((val as number[])[0]);
-                  setActiveRecipeId(null);
-                }}
-                className="flex-1"
-              />
-              <NumberField
-                value={brightnessValue}
-                min={0}
-                max={3}
-                step={0.1}
-                precision={1}
-                onChange={(value) => {
-                  handleBrightnessChange(value);
-                  setActiveRecipeId(null);
-                }}
-              />
-              {renderKeyframeControl(lightingTrack, brightnessValue)}
+                    <span className="flex-1" />
+                    <NumberField
+                      value={scaleValue}
+                      min={0.1}
+                      max={SCALE_MAX}
+                      step={0.05}
+                      precision={2}
+                      onChange={(value) => { handleScaleChange(value); setActiveRecipeId(null); }}
+                    />
+                    {renderKeyframeControl(scaleTrack, scaleValue)}
                   </>
                 );
               })()}
             </div>
 
-            {/* Zoom */}
-            <div className="flex items-center gap-3">
-              <span className="text-[11px] text-zinc-400 w-24 shrink-0">Zoom</span>
-              <Slider
-                value={[finiteNumber(zoom, 1)]}
-                min={0.5}
-                max={2.0}
-                step={0.1}
-                onValueChange={(val) => { setZoom((val as number[])[0]); setActiveRecipeId(null); }}
-                className="flex-1"
-              />
-              <NumberField
-                value={finiteNumber(zoom, 1)}
-                min={0.5}
-                max={2}
-                step={0.1}
-                precision={1}
-                onChange={(value) => { setZoom(value); setActiveRecipeId(null); }}
-              />
+            {/* Light — brightness inline; direction & temperature live in the orb popover */}
+            <div className={motionPropertyRowClass('lighting')} onClick={() => setSelectedMotionTrackId('lighting')}>
+              <div onClick={(e) => e.stopPropagation()}>
+                <LightDirectionPicker
+                  position={activeKeyLightPosition}
+                  color={keyLightColor}
+                  onDirectionChange={updateLightPositionXY}
+                  onColorChange={(color) => { setKeyLightColor(color); setActiveRecipeId(null); }}
+                  isKeyed={Boolean(lightPositionKeyframeAtPlayhead())}
+                  onToggleKeyframe={toggleLightPositionKeyframeAtPlayhead}
+                />
+              </div>
+              <span className="w-12 shrink-0 text-[11px] text-zinc-300">Light</span>
+              {(() => {
+                const brightnessValue = finiteNumber(lightingTrack.keyframes.length > 0 ? activeKeyLightIntensity : keyLightIntensity, 1);
+                return (
+                  <>
+                    <span className="flex-1" />
+                    <NumberField value={brightnessValue} min={0} max={LIGHT_MAX} step={0.1} precision={1} onChange={(value) => { handleBrightnessChange(value); setActiveRecipeId(null); }} />
+                    {renderKeyframeControl(lightingTrack, brightnessValue)}
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Zoom (view only) */}
+            <div className="flex items-center gap-3 -mx-1 px-1 py-1">
+              <Maximize2 className="size-3.5 shrink-0 text-zinc-500" />
+              <span className="w-16 shrink-0 text-[11px] text-zinc-300">Zoom</span>
+              <span className="flex-1" />
+              <NumberField value={finiteNumber(zoom, 1)} min={0.5} max={2} step={0.1} precision={1} onChange={(value) => { setZoom(value); setActiveRecipeId(null); }} />
+              <span className="size-6 shrink-0" />
             </div>
           </div>
 
@@ -1995,99 +1872,42 @@ export default function AppLayout() {
       {/* =========================================================================
           3. KEYFRAME TIMELINE Scrubber
           ========================================================================= */}
-      <div className={`transition-all duration-500 ease-in-out shrink-0 overflow-hidden ${zenMode ? 'h-0 border-t-0' : 'h-[136px] border-t border-white/[0.07] bg-[#0f1012]'}`}>
+      <div className={`transition-all duration-500 ease-in-out shrink-0 overflow-hidden ${zenMode ? 'h-0 border-t-0' : 'h-[184px] border-t border-white/[0.07] bg-[#0f1012]'}`}>
         <Timeline
           duration={duration}
           currentTime={currentTime}
-          isPlaying={isPlaying}
           onTimeChange={setCurrentTime}
-          onPlayToggle={handlePlayToggle}
-          onReset={handleReset}
+          onScrubStart={handleScrubStart}
+          loop={loop}
+          onLoopChange={setLoop}
           tracks={tracks}
           onTracksChange={handleTracksChange}
           activeTrackId={selectedMotionTrackId}
-          onActiveTrackChange={(trackId) => setSelectedMotionTrackId(trackId as MotionTrackId)}
-          sequenceSlot={
-            <div className="flex w-full items-center gap-2">
-              <div className="flex min-w-[320px] max-w-[720px] flex-1 items-center">
-                <button
-                  type="button"
-                  className="h-7 min-w-0 flex-1 rounded-l-md border border-white/[0.08] bg-white/[0.045] px-2.5 flex items-center gap-2 text-left hover:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-                  onClick={() => setActivePanelTab('library')}
-                >
-                  <div className="size-5 shrink-0 flex items-center justify-center [&_svg]:h-full [&_svg]:w-full [&_svg]:fill-current [&_svg]:stroke-current" style={{ color: colorA }} dangerouslySetInnerHTML={{ __html: iconAContent }} />
-                  <span className="truncate text-[11px] font-medium text-zinc-200">{PRESET_ICONS.find(i => i.id === iconA)?.name || 'Shape 1'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  aria-label={`Edit ${transitionType === 'wipe' ? 'wipe' : 'dissolve'} overlap`}
-                  title={`Edit ${transitionType === 'wipe' ? 'wipe' : 'dissolve'} overlap`}
-                  className="relative h-7 w-8 -mx-px border-y border-white/[0.11] bg-black/30 overflow-hidden hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-                >
-                  <div className="absolute inset-0 opacity-60" style={{ background: `linear-gradient(90deg, ${colorA}55, ${colorB}55)` }} />
-                  <div className="absolute inset-0 opacity-35 [background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.45)_0,rgba(255,255,255,.45)_1px,transparent_1px,transparent_5px)]" />
-                  <div
-                    className="absolute bottom-0 left-0 h-0.5 bg-white/70"
-                    style={{ width: `${activeTransitionProgress * 100}%` }}
-                  />
-                </button>
-
-                <button
-                  type="button"
-                  className="h-7 min-w-0 flex-1 rounded-r-md border border-white/[0.08] bg-white/[0.045] px-2.5 flex items-center gap-2 text-left hover:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-                  onClick={() => setActivePanelTab('library')}
-                >
-                  <div className="size-5 shrink-0 flex items-center justify-center [&_svg]:h-full [&_svg]:w-full [&_svg]:fill-current [&_svg]:stroke-current" style={{ color: colorB }} dangerouslySetInnerHTML={{ __html: iconBContent }} />
-                  <span className="truncate text-[11px] font-medium text-zinc-200">{PRESET_ICONS.find(i => i.id === iconB)?.name || 'Shape 2'}</span>
-                </button>
-              </div>
-
-              <Popover>
-                <PopoverTrigger
-                  className="h-7 min-w-28 rounded-md border border-dashed border-white/[0.14] px-2 flex items-center justify-center gap-1.5 text-[11px] text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-                >
-                  <Plus className="size-3.5" />
-                  Set next
-                </PopoverTrigger>
-                <PopoverContent align="end" side="top" sideOffset={8} className="w-72 border-white/[0.09] bg-[#15171a] p-2.5 text-zinc-100 shadow-2xl">
-                  <div className="flex items-center justify-between px-1 pb-2">
-                    <span className="text-[11px] font-medium text-zinc-300">Choose next shape</span>
-                    <button
-                      type="button"
-                      onClick={() => fileInputBRef.current?.click()}
-                      className="h-6 rounded-md px-2 text-[10px] text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200"
-                    >
-                      Upload SVG
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-5 gap-1.5">
-                    {PRESET_ICONS.map((icon) => (
-                      <button
-                        key={`add-${icon.id}`}
-                        type="button"
-                        aria-label={`Add ${icon.name} as next shape`}
-                        title={icon.name}
-                        onClick={() => {
-                          selectPresetIcon('B', icon);
-                          setActivePanelTab('library');
-                        }}
-                        className="aspect-square rounded-md border border-white/[0.08] bg-white/[0.035] p-2 text-zinc-400 hover:border-white/[0.18] hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-                      >
-                        <div
-                          className="size-5 mx-auto [&_svg]:h-full [&_svg]:w-full [&_svg]:fill-current [&_svg]:stroke-current"
-                          style={{ color: icon.defaultTint }}
-                          dangerouslySetInnerHTML={{ __html: icon.svgContent }}
-                        />
-                      </button>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-          }
+          onActiveTrackChange={(trackId) => { setSelectedMotionTrackId(trackId as MotionTrackId); setSelectedShapeId(null); }}
+          shapes={shapes}
+          selectedShapeId={selectedShapeId}
+          onSelectShape={setSelectedShapeId}
+          onShapesChange={(next) => { markCustom(); setShapes(next); }}
+          onAddShape={addShapeAtPlayhead}
+          onRemoveShape={removeShape}
+          onShapeEasingChange={(id, easing) => { markCustom(); setShapes((prev) => prev.map((s) => s.id === id ? { ...s, easing } : s)); }}
+          shapeOptions={PRESET_ICONS}
+          onShapeIconChange={setShapeIcon}
+          onUploadShape={triggerShapeUpload}
+          onShapeBlendChange={setShapeBlend}
+          openShapePicker={openShapePicker}
+          onOpenShapePicker={setOpenShapePicker}
+          wipeDirections={directions}
         />
       </div>
+
+      <input
+        ref={uploadFileRef}
+        type="file"
+        accept=".svg"
+        className="hidden"
+        onChange={(e) => { const id = uploadTargetRef.current; if (id) uploadSvgToShape(e, id); }}
+      />
 
       {/* =========================================================================
           4. EXPORT STUDIO MODAL
