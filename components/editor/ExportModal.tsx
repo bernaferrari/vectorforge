@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Download, Code2, Video, Check, Copy, Sparkles, FileCode, CheckCircle } from 'lucide-react';
+import { Download, Video, Check, Copy, Box, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import confetti from 'canvas-confetti';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -18,6 +18,7 @@ interface ExportModalProps {
   colorB: string;
   roughness: number;
   metalness: number;
+  reflectance: number;
   clearcoat: number;
   clearcoatRoughness: number;
   transmission: number;
@@ -48,6 +49,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   colorB,
   roughness,
   metalness,
+  reflectance,
   clearcoat,
   clearcoatRoughness,
   transmission,
@@ -66,7 +68,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   svgPathA,
   svgPathB
 }) => {
-  const [activeTab, setActiveTab] = useState<'options' | 'r3f' | 'vanilla'>('options');
+  const [activeTab, setActiveTab] = useState<'options' | 'r3f' | 'android'>('options');
   const [isRecording, setIsRecording] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
 
@@ -150,6 +152,8 @@ function ExtrudedIcon({ progress = 0 }: ExtrudedIconProps) {
     color: '${colorA}',
     roughness: ${roughness},
     metalness: ${metalness},
+    reflectivity: ${reflectance},
+    envMapIntensity: ${reflectance},
     clearcoat: ${clearcoat},
     clearcoatRoughness: ${clearcoatRoughness},
     transmission: ${transmission},
@@ -164,6 +168,8 @@ function ExtrudedIcon({ progress = 0 }: ExtrudedIconProps) {
     color: '${colorB}',
     roughness: ${roughness},
     metalness: ${metalness},
+    reflectivity: ${reflectance},
+    envMapIntensity: ${reflectance},
     clearcoat: ${clearcoat},
     clearcoatRoughness: ${clearcoatRoughness},
     transmission: ${transmission},
@@ -191,106 +197,167 @@ function ExtrudedIcon({ progress = 0 }: ExtrudedIconProps) {
 `;
   };
 
-  // Generate dynamic single-file vanilla HTML/Three.js template
-  const generateVanillaCode = () => {
-    const escA = svgPathA.replace(/`/g, '\\`').trim();
+  // Generate an Android Filament loader for the exported glTF asset.
+  const generateAndroidFilamentCode = () => {
+    return `/*
+Gradle dependencies:
+implementation("com.google.android.filament:filament-android:<filament-version>")
+implementation("com.google.android.filament:gltfio-android:<filament-version>")
+implementation("com.google.android.filament:filament-utils-android:<filament-version>")
 
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>3D Shape Shifter Render</title>
-  <style>
-    body { margin: 0; background: #0f0a1d; overflow: hidden; }
-    canvas { width: 100vw; height: 100vh; display: block; }
-  </style>
-</head>
-<body>
-  <script type="module">
-    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-    import { SVGLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/SVGLoader.js';
+Export GLTF from this editor, then place it at:
+app/src/main/assets/exports/icon.gltf
+*/
 
-    // 1. Scene, Camera, Renderer Setup
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(0, 0, 15);
+package com.example.icon3d
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    document.body.appendChild(renderer.domElement);
+import android.content.Context
+import android.view.Choreographer
+import android.view.SurfaceView
+import com.google.android.filament.Camera
+import com.google.android.filament.Engine
+import com.google.android.filament.EntityManager
+import com.google.android.filament.IndirectLight
+import com.google.android.filament.LightManager
+import com.google.android.filament.Renderer
+import com.google.android.filament.Scene
+import com.google.android.filament.Skybox
+import com.google.android.filament.SwapChain
+import com.google.android.filament.View
+import com.google.android.filament.gltfio.AssetLoader
+import com.google.android.filament.gltfio.FilamentAsset
+import com.google.android.filament.gltfio.ResourceLoader
+import com.google.android.filament.gltfio.UbershaderProvider
+import com.google.android.filament.utils.Manipulator
+import com.google.android.filament.utils.UiHelper
+import java.nio.ByteBuffer
 
-    // 2. Lights
-    const ambient = new THREE.AmbientLight(0xffffff, ${ambientIntensity});
-    scene.add(ambient);
-    const key = new THREE.DirectionalLight(0xffffff, ${keyLightIntensity});
-    key.position.set(5, 5, 4);
-    key.castShadow = true;
-    scene.add(key);
+class FilamentIconView(context: Context) : SurfaceView(context), Choreographer.FrameCallback {
+    private val engine: Engine = Engine.create()
+    private val renderer: Renderer = engine.createRenderer()
+    private val scene: Scene = engine.createScene()
+    private val view: View = engine.createView()
+    private val cameraEntity = EntityManager.get().create()
+    private val camera: Camera = engine.createCamera(cameraEntity)
+    private val uiHelper = UiHelper(UiHelper.ContextErrorPolicy.DONT_CHECK)
+    private val manipulator = Manipulator.Builder()
+        .targetPosition(0.0f, 0.0f, 0.0f)
+        .orbitHomePosition(0.0f, 0.0f, 7.5f)
+        .viewport(width.coerceAtLeast(1), height.coerceAtLeast(1))
+        .build(Manipulator.Mode.ORBIT)
 
-    // 3. SVG Parse & 3D Extrusion
-    const svgContent = \`${escA}\`;
-    const loader = new SVGLoader();
-    const svgData = loader.parse(svgContent);
-    const group = new THREE.Group();
+    private var swapChain: SwapChain? = null
+    private var asset: FilamentAsset? = null
+    private var lightEntity = 0
 
-    const mat = new THREE.MeshPhysicalMaterial({
-      color: '${colorA}',
-      roughness: ${roughness},
-      metalness: ${metalness},
-      clearcoat: ${clearcoat},
-      clearcoatRoughness: ${clearcoatRoughness},
-      transmission: ${transmission},
-      thickness: ${thickness},
-      emissive: ${emissiveIntensity} > 0 ? new THREE.Color('${colorA}') : new THREE.Color('#000000'),
-      emissiveIntensity: ${emissiveIntensity}
-    });
+    init {
+        view.scene = scene
+        view.camera = camera
+        view.blendMode = View.BlendMode.TRANSLUCENT
+        view.renderQuality = view.renderQuality.apply { hdrColorBuffer = View.QualityLevel.HIGH }
 
-    svgData.paths.forEach((path, i) => {
-      const shapes = SVGLoader.createShapes(path);
-      shapes.forEach((shape) => {
-        const geom = new THREE.ExtrudeGeometry(shape, {
-          depth: ${extrusionDepth} + i * ${layerSpacing} * 0.1,
-          bevelEnabled: ${bevelEnabled},
-          bevelThickness: ${bevelThickness},
-          bevelSize: ${bevelSize},
-          bevelSegments: ${bevelSegments}
-        });
-        const mesh = new THREE.Mesh(geom, mat);
-        mesh.position.z = i * ${layerSpacing} * 0.1;
-        group.add(mesh);
-      });
-    });
+        scene.skybox = Skybox.Builder().color(0.02f, 0.02f, 0.025f, 1.0f).build(engine)
+        scene.indirectLight = IndirectLight.Builder()
+            .intensity(${Math.round(ambientIntensity * 30000)})
+            .build(engine)
 
-    group.scale.set(0.12, -0.12, 0.12);
-    
-    // Center logic
-    const box = new THREE.Box3().setFromObject(group);
-    const center = new THREE.Vector3();
-    box.getCenter(center);
-    group.children.forEach(c => {
-      c.position.x -= center.x / group.scale.x;
-      c.position.y -= center.y / group.scale.y;
-    });
-    scene.add(group);
+        lightEntity = EntityManager.get().create()
+        LightManager.Builder(LightManager.Type.DIRECTIONAL)
+            .color(1.0f, 1.0f, 1.0f)
+            .intensity(${Math.round(Math.max(keyLightIntensity, rimLightIntensity) * 50000)})
+            .direction(-0.45f, -0.65f, -0.55f)
+            .castShadows(true)
+            .build(engine, lightEntity)
+        scene.addEntity(lightEntity)
 
-    // 4. Animate Rotation loop
-    function animate() {
-      requestAnimationFrame(animate);
-      group.rotation.y += 0.01;
-      renderer.render(scene, camera);
+        uiHelper.renderCallback = object : UiHelper.RendererCallback {
+            override fun onNativeWindowChanged(surface: android.view.Surface) {
+                swapChain?.let(engine::destroySwapChain)
+                swapChain = engine.createSwapChain(surface)
+            }
+
+            override fun onDetachedFromSurface() {
+                swapChain?.let {
+                    engine.destroySwapChain(it)
+                    swapChain = null
+                }
+            }
+
+            override fun onResized(width: Int, height: Int) {
+                view.viewport = com.google.android.filament.Viewport(0, 0, width, height)
+                camera.setProjection(40.0, width.toDouble() / height.coerceAtLeast(1), 0.05, 100.0, Camera.Fov.VERTICAL)
+                manipulator.viewport(width, height)
+            }
+        }
+        uiHelper.attachTo(this)
+
+        loadModel("exports/icon.gltf")
+        Choreographer.getInstance().postFrameCallback(this)
     }
-    animate();
 
-    // Window resizing
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-  </script>
-</body>
-</html>
+    private fun loadModel(assetPath: String) {
+        val bytes = context.assets.open(assetPath).use { input ->
+            ByteArray(input.available()).also { input.read(it) }
+        }
+
+        val materialProvider = UbershaderProvider(engine)
+        val assetLoader = AssetLoader(engine, materialProvider, EntityManager.get())
+        val resourceLoader = ResourceLoader(engine)
+        val buffer = ByteBuffer.wrap(bytes)
+
+        asset = assetLoader.createAsset(buffer)?.also { loaded ->
+            resourceLoader.loadResources(loaded)
+            loaded.releaseSourceData()
+            loaded.root.transformToCenter(${String((-extrusionDepth / 2).toFixed(3))}f)
+            scene.addEntities(loaded.entities)
+        }
+    }
+
+    private fun Int.transformToCenter(zOffset: Float) {
+        val transformManager = engine.transformManager
+        val instance = transformManager.getInstance(this)
+        transformManager.setTransform(instance, floatArrayOf(
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, zOffset, 1.0f
+        ))
+    }
+
+    override fun doFrame(frameTimeNanos: Long) {
+        val cameraTransform = manipulator.getLookAt()
+        camera.lookAt(
+            cameraTransform.eye[0].toDouble(), cameraTransform.eye[1].toDouble(), cameraTransform.eye[2].toDouble(),
+            cameraTransform.target[0].toDouble(), cameraTransform.target[1].toDouble(), cameraTransform.target[2].toDouble(),
+            cameraTransform.up[0].toDouble(), cameraTransform.up[1].toDouble(), cameraTransform.up[2].toDouble()
+        )
+
+        swapChain?.let { chain ->
+            if (renderer.beginFrame(chain, frameTimeNanos)) {
+                renderer.render(view)
+                renderer.endFrame()
+            }
+        }
+        Choreographer.getInstance().postFrameCallback(this)
+    }
+
+    fun destroy() {
+        Choreographer.getInstance().removeFrameCallback(this)
+        uiHelper.detach()
+        asset?.let {
+            scene.removeEntities(it.entities)
+            engine.destroyEntity(it.root)
+        }
+        scene.removeEntity(lightEntity)
+        engine.destroyEntity(lightEntity)
+        engine.destroyRenderer(renderer)
+        engine.destroyView(view)
+        engine.destroyScene(scene)
+        engine.destroyCameraComponent(cameraEntity)
+        EntityManager.get().destroy(cameraEntity)
+        engine.destroy()
+    }
+}
 `;
   };
 
@@ -331,118 +398,102 @@ function ExtrudedIcon({ progress = 0 }: ExtrudedIconProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm animate-fade-in">
-      <div className="w-[620px] max-h-[85vh] bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col font-sans">
-        
-        {/* Header */}
-        <div className="px-5 py-3.5 border-b border-zinc-800/60 flex items-center justify-between">
+      <div className="w-[640px] max-w-[calc(100vw-32px)] max-h-[calc(100vh-40px)] overflow-hidden rounded-xl border border-white/[0.08] bg-[#101114] font-sans shadow-2xl">
+        <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
           <h2 className="text-sm font-semibold text-white">Export</h2>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors text-xs px-2 py-1 rounded-md hover:bg-zinc-800">
-            Close
+          <button
+            type="button"
+            aria-label="Close export"
+            onClick={onClose}
+            className="flex size-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+          >
+            <X className="size-4" />
           </button>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)} className="flex-1 flex flex-col min-h-0 gap-0">
-          {/* Tab selection */}
-          <div className="px-6 py-3 border-b border-zinc-800 bg-zinc-950 flex items-center justify-center shrink-0">
-            <TabsList className="grid grid-cols-3 w-full bg-zinc-950 p-1 border border-zinc-800 rounded-lg">
-              <TabsTrigger value="options" className="text-xs font-semibold py-1.5 rounded-md">Asset Exports</TabsTrigger>
-              <TabsTrigger value="r3f" className="text-xs font-semibold py-1.5 rounded-md">React Three Fiber TSX</TabsTrigger>
-              <TabsTrigger value="vanilla" className="text-xs font-semibold py-1.5 rounded-md">Vanilla HTML / JS</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)} className="gap-0">
+          <div className="border-b border-white/[0.07] px-4 py-3">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="options">Assets</TabsTrigger>
+              <TabsTrigger value="r3f">React</TabsTrigger>
+              <TabsTrigger value="android">Android</TabsTrigger>
             </TabsList>
           </div>
 
-          {/* Tab Contents */}
-          <div className="flex-1 min-h-0 relative bg-zinc-900 flex flex-col">
-            <TabsContent value="options" className="flex-1 p-6 overflow-y-auto outline-none">
-              <div className="grid grid-cols-2 gap-4">
-                {/* glTF block */}
-                <div className="border border-zinc-800 bg-zinc-950 p-5 rounded-lg flex flex-col justify-between h-[210px] group hover:border-violet-500/30 transition-all">
-                  <div>
-                    <div className="w-10 h-10 bg-violet-500/10 border border-violet-500/25 rounded-lg flex items-center justify-center mb-3">
-                      <Download className="w-5 h-5 text-violet-400" />
-                    </div>
-                    <h3 className="font-semibold text-white text-sm mb-1">glTF / glb File</h3>
-                    <p className="text-[12px] text-muted-foreground leading-normal">
-                      Export the current 3D extrusion as a fully textured glTF mesh. Ready to load directly into Blender, Unity, or custom engines.
-                    </p>
+          <div className="bg-[#111214]">
+            <TabsContent value="options" className="p-4 outline-none">
+              <div className="flex flex-col divide-y divide-white/[0.07] overflow-hidden rounded-lg border border-white/[0.08] bg-black/20">
+                <div className="flex items-center gap-3 p-3">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.035] text-zinc-300">
+                    <Box className="size-4" />
                   </div>
-                  <Button className="w-full bg-violet-600 hover:bg-violet-700 text-white gap-2 font-medium" onClick={onExportGltf}>
-                    Download 3D Model
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-medium text-white">3D model</h3>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">Export the current extruded SVG as a glTF file.</p>
+                  </div>
+                  <Button variant="secondary" className="shrink-0 gap-1.5" onClick={onExportGltf}>
+                    <Download className="size-3.5" />
+                    GLTF
                   </Button>
                 </div>
 
-                {/* Video render block */}
-                <div className={`border p-5 rounded-lg flex flex-col justify-between h-[210px] transition-all ${
-                  isRecording 
-                    ? 'border-red-500 bg-red-950/20' 
-                    : 'border-zinc-800 bg-zinc-950 hover:border-violet-500/30'
-                }`}>
-                  <div>
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 border ${
-                      isRecording 
-                        ? 'bg-red-500/20 border-red-500/30' 
-                        : 'bg-emerald-500/10 border-emerald-500/25'
-                    }`}>
-                      <Video className={`w-5 h-5 ${isRecording ? 'text-red-400 animate-pulse' : 'text-emerald-400'}`} />
-                    </div>
-                    <h3 className="font-semibold text-white text-sm mb-1">60fps Video Capture</h3>
-                    <p className="text-[12px] text-muted-foreground leading-normal">
-                      Record your 3D transitions locally in real-time. Automatically exports as transparent WebM to embed inside your website or presentation layers.
-                    </p>
+                <div className="flex items-center gap-3 p-3">
+                  <div className={`flex size-9 shrink-0 items-center justify-center rounded-md border ${
+                    isRecording ? 'border-red-500/25 bg-red-500/10 text-red-300' : 'border-white/[0.08] bg-white/[0.035] text-zinc-300'
+                  }`}>
+                    <Video className={`size-4 ${isRecording ? 'animate-pulse' : ''}`} />
                   </div>
-                  <Button 
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-medium text-white">Video</h3>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">Record the canvas as a WebM video from the live preview.</p>
+                  </div>
+                  <Button
+                    variant={isRecording ? 'destructive' : 'secondary'}
                     onClick={handleVideoRecordingToggle} 
-                    className={`w-full font-medium gap-2 ${
-                      isRecording 
-                        ? 'bg-red-500 hover:bg-red-600 text-white' 
-                        : 'bg-emerald-500 hover:bg-emerald-600 text-white'
-                    }`}
+                    className="shrink-0 gap-1.5"
                   >
-                    {isRecording ? 'Stop Recording' : 'Start Studio Capture'}
+                    <Video className="size-3.5" />
+                    {isRecording ? 'Stop' : 'WebM'}
                   </Button>
                 </div>
               </div>
             </TabsContent>
 
-            <TabsContent value="r3f" className="flex-1 p-6 outline-none flex flex-col min-h-0 relative">
-              <div className="absolute top-2 right-2 z-10">
+            <TabsContent value="r3f" className="relative p-4 outline-none">
+              <div className="absolute right-6 top-6 z-10">
                 <Button 
                   size="sm" 
                   variant="ghost" 
-                  className="bg-black/60 hover:bg-black text-white hover:text-white gap-1.5 h-8 font-medium border border-border/10"
+                  className="border border-white/[0.08] bg-black/70 text-white hover:bg-black"
                   onClick={() => handleCopyCode(generateR3fCode())}
                 >
                   {isCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
                   {isCopied ? 'Copied!' : 'Copy Code'}
                 </Button>
               </div>
-              <pre className="flex-1 w-full bg-black/60 rounded-lg p-4 font-mono text-[11px] overflow-auto text-muted-foreground leading-relaxed border border-border/5">
+              <pre className="max-h-[56vh] w-full overflow-auto rounded-lg border border-white/[0.08] bg-black/45 p-4 font-mono text-[11px] leading-relaxed text-zinc-500">
                 <code>{generateR3fCode()}</code>
               </pre>
             </TabsContent>
 
-            <TabsContent value="vanilla" className="flex-1 p-6 outline-none flex flex-col min-h-0 relative">
-              <div className="absolute top-2 right-2 z-10">
+            <TabsContent value="android" className="relative p-4 outline-none">
+              <div className="absolute right-6 top-6 z-10">
                 <Button 
                   size="sm" 
                   variant="ghost" 
-                  className="bg-black/60 hover:bg-black text-white hover:text-white gap-1.5 h-8 font-medium border border-border/10"
-                  onClick={() => handleCopyCode(generateVanillaCode())}
+                  className="border border-white/[0.08] bg-black/70 text-white hover:bg-black"
+                  onClick={() => handleCopyCode(generateAndroidFilamentCode())}
                 >
                   {isCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
                   {isCopied ? 'Copied!' : 'Copy Code'}
                 </Button>
               </div>
-              <pre className="flex-1 w-full bg-black/60 rounded-lg p-4 font-mono text-[11px] overflow-auto text-muted-foreground leading-relaxed border border-border/5">
-                <code>{generateVanillaCode()}</code>
+              <pre className="max-h-[56vh] w-full overflow-auto rounded-lg border border-white/[0.08] bg-black/45 p-4 font-mono text-[11px] leading-relaxed text-zinc-500">
+                <code>{generateAndroidFilamentCode()}</code>
               </pre>
             </TabsContent>
           </div>
         </Tabs>
-
-        <div className="px-5 py-3 border-t border-zinc-800/60 flex items-center justify-between text-[11px] text-zinc-500">
-          <span>All processing happens locally</span>
-        </div>
       </div>
     </div>
   );

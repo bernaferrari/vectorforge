@@ -3,11 +3,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Play, Pause, Sliders,
-  Upload, Download, RefreshCw, Undo2,
+  Upload, Download,
   ArrowUpLeft, ArrowUp, ArrowUpRight, ArrowLeft, ArrowRight, ArrowDownLeft, ArrowDown, ArrowDownRight, Compass,
-  Box, Wand2, Palette, Cuboid, Orbit, PanelLeftClose, PanelLeftOpen, Rows3, Blend, ChevronDown,
-  Sun, Maximize2, ChevronLeft, ChevronRight, SkipBack, SkipForward
+  Box, Wand2, Cuboid, Orbit, PanelLeftClose, PanelLeftOpen, Blend, ChevronDown,
+  MoreHorizontal, Maximize2, ChevronLeft, ChevronRight, SkipBack, SkipForward, Moon, Sun
 } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { ColorPicker } from '@/components/ui/color-picker';
@@ -15,9 +16,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { PRESET_ICONS, PresetIcon } from './IconLibrary';
 import { SvgCanvas, SvgCanvasRef } from '../3d/SvgCanvas';
 import { MaterialPresetId } from '../3d/MaterialPresets';
-import { Timeline, TimelineTrack, interpolateKeyframes, interpolateFillKeyframes, applyEasing, EasingType, ShapeStop, FillStop, FillGradientType } from './Timeline';
+import { Timeline, TimelineTrack, TimelinePropertyRow, interpolateKeyframes, interpolateFillKeyframes, applyEasing, EasingType, ShapeStop, FillStop, FillKeyframe, FillGradientType, DEFAULT_TRANSITION_START, DEFAULT_TRANSITION_END } from './Timeline';
 import { ExportModal } from './ExportModal';
 import { MOTION_RECIPES } from './MotionRecipes';
+import { bindWindowPointerDrag } from '@/lib/drag-events';
 
 const directions = [
   { label: '↖', x: -0.707, y: 0.707, tooltip: 'Top Left to Bottom Right' },
@@ -32,53 +34,62 @@ const directions = [
 ];
 
 const MATERIAL_METADATA: Record<MaterialPresetId, { name: string; subtitle: string; description: string; glowColor: string }> = {
-  clay: {
-    name: "Matte Clay",
-    subtitle: "Plaster Feel",
-    description: "A soft, non-reflective plaster finish. Ideal for showcasing raw geometry, structural contours, and smooth, clean shadows.",
-    glowColor: "rgba(230, 230, 230, 0.15)"
+  frost: {
+    name: "Frost",
+    subtitle: "Soft Translucent",
+    description: "A milky translucent finish with soft internal color and restrained highlights. Distinct from satin without becoming full glass.",
+    glowColor: "rgba(186, 230, 253, 0.24)"
+  },
+  satin: {
+    name: "Satin",
+    subtitle: "Google PBR",
+    description: "A Google-inspired tactile surface with moderate roughness, a tiny metallic lift, and a small emissive boost.",
+    glowColor: "rgba(66, 133, 244, 0.24)"
   },
   glass: {
-    name: "Satin Glass",
-    subtitle: "Translucent Refract",
-    description: "Ultra-premium glassmorphism with dynamic light refraction, subtle varnish coats, and high physical background transmission.",
+    name: "Glass",
+    subtitle: "Clear Refraction",
+    description: "A subtle translucent finish with controlled highlights. Useful when depth matters without making the shape disappear.",
     glowColor: "rgba(14, 165, 233, 0.25)"
   },
   chrome: {
-    name: "Liquid Silver",
-    subtitle: "Mirror Metal",
-    description: "Highly polished, mirror-like chrome finish. Provides infinite environmental reflections and striking metallic highlights.",
-    glowColor: "rgba(161, 161, 170, 0.25)"
+    name: "Metal",
+    subtitle: "Studio Chrome",
+    description: "A vivid reflective finish with studio-box highlights. It keeps mesh color readable instead of crushing it into black.",
+    glowColor: "rgba(125, 211, 252, 0.28)"
   },
-  gold: {
-    name: "Royal Gold",
-    subtitle: "Polished Luxury",
-    description: "Deep, rich metallic gold with customized micro-roughness. Evokes luxury, premium craftsmanship, and warm ambient reflections.",
-    glowColor: "rgba(234, 179, 8, 0.25)"
+  pearl: {
+    name: "Pearl",
+    subtitle: "Soft Iridescent",
+    description: "A bright ceramic finish with soft pearlescent sheen. It feels lighter and more dimensional than glossy paint.",
+    glowColor: "rgba(216, 180, 254, 0.24)"
   },
-  glow: {
-    name: "Neon Emissive",
-    subtitle: "Illuminated",
-    description: "Self-illuminating high-energy neon paint. Projects an intensive electric glow onto adjacent geometry and scene elements.",
-    glowColor: "rgba(244, 63, 94, 0.25)"
+  lacquer: {
+    name: "Lacquer",
+    subtitle: "Gloss Paint",
+    description: "A polished enamel-like finish with strong clearcoat and clean color. Useful for app-icon surfaces.",
+    glowColor: "rgba(244, 63, 94, 0.2)"
   },
   custom: {
-    name: "Custom Studio",
-    subtitle: "Manual Control",
-    description: "Access the absolute parameter level. Fine-tune your own physical finish using roughness, metalness, clearcoat, and transmission.",
+    name: "Custom",
+    subtitle: "Advanced",
+    description: "Manual roughness, metal, coat, transparency, and emission controls.",
     glowColor: "rgba(124, 92, 255, 0.25)"
   }
 };
 
 // Sphere-like preview gradients so each material reads at a glance.
 const MATERIAL_PREVIEW: Record<MaterialPresetId, string> = {
-  clay: 'radial-gradient(circle at 33% 27%, #fafafa, #d4d4d8 55%, #9ca3af)',
-  glass: 'radial-gradient(circle at 33% 27%, #ffffff, #7dd3fc 45%, #0284c7)',
-  chrome: 'radial-gradient(circle at 33% 27%, #ffffff, #d4d4d8 38%, #52525b 78%, #18181b)',
-  gold: 'radial-gradient(circle at 33% 27%, #fff7cc, #facc15 45%, #a16207)',
-  glow: 'radial-gradient(circle at 33% 27%, #fecdd3, #fb7185 42%, #e11d48)',
-  custom: 'radial-gradient(circle at 33% 27%, #ede9fe, #a78bfa 45%, #6d28d9)',
+  frost: 'radial-gradient(circle at 32% 24%, #ffffff 0%, rgba(226,244,255,.9) 28%, rgba(148,197,255,.42) 56%, rgba(196,181,253,.38) 100%)',
+  satin: 'radial-gradient(circle at 28% 24%, #ffffff 0%, #ff9900 16%, #807aff 42%, #00c796 72%, #1759ff 100%)',
+  glass: 'radial-gradient(circle at 30% 24%, #ffffff, rgba(186,230,253,.92) 30%, rgba(59,130,246,.18) 62%, rgba(14,116,144,.46))',
+  chrome: 'radial-gradient(circle at 30% 22%, #ffffff 0%, #e0f2fe 18%, #64748b 31%, #ffffff 43%, #38bdf8 58%, #f8fafc 68%, #27272a 100%)',
+  pearl: 'radial-gradient(circle at 30% 24%, #ffffff 0%, #fdf4ff 24%, #bae6fd 44%, #d8b4fe 66%, #64748b 100%)',
+  lacquer: 'radial-gradient(circle at 34% 26%, #ffffff 0%, #fecdd3 18%, #fb7185 48%, #be123c 100%)',
+  custom: 'radial-gradient(circle at 34% 28%, #ede9fe, #a78bfa 45%, #6d28d9)',
 };
+
+const FINISH_PRESETS: MaterialPresetId[] = ['frost', 'satin', 'glass', 'chrome', 'pearl', 'lacquer'];
 
 interface CuratedPalette {
   name: string;
@@ -164,6 +175,10 @@ const finiteNumber = (value: number | undefined | null, fallback = 0) =>
 const clampNumber = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
+const isEditableShortcutTarget = (target: EventTarget | null) =>
+  target instanceof HTMLElement &&
+  Boolean(target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'));
+
 const normalizeDegrees = (value: number) => ((value % 360) + 360) % 360;
 
 type FillMode = 'solid' | 'gradient';
@@ -173,6 +188,23 @@ type LightPositionKeyframe = {
   id: string;
   time: number;
   value: LightPosition;
+  easing: EasingType;
+};
+type MaterialSettings = {
+  roughness: number;
+  metalness: number;
+  reflectance: number;
+  clearcoat: number;
+  clearcoatRoughness: number;
+  transmission: number;
+  thickness: number;
+  emissiveIntensity: number;
+};
+type MaterialSettingKey = keyof MaterialSettings;
+type MaterialKeyframe = {
+  id: string;
+  time: number;
+  value: MaterialSettings;
   easing: EasingType;
 };
 
@@ -185,19 +217,61 @@ const EXTRUDE_DEFAULT = 10;
 const EXTRUDE_MAX = 20;
 const SCALE_DEFAULT = 1;
 const SCALE_MAX = 3;
-const LIGHT_MAX = 10;
+const GEOMETRY_QUALITY_DEFAULT = 0.045;
+const LIGHT_MAX = 25;
 
 const MOTION_TRACK_NAMES: Record<MotionTrackId, string> = {
   extrusion: 'Extrude',
-  rotation: 'Spin',
+  rotation: 'Rotation',
   scale: 'Scale',
   lighting: 'Brightness',
 };
 
-const makeFillStops = (color: string, colorSecondary: string, solid = false): FillStop[] => [
-  { id: 'start', color, position: 0 },
-  { id: 'end', color: solid ? color : colorSecondary, position: 1 },
+const makeFillStops = (color: string, colorSecondary: string, solid = false, positions: [number, number] = [0, 1]): FillStop[] => [
+  { id: 'start', color, position: positions[0] },
+  { id: 'end', color: solid ? color : colorSecondary, position: positions[1] },
 ];
+
+const GOOGLE_MESH_FILL_STOPS: FillStop[] = [
+  { id: 'google-top-left', color: '#FF9900', position: 0 },
+  { id: 'google-top-center', color: '#FF360A', position: 0.125 },
+  { id: 'google-top-right', color: '#D13AB3', position: 0.25 },
+  { id: 'google-middle-left', color: '#FFC700', position: 0.375 },
+  { id: 'google-center', color: '#807AFF', position: 0.5 },
+  { id: 'google-middle-right', color: '#1759FF', position: 0.625 },
+  { id: 'google-bottom-left', color: '#63E600', position: 0.75 },
+  { id: 'google-bottom-center', color: '#00C796', position: 0.875 },
+  { id: 'google-bottom-right', color: '#00ADF0', position: 1 },
+];
+
+const googleMeshFillStops = (): FillStop[] => GOOGLE_MESH_FILL_STOPS.map((stop) => ({ ...stop }));
+
+const normalizeFillStops = (stops: Array<{ id?: string; color: string; position: number }>): FillStop[] => {
+  const usedIds = new Set<string>();
+  const nextStopId = (id: string | undefined, index: number) => {
+    const baseId = id?.trim() || `stop-${index}`;
+    if (!usedIds.has(baseId)) {
+      usedIds.add(baseId);
+      return baseId;
+    }
+    let suffix = 2;
+    let nextId = `${baseId}-${suffix}`;
+    while (usedIds.has(nextId)) {
+      suffix += 1;
+      nextId = `${baseId}-${suffix}`;
+    }
+    usedIds.add(nextId);
+    return nextId;
+  };
+
+  return stops
+    .map((stop, index) => ({
+      id: nextStopId(stop.id, index),
+      color: stop.color.startsWith('#') ? stop.color : `#${stop.color}`,
+      position: clampNumber(stop.position, 0, 1),
+    }))
+    .sort((a, b) => a.position - b.position);
+};
 
 const interpolateLightPositionKeyframes = (
   time: number,
@@ -222,11 +296,33 @@ const interpolateLightPositionKeyframes = (
   };
 };
 
+const interpolateMaterialKeyframes = (
+  time: number,
+  fallback: MaterialSettings,
+  keyframes: MaterialKeyframe[]
+): MaterialSettings => {
+  if (keyframes.length === 0) return fallback;
+  const sorted = [...keyframes].sort((a, b) => a.time - b.time);
+  if (time <= sorted[0].time) return sorted[0].value;
+  if (time >= sorted[sorted.length - 1].time) return sorted[sorted.length - 1].value;
+
+  const next = sorted.find((keyframe) => keyframe.time >= time);
+  const previous = [...sorted].reverse().find((keyframe) => keyframe.time <= time);
+  if (!previous || !next || previous.id === next.id) return previous?.value ?? next?.value ?? fallback;
+
+  const eased = applyEasing(previous.easing, (time - previous.time) / (next.time - previous.time));
+  return (Object.keys(fallback) as MaterialSettingKey[]).reduce((settings, key) => {
+    settings[key] = previous.value[key] + (next.value[key] - previous.value[key]) * eased;
+    return settings;
+  }, { ...fallback });
+};
+
 function NumberField({
   value,
   min,
   max,
   step,
+  prefix,
   suffix = '',
   precision = 1,
   className = 'w-[62px]',
@@ -237,6 +333,7 @@ function NumberField({
   min: number;
   max: number;
   step: number;
+  prefix?: string;
   suffix?: string;
   precision?: number;
   className?: string;
@@ -263,10 +360,12 @@ function NumberField({
   const startScrub = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
     const startX = e.clientX;
     const startValue = value;
     let moved = false;
-    const move = (ev: PointerEvent) => {
+    bindWindowPointerDrag({
+      onMove: (ev) => {
       const dx = ev.clientX - startX;
       if (Math.abs(dx) > 3) moved = true;
       if (!moved) return;
@@ -275,23 +374,24 @@ function NumberField({
       const rounded = Number(next.toFixed(precision));
       setDraft(rounded.toFixed(precision));
       onChange(rounded);
-    };
-    const up = () => {
+      },
+      onEnd: () => {
       document.body.style.cursor = '';
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
       if (!moved) inputRef.current?.focus();
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
+      },
+    });
   };
 
   return (
     <div
       onPointerDown={startScrub}
+      onLostPointerCapture={() => {
+        document.body.style.cursor = '';
+      }}
       title="Drag to adjust · click to type"
       className={`flex h-7 cursor-ew-resize items-center rounded-md border border-white/[0.08] bg-black/20 px-1.5 focus-within:border-white/20 ${className}`}
     >
+      {prefix && <span className="pr-1 text-[9px] font-medium text-zinc-500">{prefix}</span>}
       <input
         ref={inputRef}
         type="text"
@@ -322,12 +422,6 @@ function NumberField({
 }
 
 const LIGHT_RANGE = 9;
-const LIGHT_TEMPERATURES: Array<{ label: string; color: string }> = [
-  { label: 'Warm', color: '#ffd9a0' },
-  { label: 'Neutral', color: '#ffffff' },
-  { label: 'Cool', color: '#cfe3ff' },
-];
-
 // A draggable mini "lit sphere": the highlight marks where the key light sits,
 // so dragging it visually orbits the light around the icon. Only mounts inside its popover.
 function LightDirectionPicker({
@@ -365,13 +459,9 @@ function LightDirectionPicker({
   const handlePadDown = (e: React.PointerEvent) => {
     e.preventDefault();
     setFromPointer(e.clientX, e.clientY);
-    const move = (ev: PointerEvent) => setFromPointer(ev.clientX, ev.clientY);
-    const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
+    bindWindowPointerDrag({
+      onMove: (ev) => setFromPointer(ev.clientX, ev.clientY),
+    });
   };
 
   const triggerSphere = `radial-gradient(circle at ${hx}% ${hy}%, #ffffff, ${color} 30%, #3f3f46 72%, #18181b)`;
@@ -379,10 +469,10 @@ function LightDirectionPicker({
   return (
     <Popover>
       <PopoverTrigger
-        title="Light direction"
-        className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-white/[0.08] bg-black/20 px-1.5 transition-colors hover:border-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+        title="Light direction & color"
+        className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-white/[0.08] bg-black/20 pl-1 pr-1.5 transition-colors hover:border-white/25 hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
       >
-        <span className="size-4 rounded-full border border-white/15 shadow-inner" style={{ background: triggerSphere }} />
+        <span className="size-4 rounded-full border border-white/20 shadow-inner" style={{ background: triggerSphere }} />
         <ChevronDown className="size-3 text-zinc-500" />
       </PopoverTrigger>
       <PopoverContent
@@ -418,22 +508,12 @@ function LightDirectionPicker({
         </div>
         <p className="mt-2 text-center text-[10px] text-zinc-500">Drag to move the light</p>
 
-        <div className="mt-2.5 flex items-center gap-1.5">
-          {LIGHT_TEMPERATURES.map((temp) => {
-            const active = color.toLowerCase() === temp.color.toLowerCase();
-            return (
-              <button
-                key={temp.label}
-                type="button"
-                title={temp.label}
-                onClick={() => onColorChange(temp.color)}
-                className={`h-7 flex-1 rounded-md border transition-all ${
-                  active ? 'border-white/60 ring-1 ring-white/30' : 'border-white/10 hover:border-white/30'
-                }`}
-                style={{ background: temp.color }}
-              />
-            );
-          })}
+        <div className="mt-2.5">
+          <ColorPicker
+            value={color}
+            onChange={onColorChange}
+            className="h-8 rounded-lg border-white/[0.08] bg-black/20 px-2 py-1.5"
+          />
         </div>
       </PopoverContent>
     </Popover>
@@ -441,25 +521,32 @@ function LightDirectionPicker({
 }
 
 export default function AppLayout() {
+  const { resolvedTheme, setTheme } = useTheme();
+  const isLightTheme = resolvedTheme === 'light';
+
   // --- 1. Shape sequence (the morph is a timeline of shapes) ---
   const makeStop = (icon: PresetIcon, time: number): ShapeStop => ({
     id: `shape-${Math.random().toString(36).slice(2, 9)}`,
     time,
     iconId: icon.id,
+    iconName: icon.name,
     svgContent: icon.svgContent,
     color: icon.defaultTint,
     colorSecondary: '#7c5cff',
     fillGradientType: 'linear',
+    fillStops: undefined,
     fillKeyframes: [],
     easing: 'ease-in-out',
     transitionType: 'wipe',
     wipeDirection: { x: 0, y: 0 },
+    transitionStart: DEFAULT_TRANSITION_START,
+    transitionEnd: DEFAULT_TRANSITION_END,
   });
 
   const [shapes, setShapes] = useState<ShapeStop[]>([]);
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
   const [openShapePicker, setOpenShapePicker] = useState<string | null>(null);
-  const [activeRecipeId, setActiveRecipeId] = useState<string | null>('spring-glass');
+  const [activeRecipeId, setActiveRecipeId] = useState<string | null>('google-metal');
 
   const markCustom = () => setActiveRecipeId(null);
 
@@ -469,7 +556,8 @@ export default function AppLayout() {
       ...stop,
       color: index % 2 === 0 ? recipe.colorA : recipe.colorB,
       colorSecondary: index % 2 === 0 ? recipe.colorASecondary : recipe.colorBSecondary,
-      fillGradientType: 'linear',
+      fillGradientType: recipe.fillGradientType ?? 'linear',
+      fillStops: recipe.id === 'google-metal' ? googleMeshFillStops() : undefined,
       fillKeyframes: [],
       transitionType: recipe.transitionType,
       wipeDirection: recipe.wipeDirection,
@@ -526,8 +614,11 @@ export default function AppLayout() {
 
     setRoughness(recipe.roughness);
     setMetalness(recipe.metalness);
+    setReflectance(recipe.reflectance ?? 0.5);
     setClearcoat(recipe.clearcoat);
+    setClearcoatRoughness(recipe.clearcoatRoughness ?? 0.1);
     setTransmission(recipe.transmission);
+    setThickness(recipe.thickness ?? 1.0);
     setEmissiveIntensity(recipe.emissiveIntensity);
 
     setExtrusionDepth(recipe.extrusionDepth);
@@ -535,10 +626,17 @@ export default function AppLayout() {
     setBevelThickness(recipe.bevelThickness);
     setBevelSize(recipe.bevelSize);
     setBevelSegments(recipe.bevelSegments);
+    setGeometryQuality(recipe.geometryQuality ?? GEOMETRY_QUALITY_DEFAULT);
     setLayerSpacing(recipe.layerSpacing);
 
     setRotationOffset({ x: 0, y: 0, z: 0 });
     setObjectScale(SCALE_DEFAULT);
+    setMoveOffset({
+      x: recipe.translateX ?? 0,
+      y: recipe.translateY ?? 0,
+      z: recipe.translateZ ?? 0,
+    });
+    setCenterPull(recipe.centerPull ?? 0);
     setKeyLightIntensity(recipe.keyLightIntensity);
     setKeyLightPosition({ x: 5, y: 5, z: 4 });
     setKeyLightPositionKeyframes([]);
@@ -549,11 +647,6 @@ export default function AppLayout() {
     setIsPlaying(false);
   };
 
-  const handleResetRecipe = () => {
-    const recipe = MOTION_RECIPES.find((r) => r.id === (activeRecipeId || 'spring-glass'));
-    if (recipe) applyRecipe(recipe);
-  };
-
   // Seed the default heart→star sequence and apply the default look on mount.
   useEffect(() => {
     const heart = PRESET_ICONS.find((i) => i.id === 'heart');
@@ -562,14 +655,14 @@ export default function AppLayout() {
     const initial = [makeStop(heart, 1.0), makeStop(star, 4.0)];
     setShapes(initial);
     setSelectedShapeId(initial[0].id);
-    const recipe = MOTION_RECIPES.find((r) => r.id === 'spring-glass');
+    const recipe = MOTION_RECIPES.find((r) => r.id === 'google-metal');
     if (recipe) applyRecipe(recipe, initial);
   }, []);
 
   // --- Shape sequence operations ---
   const setShapeIcon = (shapeId: string, icon: PresetIcon) => {
     markCustom();
-    setShapes((prev) => prev.map((s) => s.id === shapeId ? { ...s, iconId: icon.id, svgContent: icon.svgContent } : s));
+    setShapes((prev) => prev.map((s) => s.id === shapeId ? { ...s, iconId: icon.id, iconName: icon.name, svgContent: icon.svgContent } : s));
   };
 
   const updateSelectedShapeColor = (value: string, secondary = false) => {
@@ -581,18 +674,23 @@ export default function AppLayout() {
       const keyframes = s.fillKeyframes ?? [];
       const activeFill = interpolateFillKeyframes(
         currentTime,
-        { color: s.color, colorSecondary: s.colorSecondary },
+        { color: s.color, colorSecondary: s.colorSecondary, gradientType: s.fillGradientType, stops: s.fillStops },
         s.fillKeyframes
       );
       const nextColor = secondary ? activeFill.color : value;
       const nextColorSecondary = secondary ? value : activeFill.colorSecondary;
-      const nextStops = makeFillStops(nextColor, nextColorSecondary, fillMode === 'solid');
+      const nextPositions: [number, number] = [
+        activeFill.stops?.[0]?.position ?? 0,
+        activeFill.stops?.[1]?.position ?? 1,
+      ];
+      const nextStops = makeFillStops(nextColor, nextColorSecondary, fillMode === 'solid', nextPositions);
 
       if (keyframes.length === 0) {
         return {
           ...s,
           color: nextColor,
           colorSecondary: nextStops[1].color,
+          fillStops: fillMode === 'gradient' ? nextStops : undefined,
         };
       }
 
@@ -630,7 +728,7 @@ export default function AppLayout() {
       const keyframes = shape.fillKeyframes ?? [];
       const activeFill = interpolateFillKeyframes(
         currentTime,
-        { color: shape.color, colorSecondary: shape.colorSecondary, gradientType: shape.fillGradientType },
+        { color: shape.color, colorSecondary: shape.colorSecondary, gradientType: shape.fillGradientType, stops: shape.fillStops },
         shape.fillKeyframes
       );
 
@@ -656,6 +754,54 @@ export default function AppLayout() {
     }));
   };
 
+  const updateSelectedShapeFillStops = (stops: Array<{ id?: string; color: string; position: number }>) => {
+    if (!selectedShapeId) return;
+    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const nextStops = normalizeFillStops(stops);
+    if (nextStops.length === 0) return;
+    markCustom();
+    setShapes((prev) => prev.map((shape) => {
+      if (shape.id !== selectedShapeId) return shape;
+      const keyframes = shape.fillKeyframes ?? [];
+      if (keyframes.length === 0) {
+        return {
+          ...shape,
+          color: nextStops[0]?.color ?? shape.color,
+          colorSecondary: nextStops[1]?.color ?? nextStops[0]?.color ?? shape.colorSecondary,
+          fillStops: nextStops,
+        };
+      }
+
+      const existing = keyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+      const nextKeyframes = existing
+        ? keyframes.map((keyframe) => keyframe.id === existing.id ? { ...keyframe, stops: nextStops } : keyframe)
+        : [
+            ...keyframes,
+            {
+              id: `${shape.id}-fill-${Date.now().toString(36)}`,
+              time: playheadTime,
+              stops: nextStops,
+              gradientType: shape.fillGradientType ?? 'linear',
+              easing: [...keyframes].sort((a, b) => a.time - b.time).filter((keyframe) => keyframe.time <= playheadTime).pop()?.easing ?? 'ease-in-out' as const,
+            },
+          ].sort((a, b) => a.time - b.time);
+
+      return {
+        ...shape,
+        color: nextStops[0]?.color ?? shape.color,
+        colorSecondary: nextStops[1]?.color ?? nextStops[0]?.color ?? shape.colorSecondary,
+        fillKeyframes: nextKeyframes,
+      };
+    }));
+  };
+
+  const updateSelectedShapeFillStopPosition = (stopIndex: number, position: number) => {
+    const nextPosition = clampNumber(position, 0, 1);
+    updateSelectedShapeFillStops(selectedShapeFillStops.map((stop, index) =>
+      index === stopIndex ? { ...stop, position: nextPosition } : stop
+    ));
+  };
+
   const addShapeAtPlayhead = () => {
     markCustom();
     setShapes((prev) => {
@@ -678,16 +824,19 @@ export default function AppLayout() {
   };
 
   // --- 2. Appearance & geometry state ---
-  const [materialPreset, setMaterialPreset] = useState<MaterialPresetId>('glass');
+  const [materialPreset, setMaterialPreset] = useState<MaterialPresetId>('chrome');
 
   // Custom Advanced Material Finish parameters
-  const [roughness, setRoughness] = useState<number>(0.15);
-  const [metalness, setMetalness] = useState<number>(0.4);
-  const [clearcoat, setClearcoat] = useState<number>(0.5);
-  const [clearcoatRoughness, setClearcoatRoughness] = useState<number>(0.1);
+  const [roughness, setRoughness] = useState<number>(0.075);
+  const [metalness, setMetalness] = useState<number>(0.48);
+  const [reflectance, setReflectance] = useState<number>(1.0);
+  const [clearcoat, setClearcoat] = useState<number>(1.0);
+  const [clearcoatRoughness, setClearcoatRoughness] = useState<number>(0.02);
   const [transmission, setTransmission] = useState<number>(0.0);
   const [thickness, setThickness] = useState<number>(1.0);
-  const [emissiveIntensity, setEmissiveIntensity] = useState<number>(0.0);
+  const [emissiveIntensity, setEmissiveIntensity] = useState<number>(0.08);
+  const [materialKeyframes, setMaterialKeyframes] = useState<MaterialKeyframe[]>([]);
+  const [isAdvancedMaterialOpen, setIsAdvancedMaterialOpen] = useState<boolean>(false);
 
   const [wireframe, setWireframe] = useState<boolean>(false);
   const [extrusionDepth, setExtrusionDepth] = useState<number>(EXTRUDE_DEFAULT);
@@ -695,11 +844,14 @@ export default function AppLayout() {
   const [bevelThickness, setBevelThickness] = useState<number>(0.15);
   const [bevelSize, setBevelSize] = useState<number>(0.08);
   const [bevelSegments, setBevelSegments] = useState<number>(3);
+  const [geometryQuality, setGeometryQuality] = useState<number>(GEOMETRY_QUALITY_DEFAULT);
   const [layerSpacing, setLayerSpacing] = useState<number>(0.8);
   const [objectScale, setObjectScale] = useState<number>(SCALE_DEFAULT);
+  const [moveOffset, setMoveOffset] = useState<LightPosition>({ x: 0, y: 0, z: 0 });
+  const [centerPull, setCenterPull] = useState<number>(0);
 
-  const [enableGradient, setEnableGradient] = useState<boolean>(false);
-  const [fillMode, setFillMode] = useState<FillMode>('solid');
+  const [enableGradient, setEnableGradient] = useState<boolean>(true);
+  const [fillMode, setFillMode] = useState<FillMode>('gradient');
   const [rotationOffset, setRotationOffset] = useState<LightPosition>({ x: 0, y: 0, z: 0 });
 
   // Lighting & perspective
@@ -712,43 +864,67 @@ export default function AppLayout() {
   const [rimLightColor] = useState<string>('#a48bff');
   const [rimLightIntensity] = useState<number>(0.8);
   const [zoom, setZoom] = useState<number>(1.0);
+  const [viewInertiaEnabled, setViewInertiaEnabled] = useState<boolean>(true);
+  const [showCenterPoint, setShowCenterPoint] = useState<boolean>(false);
   const [zenMode, setZenMode] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
 
   // Synchronize presets with customized sliders when a predefined preset is clicked
   useEffect(() => {
-    if (materialPreset === 'clay') {
-      setRoughness(0.85);
-      setMetalness(0.1);
-      setClearcoat(0.0);
-      setTransmission(0.0);
-      setEmissiveIntensity(0.0);
-    } else if (materialPreset === 'glass') {
-      setRoughness(0.1);
+    if (materialPreset === 'frost') {
+      setRoughness(0.72);
       setMetalness(0.0);
+      setReflectance(0.76);
+      setClearcoat(0.18);
+      setClearcoatRoughness(0.62);
+      setTransmission(0.28);
+      setThickness(0.65);
+      setEmissiveIntensity(0.035);
+    } else if (materialPreset === 'satin') {
+      setRoughness(0.34);
+      setMetalness(0.04);
+      setReflectance(0.62);
+      setClearcoat(0.0);
+      setClearcoatRoughness(0.35);
+      setTransmission(0.0);
+      setThickness(0.4);
+      setEmissiveIntensity(0.0744);
+    } else if (materialPreset === 'glass') {
+      setRoughness(0.04);
+      setMetalness(0.0);
+      setReflectance(0.72);
       setClearcoat(1.0);
-      setClearcoatRoughness(0.1);
-      setTransmission(0.9);
-      setThickness(1.5);
+      setClearcoatRoughness(0.04);
+      setTransmission(0.72);
+      setThickness(1.7);
       setEmissiveIntensity(0.0);
     } else if (materialPreset === 'chrome') {
-      setRoughness(0.05);
-      setMetalness(1.0);
-      setClearcoat(0.0);
+      setRoughness(0.075);
+      setMetalness(0.48);
+      setReflectance(1.0);
+      setClearcoat(1.0);
+      setClearcoatRoughness(0.02);
       setTransmission(0.0);
-      setEmissiveIntensity(0.0);
-    } else if (materialPreset === 'gold') {
+      setThickness(0.4);
+      setEmissiveIntensity(0.08);
+    } else if (materialPreset === 'pearl') {
+      setRoughness(0.42);
+      setMetalness(0.0);
+      setReflectance(0.86);
+      setClearcoat(0.72);
+      setClearcoatRoughness(0.22);
+      setTransmission(0.0);
+      setThickness(0.6);
+      setEmissiveIntensity(0.035);
+    } else if (materialPreset === 'lacquer') {
       setRoughness(0.2);
-      setMetalness(0.95);
-      setClearcoat(0.0);
+      setMetalness(0.0);
+      setReflectance(0.72);
+      setClearcoat(1.0);
+      setClearcoatRoughness(0.03);
       setTransmission(0.0);
-      setEmissiveIntensity(0.0);
-    } else if (materialPreset === 'glow') {
-      setRoughness(0.5);
-      setMetalness(0.2);
-      setClearcoat(0.0);
-      setTransmission(0.0);
-      setEmissiveIntensity(2.0);
+      setThickness(0.5);
+      setEmissiveIntensity(0.04);
     }
   }, [materialPreset]);
 
@@ -758,6 +934,37 @@ export default function AppLayout() {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [loop, setLoop] = useState<boolean>(true);
   const [selectedMotionTrackId, setSelectedMotionTrackId] = useState<MotionTrackId>('rotation');
+  const inspectorRefs = {
+    fill: useRef<HTMLDivElement>(null),
+    material: useRef<HTMLDivElement>(null),
+    extrusion: useRef<HTMLDivElement>(null),
+    rotation: useRef<HTMLDivElement>(null),
+    scale: useRef<HTMLDivElement>(null),
+    lighting: useRef<HTMLDivElement>(null),
+  };
+
+  const scrollInspectorPropertyIntoView = (id: MotionTrackId | 'fill' | 'material' | 'light-position') => {
+    if (id === 'material') setIsAdvancedMaterialOpen(true);
+    const target =
+      id === 'light-position'
+        ? inspectorRefs.lighting.current
+        : inspectorRefs[id]?.current;
+    if (!target) return;
+    window.requestAnimationFrame(() => {
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+  };
+
+  const selectTimelineTrack = (trackId: string) => {
+    const nextTrackId = trackId as MotionTrackId;
+    setSelectedMotionTrackId(nextTrackId);
+    setSelectedShapeId(null);
+    scrollInspectorPropertyIntoView(nextTrackId);
+  };
+
+  const selectTimelinePropertyRow = (rowId: string) => {
+    scrollInspectorPropertyIntoView(rowId as 'fill' | 'material' | 'light-position');
+  };
 
   // Single predictable rule for editing a property value:
   //  - If the track is NOT animated (no keyframes) → set a constant value.
@@ -832,13 +1039,61 @@ export default function AppLayout() {
   };
 
   const handleViewRotationCommit = (delta: { x: number; y: number; z: number }) => {
-    const nextY = normalizeDegrees(activeRotationY + delta.y);
-    setRotationOffset((prev) => ({
-      x: normalizeDegrees(prev.x + delta.x),
-      y: nextY,
-      z: normalizeDegrees(prev.z + delta.z)
-    }));
-    handleSpinChange(nextY);
+    setSelectedMotionTrackId('rotation');
+    setActiveRecipeId(null);
+    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    setTracks((prevTracks) => {
+      const rotation = prevTracks.find((track) => track.id === 'rotation');
+      const currentY = rotation && rotation.keyframes.length > 0
+        ? interpolateKeyframes(playheadTime, rotation)
+        : rotationOffset.y;
+      const nextY = normalizeDegrees(currentY + delta.y);
+
+      setRotationOffset((prev) => ({
+        x: normalizeDegrees(prev.x + delta.x),
+        y: nextY,
+        z: normalizeDegrees(prev.z + delta.z)
+      }));
+
+      return prevTracks.map((track) => {
+        if (track.id !== 'rotation') return track;
+        const clampedValue = clampNumber(nextY, track.min, track.max);
+
+        if (track.keyframes.length === 0) {
+          return { ...track, defaultValue: clampedValue };
+        }
+
+        const exactKeyframe = track.keyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+        if (exactKeyframe) {
+          return {
+            ...track,
+            defaultValue: clampedValue,
+            keyframes: track.keyframes.map((keyframe) =>
+              keyframe.id === exactKeyframe.id ? { ...keyframe, value: clampedValue } : keyframe
+            )
+          };
+        }
+
+        const previousKeyframe = [...track.keyframes]
+          .sort((a, b) => a.time - b.time)
+          .filter((keyframe) => keyframe.time <= playheadTime)
+          .pop();
+
+        return {
+          ...track,
+          defaultValue: clampedValue,
+          keyframes: [
+            ...track.keyframes,
+            {
+              id: `${track.id}-${Date.now().toString(36)}`,
+              time: playheadTime,
+              value: clampedValue,
+              easing: previousKeyframe?.easing ?? 'ease-in-out'
+            }
+          ].sort((a, b) => a.time - b.time)
+        };
+      });
+    });
   };
 
   const handleBrightnessChange = (newValue: number) => {
@@ -861,7 +1116,7 @@ export default function AppLayout() {
     },
     {
       id: 'rotation',
-      name: 'Spin',
+      name: 'Rotation',
       color: '#ffd23f',
       min: 0,
       max: 360,
@@ -900,8 +1155,8 @@ export default function AppLayout() {
   const sortedShapes = [...shapes].sort((a, b) => a.time - b.time);
   const morph = (() => {
     const fallback: ShapeStop = {
-      id: 'empty', time: 0, iconId: '', svgContent: '', color: '#ffffff', colorSecondary: '#ffffff',
-      fillGradientType: 'linear', fillKeyframes: [],
+      id: 'empty', time: 0, iconId: '', iconName: 'Shape', svgContent: '', color: '#ffffff', colorSecondary: '#ffffff',
+      fillGradientType: 'linear', fillStops: undefined, fillKeyframes: [],
       easing: 'ease-in-out', transitionType: 'wipe', wipeDirection: { x: 0, y: 0 },
     };
     if (sortedShapes.length === 0) return { from: fallback, to: fallback, progress: 0 };
@@ -914,36 +1169,50 @@ export default function AppLayout() {
     const from = sortedShapes[i];
     const to = sortedShapes[i + 1];
     const span = to.time - from.time;
-    const raw = span > 0 ? (currentTime - from.time) / span : 1;
-    return { from, to, progress: clampNumber(applyEasing(from.easing, raw), 0, 1) };
+    const gapFrac = span > 0 ? (currentTime - from.time) / span : 1;
+    // The morph only happens inside [transitionStart, transitionEnd] of the gap;
+    // outside that window the shape holds (0 = fully `from`, 1 = fully `to`).
+    const startFrac = from.transitionStart ?? DEFAULT_TRANSITION_START;
+    const endFrac = from.transitionEnd ?? DEFAULT_TRANSITION_END;
+    const windowProgress = gapFrac <= startFrac
+      ? 0
+      : gapFrac >= endFrac
+        ? 1
+        : (gapFrac - startFrac) / Math.max(1e-6, endFrac - startFrac);
+    // Fade/Wipe ease across the window; "None" is a hard cut at its midpoint.
+    const progress = from.transitionType === 'none'
+      ? (windowProgress < 0.5 ? 0 : 1)
+      : clampNumber(applyEasing(from.easing, windowProgress), 0, 1);
+    return { from, to, progress };
   })();
 
   const selectedShape = shapes.find((s) => s.id === selectedShapeId) ?? sortedShapes[0] ?? null;
   const shapeName = (stop: ShapeStop | null) =>
-    stop ? (PRESET_ICONS.find((i) => i.id === stop.iconId)?.name ?? 'Custom') : 'Shape';
+    stop ? (stop.iconName ?? PRESET_ICONS.find((i) => i.id === stop.iconId)?.name ?? 'Custom') : 'Shape';
 
   const selectedShapeFillValue = selectedShape
     ? interpolateFillKeyframes(
         currentTime,
-        { color: selectedShape.color, colorSecondary: selectedShape.colorSecondary, gradientType: selectedShape.fillGradientType },
+        { color: selectedShape.color, colorSecondary: selectedShape.colorSecondary, gradientType: selectedShape.fillGradientType, stops: selectedShape.fillStops },
         selectedShape.fillKeyframes
       )
-    : { color: '#ffffff', colorSecondary: '#ffffff', gradientType: 'linear' as const };
+    : { color: '#ffffff', colorSecondary: '#ffffff', gradientType: 'linear' as const, stops: makeFillStops('#ffffff', '#ffffff') };
   const selectedShapeFill = selectedShapeFillValue.color;
   const selectedShapeFillSecondary = selectedShapeFillValue.colorSecondary;
   const selectedShapeGradientType = selectedShapeFillValue.gradientType ?? selectedShape?.fillGradientType ?? 'linear';
+  const selectedShapeFillStops = selectedShapeFillValue.stops ?? makeFillStops(selectedShapeFill, selectedShapeFillSecondary, fillMode === 'solid');
 
   // Engine-facing values derived from the surrounding shapes (SvgCanvas keeps its 2-shape crossfade).
   const iconAContent = morph.from.svgContent;
   const iconBContent = morph.to.svgContent;
   const fillA = interpolateFillKeyframes(
     currentTime,
-    { color: morph.from.color, colorSecondary: morph.from.colorSecondary, gradientType: morph.from.fillGradientType },
+    { color: morph.from.color, colorSecondary: morph.from.colorSecondary, gradientType: morph.from.fillGradientType, stops: morph.from.fillStops },
     morph.from.fillKeyframes
   );
   const fillB = interpolateFillKeyframes(
     currentTime,
-    { color: morph.to.color, colorSecondary: morph.to.colorSecondary, gradientType: morph.to.fillGradientType },
+    { color: morph.to.color, colorSecondary: morph.to.colorSecondary, gradientType: morph.to.fillGradientType, stops: morph.to.fillStops },
     morph.to.fillKeyframes
   );
   const colorA = fillA.color;
@@ -972,6 +1241,17 @@ export default function AppLayout() {
     ? interpolateKeyframes(currentTime, lightingTrack)
     : keyLightIntensity;
   const activeKeyLightPosition = interpolateLightPositionKeyframes(currentTime, keyLightPosition, keyLightPositionKeyframes);
+  const baseMaterialSettings: MaterialSettings = {
+    roughness,
+    metalness,
+    reflectance,
+    clearcoat,
+    clearcoatRoughness,
+    transmission,
+    thickness,
+    emissiveIntensity,
+  };
+  const activeMaterialSettings = interpolateMaterialKeyframes(currentTime, baseMaterialSettings, materialKeyframes);
 
   const hasLayerGapControls = false;
 
@@ -1098,6 +1378,99 @@ export default function AppLayout() {
     });
   };
 
+  const setMaterialBaseSetting = (key: MaterialSettingKey, value: number) => {
+    if (key === 'roughness') setRoughness(value);
+    if (key === 'metalness') setMetalness(value);
+    if (key === 'reflectance') setReflectance(value);
+    if (key === 'clearcoat') setClearcoat(value);
+    if (key === 'clearcoatRoughness') setClearcoatRoughness(value);
+    if (key === 'transmission') setTransmission(value);
+    if (key === 'thickness') setThickness(value);
+    if (key === 'emissiveIntensity') setEmissiveIntensity(value);
+  };
+
+  const updateMaterialSetting = (key: MaterialSettingKey, value: number, min: number, max: number) => {
+    const clamped = clampNumber(value, min, max);
+    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    setActiveRecipeId(null);
+    setMaterialBaseSetting(key, clamped);
+    setMaterialKeyframes((prev) => {
+      if (prev.length === 0) return prev;
+      const nextValue = { ...activeMaterialSettings, [key]: clamped };
+      const existing = prev.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+      if (existing) {
+        return prev.map((keyframe) => keyframe.id === existing.id ? { ...keyframe, value: nextValue } : keyframe);
+      }
+      const previousKeyframe = [...prev]
+        .sort((a, b) => a.time - b.time)
+        .filter((keyframe) => keyframe.time <= playheadTime)
+        .pop();
+      return [
+        ...prev,
+        {
+          id: `material-${Date.now().toString(36)}`,
+          time: playheadTime,
+          value: nextValue,
+          easing: previousKeyframe?.easing ?? 'ease-in-out',
+        }
+      ].sort((a, b) => a.time - b.time);
+    });
+  };
+
+  const materialKeyframeAtPlayhead = () => {
+    const playheadTime = Number(currentTime.toFixed(2));
+    return materialKeyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+  };
+
+  const toggleMaterialKeyframeAtPlayhead = () => {
+    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    setActiveRecipeId(null);
+    setMaterialKeyframes((prev) => {
+      const existing = prev.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+      if (existing) return prev.filter((keyframe) => keyframe.id !== existing.id);
+
+      const previousKeyframe = [...prev]
+        .sort((a, b) => a.time - b.time)
+        .filter((keyframe) => keyframe.time <= playheadTime)
+        .pop();
+
+      return [
+        ...prev,
+        {
+          id: `material-${Date.now().toString(36)}`,
+          time: playheadTime,
+          value: activeMaterialSettings,
+          easing: previousKeyframe?.easing ?? 'ease-in-out',
+        }
+      ].sort((a, b) => a.time - b.time);
+    });
+  };
+
+  const renderMaterialKeyframeControl = () => {
+    const isKeyedHere = Boolean(materialKeyframeAtPlayhead());
+    return (
+      <button
+        type="button"
+        aria-label={`${isKeyedHere ? 'Remove' : 'Add'} material keyframe at current time`}
+        title={`${isKeyedHere ? 'Remove' : 'Add'} material keyframe`}
+        onClick={(event) => {
+          event.stopPropagation();
+          toggleMaterialKeyframeAtPlayhead();
+        }}
+        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+          isKeyedHere
+            ? 'bg-white/[0.06] text-white'
+            : 'text-zinc-600 hover:bg-white/[0.05] hover:text-zinc-300'
+        }`}
+      >
+        <span
+          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-black/80' : 'border-white/20'}`}
+          style={{ backgroundColor: isKeyedHere ? '#a78bfa' : 'transparent' }}
+        />
+      </button>
+    );
+  };
+
   const renderLightPositionKeyframeControl = () => {
     const isKeyedHere = Boolean(lightPositionKeyframeAtPlayhead());
     return (
@@ -1109,10 +1482,10 @@ export default function AppLayout() {
           event.stopPropagation();
           toggleLightPositionKeyframeAtPlayhead();
         }}
-        className={`size-6 shrink-0 rounded-md border flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
           isKeyedHere
-            ? 'border-white/30 bg-white/[0.09]'
-            : 'border-white/[0.08] bg-black/20 hover:bg-white/[0.05]'
+            ? 'bg-white/[0.06] text-white'
+            : 'text-zinc-600 hover:bg-white/[0.05] hover:text-zinc-300'
         }`}
       >
         <span
@@ -1139,10 +1512,10 @@ export default function AppLayout() {
           event.stopPropagation();
           toggleKeyframeAtPlayhead(track, value);
         }}
-        className={`size-6 shrink-0 rounded-md border flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
           isKeyedHere
-            ? 'border-white/30 bg-white/[0.09]'
-            : 'border-white/[0.08] bg-black/20 hover:bg-white/[0.05]'
+            ? 'bg-white/[0.06] text-white'
+            : 'text-zinc-600 hover:bg-white/[0.05] hover:text-zinc-300'
         }`}
       >
         <span
@@ -1188,7 +1561,8 @@ export default function AppLayout() {
           {
             id: `${shape.id}-fill-${Date.now().toString(36)}`,
             time: playheadTime,
-            stops: makeFillStops(selectedShapeFill, selectedShapeFillSecondary, fillMode === 'solid'),
+            stops: selectedShapeFillStops,
+            gradientType: selectedShapeGradientType,
             easing: previousKeyframe?.easing ?? 'ease-in-out',
           },
         ].sort((a, b) => a.time - b.time),
@@ -1208,10 +1582,10 @@ export default function AppLayout() {
           event.stopPropagation();
           toggleSelectedShapeColorKeyframe();
         }}
-        className={`size-6 shrink-0 rounded-md border flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
           isKeyedHere
-            ? 'border-white/30 bg-white/[0.09]'
-            : 'border-white/[0.08] bg-black/20 hover:bg-white/[0.05]'
+            ? 'bg-white/[0.06] text-white'
+            : 'text-zinc-600 hover:bg-white/[0.05] hover:text-zinc-300'
         }`}
       >
         <span
@@ -1271,18 +1645,44 @@ export default function AppLayout() {
     }
     setIsPlaying(!isPlaying);
   };
+
+  useEffect(() => {
+    const handleEditorShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isEditableShortcutTarget(event.target)) return;
+
+      if (event.code === 'Space') {
+        event.preventDefault();
+        handlePlayToggle();
+      }
+    };
+
+    window.addEventListener('keydown', handleEditorShortcut);
+    return () => window.removeEventListener('keydown', handleEditorShortcut);
+  }, [handlePlayToggle]);
+
   const handleReset = () => {
     setIsPlaying(false);
     setCurrentTime(0);
   };
 
+  const shapeTransitionBreakpoints = sortedShapes.slice(0, -1).flatMap((from, index) => {
+    const to = sortedShapes[index + 1];
+    const gap = Math.max(0, to.time - from.time);
+    const start = from.time + (from.transitionStart ?? DEFAULT_TRANSITION_START) * gap;
+    const end = from.time + (from.transitionEnd ?? DEFAULT_TRANSITION_END) * gap;
+    return [start, end];
+  });
+
   const timelineBreakpoints = Array.from(new Set([
     0,
     duration,
-    ...shapes.map((shape) => shape.time),
+    ...shapeTransitionBreakpoints,
     ...shapes.flatMap((shape) => (shape.fillKeyframes ?? []).map((keyframe) => keyframe.time)),
     ...tracks.flatMap((track) => track.keyframes.map((keyframe) => keyframe.time)),
     ...keyLightPositionKeyframes.map((keyframe) => keyframe.time),
+    ...materialKeyframes.map((keyframe) => keyframe.time),
   ].map((time) => Number(clampNumber(time, 0, duration).toFixed(2)))))
     .sort((a, b) => a - b);
 
@@ -1311,6 +1711,78 @@ export default function AppLayout() {
     setActiveRecipeId(null);
   };
 
+  const timelinePropertyRows: TimelinePropertyRow[] = [
+    ...(selectedShape?.fillKeyframes?.length ? [{
+      id: 'fill',
+      name: 'Fill',
+      color: '#ff5b9a',
+      keyframes: selectedShape.fillKeyframes.map((keyframe) => ({
+        id: keyframe.id,
+        time: keyframe.time,
+        label: `${keyframe.stops?.[0]?.color ?? selectedShape.color}`,
+      })),
+    }] : []),
+    ...(keyLightPositionKeyframes.length ? [{
+      id: 'light-position',
+      name: 'Light Position',
+      color: '#ffd166',
+      keyframes: keyLightPositionKeyframes.map((keyframe) => ({
+        id: keyframe.id,
+        time: keyframe.time,
+        label: `X ${keyframe.value.x.toFixed(1)} Y ${keyframe.value.y.toFixed(1)} Z ${keyframe.value.z.toFixed(1)}`,
+      })),
+    }] : []),
+    ...(materialKeyframes.length ? [{
+      id: 'material',
+      name: 'Material',
+      color: '#a78bfa',
+      keyframes: materialKeyframes.map((keyframe) => ({
+        id: keyframe.id,
+        time: keyframe.time,
+        label: `M ${keyframe.value.metalness.toFixed(2)} R ${keyframe.value.roughness.toFixed(2)}`,
+      })),
+    }] : []),
+  ];
+
+  const clearTimelineTrackRow = (trackId: string) => {
+    setTracks((prev) => prev.map((track) => track.id === trackId ? { ...track, keyframes: [] } : track));
+    setActiveRecipeId(null);
+  };
+
+  const clearTimelinePropertyRow = (rowId: string) => {
+    if (rowId === 'fill' && selectedShapeId) {
+      setShapes((prev) => prev.map((shape) => shape.id === selectedShapeId ? { ...shape, fillKeyframes: [] } : shape));
+      markCustom();
+    }
+    if (rowId === 'light-position') {
+      setKeyLightPositionKeyframes([]);
+      markCustom();
+    }
+    if (rowId === 'material') {
+      setMaterialKeyframes([]);
+      markCustom();
+    }
+  };
+
+  const removeTimelinePropertyKeyframe = (rowId: string, keyframeId: string) => {
+    if (rowId === 'fill' && selectedShapeId) {
+      setShapes((prev) => prev.map((shape) =>
+        shape.id === selectedShapeId
+          ? { ...shape, fillKeyframes: (shape.fillKeyframes ?? []).filter((keyframe) => keyframe.id !== keyframeId) }
+          : shape
+      ));
+      markCustom();
+    }
+    if (rowId === 'light-position') {
+      setKeyLightPositionKeyframes((prev) => prev.filter((keyframe) => keyframe.id !== keyframeId));
+      markCustom();
+    }
+    if (rowId === 'material') {
+      setMaterialKeyframes((prev) => prev.filter((keyframe) => keyframe.id !== keyframeId));
+      markCustom();
+    }
+  };
+
   const handleScrubStart = () => setIsPlaying(false);
 
   // --- 4. Exporter modal ---
@@ -1331,7 +1803,7 @@ export default function AppLayout() {
     reader.onload = (event) => {
       const content = event.target?.result as string;
       if (content) {
-        setShapes((prev) => prev.map((s) => s.id === shapeId ? { ...s, iconId: 'custom', svgContent: content } : s));
+        setShapes((prev) => prev.map((s) => s.id === shapeId ? { ...s, iconId: 'custom', iconName: 'Custom', svgContent: content } : s));
       }
       e.target.value = '';
     };
@@ -1345,7 +1817,7 @@ export default function AppLayout() {
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
-      if (text) setShapes((prev) => prev.map((s) => s.id === selectedShapeId ? { ...s, iconId: 'custom', svgContent: text } : s));
+      if (text) setShapes((prev) => prev.map((s) => s.id === selectedShapeId ? { ...s, iconId: 'custom', iconName: 'Custom', svgContent: text } : s));
     };
     reader.readAsText(file);
   };
@@ -1364,32 +1836,29 @@ export default function AppLayout() {
   };
 
   return (
-    <div className="w-screen h-screen flex flex-col overflow-hidden bg-zinc-950 text-zinc-50 font-sans select-none antialiased">
+    <div className="w-screen h-screen flex flex-col overflow-hidden bg-background text-foreground font-sans select-none antialiased">
       
       {/* =========================================================================
           1. TOP BAR
           ========================================================================= */}
-      <div className="h-14 border-b border-white/[0.07] flex items-center justify-between px-3 bg-[#0d0e10]/95 backdrop-blur-xl shrink-0 relative z-30">
+      <div className="h-14 border-b border-border flex items-center justify-between px-3 bg-background/95 backdrop-blur-xl shrink-0 relative z-30">
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
             aria-label={zenMode ? "Show panels" : "Hide panels"}
             onClick={() => setZenMode(!zenMode)}
-            className="size-9 rounded-lg border border-white/[0.08] bg-white/[0.03] text-zinc-400 hover:text-white hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+            className="size-9 rounded-lg border border-border bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             {zenMode ? <PanelLeftOpen className="mx-auto size-4" /> : <PanelLeftClose className="mx-auto size-4" />}
           </button>
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="size-8 rounded-lg bg-white text-zinc-950 flex items-center justify-center">
+            <div className="size-8 rounded-lg bg-foreground text-background flex items-center justify-center">
               <Box className="size-4" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-white text-sm tracking-tight">VectorForge</span>
-                <span className="hidden sm:inline text-[10px] uppercase tracking-[0.18em] text-zinc-600">3D Motion Studio</span>
-              </div>
-              <div className="text-[11px] text-zinc-500 truncate">
-                {sortedShapes.map((s) => shapeName(s)).join(' → ')} · {activeRecipeId ? MOTION_RECIPES.find(r => r.id === activeRecipeId)?.name : 'Custom setup'}
+                <span className="font-semibold text-foreground text-sm tracking-tight">VectorForge</span>
+                <span className="hidden sm:inline text-[10px] uppercase tracking-[0.18em] text-muted-foreground">3D Motion Studio</span>
               </div>
             </div>
           </div>
@@ -1398,19 +1867,24 @@ export default function AppLayout() {
         <div />
 
         <div className="flex items-center gap-1.5">
-          <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-white hover:bg-white/[0.06] h-8 rounded-lg text-xs" onClick={handleResetRecipe}>
-            <RefreshCw className="size-3.5" />
-            Reset Look
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={isLightTheme ? 'Switch to dark theme' : 'Switch to light theme'}
+            title={isLightTheme ? 'Switch to dark theme' : 'Switch to light theme'}
+            onClick={() => setTheme(isLightTheme ? 'dark' : 'light')}
+            className="size-8 rounded-lg border border-border bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {isLightTheme ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}
           </Button>
-
-          <Button size="sm" className="bg-white hover:bg-zinc-200 text-zinc-950 gap-1.5 font-medium h-8 rounded-lg text-xs" onClick={() => setIsExportOpen(true)}>
+          <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 font-medium h-8 rounded-lg text-xs" onClick={() => setIsExportOpen(true)}>
             <Download className="size-3.5" />
             Export
           </Button>
         </div>
       </div>
 
-      <div className="flex-1 flex min-h-0 bg-[#111214]">
+      <div className="flex-1 flex min-h-0 bg-muted/40 dark:bg-[#111214]">
 
         {/* MIDDLE SECTION: Interactive WebGL Viewport Canvas */}
         <div className={`transition-all duration-300 ease-out flex-1 flex flex-col min-w-0 ${
@@ -1434,7 +1908,7 @@ export default function AppLayout() {
               handleDropSvg(e);
             }}
             className={`flex-1 min-h-0 relative transition-all duration-300 ease-out ${
-              zenMode ? 'rounded-none border-0' : 'rounded-lg border border-white/[0.07] overflow-hidden bg-[#0b0c0e]'
+              zenMode ? 'rounded-none border-0' : 'rounded-lg border border-border overflow-hidden bg-muted/40 dark:bg-[#0b0c0e]'
             }`}
           >
             <SvgCanvas
@@ -1446,27 +1920,33 @@ export default function AppLayout() {
               colorB={colorB}
               colorASecondary={colorASecondary}
               colorBSecondary={colorBSecondary}
+              colorAStops={fillA.stops}
+              colorBStops={fillB.stops}
               enableGradient={enableGradient}
               gradientType={activeGradientType}
-              roughness={roughness}
-              metalness={metalness}
-              clearcoat={clearcoat}
-              clearcoatRoughness={clearcoatRoughness}
-              transmission={transmission}
-              thickness={thickness}
-              emissiveIntensity={emissiveIntensity}
+              roughness={activeMaterialSettings.roughness}
+              metalness={activeMaterialSettings.metalness}
+              reflectance={activeMaterialSettings.reflectance}
+              clearcoat={activeMaterialSettings.clearcoat}
+              clearcoatRoughness={activeMaterialSettings.clearcoatRoughness}
+              transmission={activeMaterialSettings.transmission}
+              thickness={activeMaterialSettings.thickness}
+              emissiveIntensity={activeMaterialSettings.emissiveIntensity}
               wireframe={wireframe}
               extrusionDepth={activeExtrusionDepth}
               bevelEnabled={bevelEnabled}
               bevelThickness={bevelThickness}
               bevelSize={bevelSize}
               bevelSegments={bevelSegments}
+              geometryQuality={geometryQuality}
               layerSpacing={layerSpacing}
               transitionType={transitionType}
               wipeDirection={wipeDirection}
               transitionProgress={activeTransitionProgress}
               rotationOffset={{ x: rotationOffset.x, y: activeRotationY, z: rotationOffset.z }}
               objectScale={activeObjectScale}
+              moveOffset={moveOffset}
+              centerPull={centerPull}
               isPlaying={isPlaying}
               ambientColor={ambientColor}
               ambientIntensity={ambientIntensity}
@@ -1476,6 +1956,8 @@ export default function AppLayout() {
               rimLightColor={rimLightColor}
               rimLightIntensity={rimLightIntensity}
               zoom={zoom}
+              viewInertiaEnabled={viewInertiaEnabled}
+              showCenterPoint={showCenterPoint}
               onZoomChange={setZoom}
               onViewRotationCommit={handleViewRotationCommit}
             />
@@ -1493,31 +1975,58 @@ export default function AppLayout() {
               </div>
             )}
 
-            {/* Viewport hint */}
-            <div className="absolute top-3 left-3 z-10">
-              <div className="flex items-center gap-1.5 text-[10px] px-2 py-1 bg-black/55 border border-white/[0.08] rounded-md text-zinc-400 backdrop-blur-sm">
-                <Orbit className="size-3" />
-                Drag to rotate · Scroll to zoom
-              </div>
+            <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+              <Popover>
+                <PopoverTrigger
+                  aria-label="View options"
+                  title="View options"
+                  className="flex h-7 w-8 items-center justify-center rounded-lg border border-border bg-background/70 text-muted-foreground backdrop-blur-sm transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-black/55 dark:hover:bg-black/70"
+                >
+                  <MoreHorizontal className="size-4" />
+                </PopoverTrigger>
+                <PopoverContent align="end" side="bottom" sideOffset={8} className="w-44 border-white/[0.09] bg-[#15171a] p-2 text-zinc-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRotationOffset({ x: 0, y: 0, z: 0 });
+                      setZoom(1);
+                      canvas3DRef.current?.resetRotation();
+                    }}
+                    className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                  >
+                    <span className="text-[11px] text-zinc-300">Reset view</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewInertiaEnabled((enabled) => !enabled)}
+                    className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                  >
+                    <span className="text-[11px] text-zinc-300">Inertia</span>
+                    <Switch
+                      checked={viewInertiaEnabled}
+                      onCheckedChange={(checked) => setViewInertiaEnabled(checked)}
+                      onClick={(event) => event.stopPropagation()}
+                      size="sm"
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCenterPoint((visible) => !visible)}
+                    className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                  >
+                    <span className="text-[11px] text-zinc-300">Center point</span>
+                    <Switch
+                      checked={showCenterPoint}
+                      onCheckedChange={(checked) => setShowCenterPoint(checked)}
+                      onClick={(event) => event.stopPropagation()}
+                      size="sm"
+                    />
+                  </button>
+                </PopoverContent>
+              </Popover>
             </div>
 
-            <div className="absolute top-3 right-3 z-10">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setRotationOffset({ x: 0, y: 0, z: 0 });
-                  setZoom(1);
-                  canvas3DRef.current?.resetRotation();
-                }}
-                className="bg-black/55 border border-white/[0.08] hover:bg-black/70 text-zinc-400 hover:text-white backdrop-blur-sm text-[11px] gap-1.5 h-7 rounded-lg"
-              >
-                <Undo2 className="w-3 h-3" />
-                Reset View
-              </Button>
-            </div>
-
-            <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-black/65 px-3 py-2 shadow-2xl backdrop-blur-xl transition-colors hover:border-white/20">
+            <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/75 px-3 py-2 shadow-2xl backdrop-blur-xl transition-colors hover:border-border dark:border-white/10 dark:bg-black/65 dark:hover:border-white/20">
               <Button
                 size="icon"
                 variant="ghost"
@@ -1585,119 +2094,110 @@ export default function AppLayout() {
 
         </div>
 
-        <div className={`transition-all duration-300 ease-out flex flex-col shrink-0 overflow-y-auto bg-[#0f1012] ${
+        <div className={`transition-all duration-300 ease-out flex flex-col shrink-0 overflow-y-auto bg-background dark:bg-[#0f1012] ${
           zenMode ? 'w-0 opacity-0 border-l-0 pointer-events-none p-0' : 'w-[328px] border-l border-white/[0.07] px-4 py-4 gap-5'
         }`}>
 
-          {/* Looks — quick-start style presets */}
-          <div className="flex flex-col gap-2.5 border-b border-white/[0.07] pb-4">
-            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
-              <Wand2 className="size-3.5" />
-              Looks
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {MOTION_RECIPES.map((recipe) => {
-                const isActive = activeRecipeId === recipe.id;
-                return (
-                  <button
-                    key={recipe.id}
-                    type="button"
-                    title={recipe.name}
-                    onClick={() => applyRecipe(recipe)}
-                    className={`group relative flex flex-col gap-1.5 rounded-xl p-1 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
-                      isActive ? 'bg-white/[0.08] ring-1 ring-white/40' : 'hover:bg-white/[0.04]'
-                    }`}
-                  >
-                    <span
-                      className="relative block h-12 w-full overflow-hidden rounded-lg border border-white/10 shadow-inner"
-                      style={{ background: `linear-gradient(135deg, ${recipe.colorA}, ${recipe.colorASecondary} 50%, ${recipe.colorB})` }}
-                    >
-                      <span className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-                    </span>
-                    <span className="truncate px-1 pb-0.5 text-[10px] font-medium text-zinc-300">{recipe.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Material — preview chips */}
-          <div className="flex flex-col gap-2.5 border-b border-white/[0.07] pb-4">
-            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
-              <Palette className="size-3.5" />
-              Material
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {(Object.keys(MATERIAL_METADATA) as MaterialPresetId[]).map((preset) => {
-                const isActive = materialPreset === preset;
-                return (
-                  <button
-                    key={preset}
-                    type="button"
-                    title={MATERIAL_METADATA[preset].name}
-                    onClick={() => { setMaterialPreset(preset); setActiveRecipeId(null); }}
-                    className={`flex flex-col items-center gap-1.5 rounded-xl p-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
-                      isActive ? 'bg-white/[0.08] ring-1 ring-white/40' : 'hover:bg-white/[0.04]'
-                    }`}
-                  >
-                    <span className="size-8 rounded-full border border-white/10 shadow-[0_2px_6px_rgba(0,0,0,0.5)]" style={{ background: MATERIAL_PREVIEW[preset] }} />
-                    <span className={`truncate text-[10px] font-medium ${isActive ? 'text-zinc-100' : 'text-zinc-400'}`}>{MATERIAL_METADATA[preset].name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Fill — solid or gradient (type lives inside the swatch popover) */}
-          <div className="flex items-center justify-between gap-3 border-b border-white/[0.07] pb-4">
-            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
-              <Rows3 className="size-3.5" />
-              Fill
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-[150px]">
-              <ColorPicker
-                value={selectedShapeFill}
-                onChange={(val) => updateSelectedShapeColor(val)}
-                gradient={fillMode === 'gradient'}
-                onGradientToggle={(on) => { setFillMode(on ? 'gradient' : 'solid'); setEnableGradient(on); markCustom(); }}
-                gradientType={selectedShapeGradientType}
-                onGradientTypeChange={updateSelectedShapeGradientType}
-                secondaryValue={selectedShapeFillSecondary}
-                onSecondaryChange={(val) => updateSelectedShapeColor(val, true)}
-                className="rounded-lg bg-white/[0.035] border-white/[0.08]"
-              />
-              </div>
-              <div className="flex shrink-0 flex-col gap-1">
-                {renderColorKeyframeControl()}
-              </div>
-            </div>
-          </div>
-
-          {materialPreset === 'custom' && (
-            <div className="flex flex-col gap-3 border-b border-white/[0.07] pb-4 animate-fade-in">
+          {/* Style */}
+          <div className="flex flex-col gap-3 border-b border-white/[0.07] pb-4">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
-                <Sliders className="size-3.5" />
-                Material
+                <Wand2 className="size-3.5" />
+                Style
               </div>
+              <span className="text-[10px] text-zinc-500">{MATERIAL_METADATA[materialPreset].name}</span>
+            </div>
 
-              {/* Compact property rows: label + direct value, closer to Figma/Framer inspectors. */}
-              {[
-                { label: 'Smoothness', value: roughness, set: setRoughness, min: 0, max: 1, step: 0.02, fmt: (v: number) => v.toFixed(2) },
-                { label: 'Metallic', value: metalness, set: setMetalness, min: 0, max: 1, step: 0.02, fmt: (v: number) => v.toFixed(2) },
-                { label: 'Gloss Coat', value: clearcoat, set: setClearcoat, min: 0, max: 1, step: 0.05, fmt: (v: number) => v.toFixed(2) },
-                { label: 'Transparency', value: transmission, set: setTransmission, min: 0, max: 1, step: 0.05, fmt: (v: number) => v.toFixed(2) },
-                { label: 'Glow', value: emissiveIntensity, set: setEmissiveIntensity, min: 0, max: 5, step: 0.1, fmt: (v: number) => v.toFixed(1) },
-              ].map(({ label, value, set, min, max, step, fmt }) => (
-                <div key={label} className="flex items-center justify-between gap-3">
-                  <span className="text-[11px] text-zinc-400 w-24 shrink-0">{label}</span>
-                  <NumberField value={value} min={min} max={max} step={step} precision={fmt(value).includes('.') ? fmt(value).split('.')[1].length : 0} onChange={(next) => { set(next); setActiveRecipeId(null); }} />
+            <div ref={inspectorRefs.fill} className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 flex-col">
+                <span className="text-[10px] font-medium text-zinc-500">Fill</span>
+              </div>
+              <div className="ml-auto flex items-center justify-end gap-2">
+                <div className="w-[126px]">
+                  <ColorPicker
+                    value={selectedShapeFill}
+                    onChange={(val) => updateSelectedShapeColor(val)}
+                    gradient={fillMode === 'gradient'}
+                    onGradientToggle={(on) => { setFillMode(on ? 'gradient' : 'solid'); setEnableGradient(on); markCustom(); }}
+                    gradientType={selectedShapeGradientType}
+                    onGradientTypeChange={updateSelectedShapeGradientType}
+                    stops={selectedShapeFillStops}
+                    onStopsChange={updateSelectedShapeFillStops}
+                    secondaryValue={selectedShapeFillSecondary}
+                    onSecondaryChange={(val) => updateSelectedShapeColor(val, true)}
+                    className="h-7 w-full rounded-md px-2 py-0 bg-white/[0.035] border-white/[0.08]"
+                  />
+                </div>
+                <div className="flex shrink-0 flex-col gap-1">
+                  {renderColorKeyframeControl()}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between px-0.5">
+                <span className="text-[10px] font-medium text-zinc-500">Finish</span>
+              </div>
+              <div className="grid grid-cols-6 gap-1.5">
+                {FINISH_PRESETS.map((preset) => {
+                  const isActive = materialPreset === preset;
+                  return (
+                    <button
+                      key={preset}
+                      type="button"
+                      aria-label={MATERIAL_METADATA[preset].name}
+                      title={MATERIAL_METADATA[preset].name}
+                      onClick={() => {
+                        setMaterialPreset(preset);
+                        setActiveRecipeId(null);
+                        setMaterialKeyframes([]);
+                      }}
+                      className={`group/finish relative flex h-8 min-w-0 items-center justify-center rounded-md border shadow-[inset_0_0_0_1px_rgba(255,255,255,0.025)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+                        isActive ? 'border-white/30 bg-white/[0.075]' : 'border-white/[0.095] bg-white/[0.03] hover:border-white/[0.18] hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      <span className="size-4 shrink-0 rounded-full border border-white/[0.16] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.22)]" style={{ background: MATERIAL_PREVIEW[preset] }} />
+                      <span className="pointer-events-none absolute -top-7 left-1/2 z-30 -translate-x-1/2 rounded-md border border-white/[0.08] bg-[#18191c] px-2 py-1 text-[10px] font-medium text-zinc-200 opacity-0 shadow-xl transition-opacity group-hover/finish:opacity-100 group-focus-visible/finish:opacity-100">
+                        {MATERIAL_METADATA[preset].name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div ref={inspectorRefs.material} className="space-y-2 border-t border-white/[0.07] pt-3 animate-fade-in">
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAdvancedMaterialOpen((open) => !open)}
+                  className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md text-left text-[10px] font-medium text-zinc-500 transition-colors hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                  aria-expanded={isAdvancedMaterialOpen}
+                >
+                  <ChevronRight className={`size-3 transition-transform ${isAdvancedMaterialOpen ? 'rotate-90' : ''}`} />
+                  <Sliders className="size-3" />
+                  Advanced
+                  {materialKeyframes.length > 0 && <span className="ml-1 size-1.5 rounded-full bg-violet-400" />}
+                </button>
+                {renderMaterialKeyframeControl()}
+              </div>
+              {isAdvancedMaterialOpen && [
+                { key: 'roughness' as const, label: 'Smoothness', value: activeMaterialSettings.roughness, min: 0, max: 1, step: 0.02, fmt: (v: number) => v.toFixed(2) },
+                { key: 'metalness' as const, label: 'Metallic', value: activeMaterialSettings.metalness, min: 0, max: 1, step: 0.02, fmt: (v: number) => v.toFixed(2) },
+                { key: 'reflectance' as const, label: 'Reflectance', value: activeMaterialSettings.reflectance, min: 0, max: 1, step: 0.02, fmt: (v: number) => v.toFixed(2) },
+                { key: 'clearcoat' as const, label: 'Clearcoat', value: activeMaterialSettings.clearcoat, min: 0, max: 1, step: 0.05, fmt: (v: number) => v.toFixed(2) },
+                { key: 'clearcoatRoughness' as const, label: 'Clearcoat Softness', value: activeMaterialSettings.clearcoatRoughness, min: 0, max: 1, step: 0.05, fmt: (v: number) => v.toFixed(2) },
+                { key: 'transmission' as const, label: 'Transparency', value: activeMaterialSettings.transmission, min: 0, max: 1, step: 0.05, fmt: (v: number) => v.toFixed(2) },
+                { key: 'thickness' as const, label: 'Glass Depth', value: activeMaterialSettings.thickness, min: 0.1, max: 4, step: 0.1, fmt: (v: number) => v.toFixed(1) },
+                { key: 'emissiveIntensity' as const, label: 'Emission', value: activeMaterialSettings.emissiveIntensity, min: 0, max: 5, step: 0.1, fmt: (v: number) => v.toFixed(1) },
+              ].map(({ key, label, value, min, max, step, fmt }) => (
+                <div key={key} className="flex items-center justify-between gap-3">
+                  <span className="w-24 shrink-0 text-[11px] text-zinc-400">{label}</span>
+                  <NumberField value={value} min={min} max={max} step={step} precision={fmt(value).includes('.') ? fmt(value).split('.')[1].length : 0} onChange={(next) => updateMaterialSetting(key, next, min, max)} />
                 </div>
               ))}
             </div>
-          )}
-
-
+          </div>
 
           {/* Shape */}
           <div className="flex flex-col gap-3 border-b border-white/[0.07] pb-4">
@@ -1707,7 +2207,7 @@ export default function AppLayout() {
             </div>
 
             {/* Extrude */}
-            <div className={motionPropertyRowClass('extrusion')} onClick={() => setSelectedMotionTrackId('extrusion')}>
+            <div ref={inspectorRefs.extrusion} className={motionPropertyRowClass('extrusion')} onClick={() => setSelectedMotionTrackId('extrusion')}>
               <span className="text-[11px] text-zinc-400 w-24 shrink-0">
                 Extrude
                 {extrusionTrack.keyframes.length > 0 && <span className="inline-block w-1 h-1 rounded-full bg-emerald-500 ml-1 align-middle" />}
@@ -1739,20 +2239,22 @@ export default function AppLayout() {
               </div>
             )}
 
-            {/* Rounded edges + segments */}
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-zinc-400">Rounded Edges</span>
-              <div className="flex items-center gap-2">
-                {bevelEnabled && (
-                  <div className="flex items-center gap-1 animate-fade-in">
-                    <span className="text-[10px] text-zinc-500">Smoothness</span>
-                    <input 
-                      type="number" min="1" max="10" 
-                      value={bevelSegments} onChange={(e) => { setBevelSegments(parseInt(e.target.value) || 1); setActiveRecipeId(null); }}
-                      className="w-8 bg-zinc-900 border border-zinc-800 rounded text-[10px] text-center text-white outline-none py-0.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                  </div>
-                )}
+            {/* Rounded edges — same row rhythm as Extrude: label · value · trailing control */}
+            <div className="flex items-center gap-3 -mx-1 px-1 py-1">
+              <span className="w-24 shrink-0 text-[11px] text-zinc-400">Rounded Edges</span>
+              <span className="flex-1" />
+              {bevelEnabled && (
+                <NumberField
+                  value={bevelSegments}
+                  min={1}
+                  max={10}
+                  step={1}
+                  precision={0}
+                  className="w-[62px] animate-fade-in"
+                  onChange={(value) => { setBevelSegments(Math.round(value)); setActiveRecipeId(null); }}
+                />
+              )}
+              <div className="flex w-6 shrink-0 items-center justify-end">
                 <Switch
                   checked={bevelEnabled}
                   onCheckedChange={(val) => {
@@ -1763,54 +2265,88 @@ export default function AppLayout() {
                 />
               </div>
             </div>
+            <div className="flex items-center justify-between gap-3 -mx-1 px-1 py-1">
+              <span className="w-24 shrink-0 text-[11px] text-zinc-400">Quality</span>
+              <span className="flex-1" />
+              <NumberField
+                value={geometryQuality}
+                min={0.015}
+                max={0.12}
+                step={0.005}
+                precision={3}
+                onChange={(value) => {
+                  setGeometryQuality(value);
+                  setActiveRecipeId(null);
+                }}
+              />
+            </div>
           </div>
 
-          {/* Motion & View */}
-          <div className="flex flex-col gap-3 pb-4">
-            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
+          {/* Motion */}
+          <div className="flex flex-col gap-1.5 pb-4">
+            <div className="flex items-center gap-2 pb-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
               <Orbit className="size-3.5" />
-              Motion &amp; View
+              Motion
             </div>
 
-            <div className={motionPropertyRowClass('rotation')} onClick={() => setSelectedMotionTrackId('rotation')}>
-              <div className="flex flex-1 items-center gap-1">
+            <div className="flex items-center justify-between gap-3 -mx-1 px-1 py-1">
+              <span className="w-24 shrink-0 text-[11px] text-zinc-400">Duration</span>
+              <span className="flex-1" />
+              <NumberField
+                value={duration}
+                min={0.5}
+                max={30}
+                step={0.1}
+                precision={1}
+                suffix="s"
+                onChange={(value) => {
+                  const next = clampNumber(value, 0.5, 30);
+                  setDuration(next);
+                  setCurrentTime((time) => clampNumber(time, 0, next));
+                  setActiveRecipeId(null);
+                }}
+              />
+            </div>
+
+            {/* Rotation — X/Y/Z, Y is the animated hero rotation */}
+            <div ref={inspectorRefs.rotation} className={motionPropertyRowClass('rotation')} onClick={() => setSelectedMotionTrackId('rotation')}>
+              <span className="flex-1" />
+              <div className="flex h-7 items-center gap-2">
                 {([
                   { label: 'X', axis: 'x' as const, value: normalizeDegrees(rotationOffset.x) },
                   { label: 'Y', axis: 'y' as const, value: normalizeDegrees(activeRotationY), animated: true },
                   { label: 'Z', axis: 'z' as const, value: normalizeDegrees(rotationOffset.z) },
                 ]).map(({ label, axis, value, animated }) => (
-                  <div key={axis} className="flex h-7 min-w-0 items-center rounded-md border border-white/[0.07] bg-black/20 px-1.5">
-                    <span className="shrink-0 text-[9px] font-medium text-zinc-500">{label}</span>
-                    <NumberField
-                      value={value}
-                      min={0}
-                      max={360}
-                      step={1}
-                      suffix="°"
-                      precision={0}
-                      className="h-6 w-[38px] border-0 bg-transparent px-0"
-                      inputClassName="text-left"
-                      onChange={(nextValue) => {
-                        const normalized = normalizeDegrees(nextValue);
-                        if (animated) {
-                          handleSpinChange(normalized);
-                        } else {
-                          setRotationOffset((prev) => ({ ...prev, [axis]: normalized }));
-                          setActiveRecipeId(null);
-                        }
-                      }}
-                    />
-                  </div>
+                  <NumberField
+                    key={axis}
+                    value={value}
+                    min={0}
+                    max={360}
+                    step={1}
+                    prefix={label}
+                    suffix="°"
+                    precision={0}
+                    className="h-7 w-[50px]"
+                    inputClassName="text-right pr-0.5"
+                    onChange={(nextValue) => {
+                      const normalized = normalizeDegrees(nextValue);
+                      if (animated) {
+                        handleSpinChange(normalized);
+                      } else {
+                        setRotationOffset((prev) => ({ ...prev, [axis]: normalized }));
+                        setActiveRecipeId(null);
+                      }
+                    }}
+                  />
                 ))}
               </div>
               {renderKeyframeControl(rotationTrack, normalizeDegrees(activeRotationY))}
             </div>
 
-            <div className={motionPropertyRowClass('scale')} onClick={() => setSelectedMotionTrackId('scale')}>
-              <span className="w-16 shrink-0 text-[11px] text-zinc-300">
-                Scale
-                {scaleTrack.keyframes.length > 0 && <span className="inline-block w-1 h-1 rounded-full bg-emerald-500 ml-1 align-middle" />}
-              </span>
+            {/* Scale */}
+            <div ref={inspectorRefs.scale} className={motionPropertyRowClass('scale')} onClick={() => setSelectedMotionTrackId('scale')}>
+              <Maximize2 className="size-3.5 shrink-0 text-zinc-500" />
+              <span className="w-10 shrink-0 text-[11px] text-zinc-300">Scale</span>
               {(() => {
                 const scaleValue = finiteNumber(scaleTrack.keyframes.length > 0 ? activeObjectScale : objectScale, SCALE_DEFAULT);
                 return (
@@ -1830,8 +2366,52 @@ export default function AppLayout() {
               })()}
             </div>
 
-            {/* Light — brightness inline; direction & temperature live in the orb popover */}
-            <div className={motionPropertyRowClass('lighting')} onClick={() => setSelectedMotionTrackId('lighting')}>
+            <div className="flex items-center justify-between gap-3 -mx-1 px-1 py-1">
+              <span className="w-14 shrink-0 text-[11px] text-zinc-400">Move</span>
+              <span className="flex-1" />
+              <div className="flex h-7 items-center gap-1.5">
+                {([
+                  { label: 'X', axis: 'x' as const },
+                  { label: 'Y', axis: 'y' as const },
+                  { label: 'Z', axis: 'z' as const },
+                ]).map(({ label, axis }) => (
+                  <NumberField
+                    key={axis}
+                    value={moveOffset[axis]}
+                    min={-100}
+                    max={100}
+                    step={1}
+                    prefix={label}
+                    precision={0}
+                    className="h-7 w-[55px]"
+                    inputClassName="text-right pr-0.5"
+                    onChange={(value) => {
+                      setMoveOffset((prev) => ({ ...prev, [axis]: clampNumber(value, -100, 100) }));
+                      setActiveRecipeId(null);
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 -mx-1 px-1 py-1">
+              <span className="w-24 shrink-0 text-[11px] text-zinc-400">Center Pull</span>
+              <span className="flex-1" />
+              <NumberField
+                value={centerPull}
+                min={0}
+                max={2}
+                step={0.02}
+                precision={2}
+                onChange={(value) => {
+                  setCenterPull(value);
+                  setActiveRecipeId(null);
+                }}
+              />
+            </div>
+
+            {/* Light — brightness inline; direction, temperature & color live in the orb popover */}
+            <div ref={inspectorRefs.lighting} className={motionPropertyRowClass('lighting')} onClick={() => setSelectedMotionTrackId('lighting')}>
               <div onClick={(e) => e.stopPropagation()}>
                 <LightDirectionPicker
                   position={activeKeyLightPosition}
@@ -1842,7 +2422,7 @@ export default function AppLayout() {
                   onToggleKeyframe={toggleLightPositionKeyframeAtPlayhead}
                 />
               </div>
-              <span className="w-12 shrink-0 text-[11px] text-zinc-300">Light</span>
+              <span className="w-10 shrink-0 text-[11px] text-zinc-300">Light</span>
               {(() => {
                 const brightnessValue = finiteNumber(lightingTrack.keyframes.length > 0 ? activeKeyLightIntensity : keyLightIntensity, 1);
                 return (
@@ -1854,15 +2434,6 @@ export default function AppLayout() {
                 );
               })()}
             </div>
-
-            {/* Zoom (view only) */}
-            <div className="flex items-center gap-3 -mx-1 px-1 py-1">
-              <Maximize2 className="size-3.5 shrink-0 text-zinc-500" />
-              <span className="w-16 shrink-0 text-[11px] text-zinc-300">Zoom</span>
-              <span className="flex-1" />
-              <NumberField value={finiteNumber(zoom, 1)} min={0.5} max={2} step={0.1} precision={1} onChange={(value) => { setZoom(value); setActiveRecipeId(null); }} />
-              <span className="size-6 shrink-0" />
-            </div>
           </div>
 
         </div>
@@ -1872,7 +2443,7 @@ export default function AppLayout() {
       {/* =========================================================================
           3. KEYFRAME TIMELINE Scrubber
           ========================================================================= */}
-      <div className={`transition-all duration-500 ease-in-out shrink-0 overflow-hidden ${zenMode ? 'h-0 border-t-0' : 'h-[184px] border-t border-white/[0.07] bg-[#0f1012]'}`}>
+      <div className={`transition-all duration-500 ease-in-out shrink-0 overflow-hidden ${zenMode ? 'h-0 border-t-0' : 'h-[184px] border-t border-border bg-background dark:bg-[#0f1012]'}`}>
         <Timeline
           duration={duration}
           currentTime={currentTime}
@@ -1882,8 +2453,13 @@ export default function AppLayout() {
           onLoopChange={setLoop}
           tracks={tracks}
           onTracksChange={handleTracksChange}
+          propertyRows={timelinePropertyRows}
+          onClearTrackKeyframes={clearTimelineTrackRow}
+          onClearPropertyRow={clearTimelinePropertyRow}
+          onRemovePropertyKeyframe={removeTimelinePropertyKeyframe}
           activeTrackId={selectedMotionTrackId}
-          onActiveTrackChange={(trackId) => { setSelectedMotionTrackId(trackId as MotionTrackId); setSelectedShapeId(null); }}
+          onActiveTrackChange={selectTimelineTrack}
+          onActivePropertyRowChange={selectTimelinePropertyRow}
           shapes={shapes}
           selectedShapeId={selectedShapeId}
           onSelectShape={setSelectedShapeId}
@@ -1923,6 +2499,7 @@ export default function AppLayout() {
         colorB={colorB}
         roughness={roughness}
         metalness={metalness}
+        reflectance={reflectance}
         clearcoat={clearcoat}
         clearcoatRoughness={clearcoatRoughness}
         transmission={transmission}

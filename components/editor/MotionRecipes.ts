@@ -1,5 +1,5 @@
 import { MaterialPresetId } from '../3d/MaterialPresets';
-import { TimelineTrack } from './Timeline';
+import { FillGradientType, TimelineTrack } from './Timeline';
 
 export interface MotionRecipe {
   id: string;
@@ -11,6 +11,7 @@ export interface MotionRecipe {
   // Design properties
   materialPreset: MaterialPresetId;
   enableGradient: boolean;
+  fillGradientType?: FillGradientType;
   colorA: string;
   colorASecondary: string;
   colorB: string;
@@ -18,8 +19,11 @@ export interface MotionRecipe {
   
   roughness: number;
   metalness: number;
+  reflectance?: number;
   clearcoat: number;
+  clearcoatRoughness?: number;
   transmission: number;
+  thickness?: number;
   emissiveIntensity: number;
   
   extrusionDepth: number;
@@ -27,7 +31,12 @@ export interface MotionRecipe {
   bevelThickness: number;
   bevelSize: number;
   bevelSegments: number;
+  geometryQuality?: number;
   layerSpacing: number;
+  translateX?: number;
+  translateY?: number;
+  translateZ?: number;
+  centerPull?: number;
   
   transitionType: 'none' | 'wipe';
   wipeDirection: { x: number; y: number };
@@ -39,6 +48,94 @@ export interface MotionRecipe {
 }
 
 export const MOTION_RECIPES: MotionRecipe[] = [
+  {
+    id: 'google-metal',
+    name: 'Google Metal',
+    description: 'Google-style mesh color with a bright studio metal finish.',
+    emoji: 'G',
+    tag: 'GOOGLE',
+    materialPreset: 'chrome',
+    enableGradient: true,
+    fillGradientType: 'mesh',
+    colorA: '#4285F4',
+    colorASecondary: '#00C796',
+    colorB: '#FF9900',
+    colorBSecondary: '#D13AB3',
+    roughness: 0.075,
+    metalness: 0.48,
+    reflectance: 1.0,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.02,
+    transmission: 0.0,
+    thickness: 0.4,
+    emissiveIntensity: 0.08,
+    extrusionDepth: 10,
+    bevelEnabled: true,
+    bevelThickness: 0.12,
+    bevelSize: 0.06,
+    bevelSegments: 4,
+    geometryQuality: 0.045,
+    layerSpacing: 0.16,
+    translateY: -2,
+    centerPull: 0.38,
+    transitionType: 'wipe',
+    wipeDirection: { x: 0.707, y: -0.707 },
+    keyLightIntensity: 1.08,
+    tracks: [
+      {
+        id: 'transition',
+        name: 'Morph',
+        color: '#4285F4',
+        min: 0,
+        max: 1.0,
+        defaultValue: 0.0,
+        keyframes: []
+      },
+      {
+        id: 'extrusion',
+        name: 'Depth',
+        color: '#00C796',
+        min: 0.2,
+        max: 20,
+        defaultValue: 10,
+        keyframes: []
+      },
+      {
+        id: 'rotation',
+        name: 'Rotation',
+        color: '#807AFF',
+        min: 0,
+        max: 360,
+        defaultValue: 0,
+        keyframes: [
+          { id: 'kf-google-r1', time: 0, value: 356, easing: 'spring' },
+          { id: 'kf-google-r2', time: 2.6, value: 360, easing: 'ease-in-out' },
+        ]
+      },
+      {
+        id: 'scale',
+        name: 'Scale',
+        color: '#FF9900',
+        min: 0.1,
+        max: 4,
+        defaultValue: 1,
+        keyframes: [
+          { id: 'kf-google-s1', time: 0, value: 1.0, easing: 'spring' },
+          { id: 'kf-google-s2', time: 1.35, value: 0.92, easing: 'spring' },
+          { id: 'kf-google-s3', time: 2.6, value: 1.0, easing: 'ease-in-out' },
+        ]
+      },
+      {
+        id: 'lighting',
+        name: 'Light',
+        color: '#FFC700',
+        min: 0.0,
+        max: 10,
+        defaultValue: 1.08,
+        keyframes: []
+      }
+    ]
+  },
   {
     id: 'spring-glass',
     name: 'Spring Glass Pulse',
@@ -93,7 +190,7 @@ export const MOTION_RECIPES: MotionRecipe[] = [
       },
       {
         id: 'rotation',
-        name: 'Spin',
+        name: 'Rotation',
         color: '#ffd23f',
         min: 0.0,
         max: 2.0,
@@ -118,10 +215,10 @@ export const MOTION_RECIPES: MotionRecipe[] = [
   {
     id: 'cyberpunk-neon',
     name: 'Cyberpunk Vaporwave',
-    description: 'Glowing neon pulse with bold retro energy.',
+    description: 'Glossy color pulse with bold retro energy.',
     emoji: '⚡',
     tag: 'NEON',
-    materialPreset: 'glow',
+    materialPreset: 'lacquer',
     enableGradient: true,
     colorA: '#7b2cbf',
     colorASecondary: '#ff007f',
@@ -131,7 +228,7 @@ export const MOTION_RECIPES: MotionRecipe[] = [
     metalness: 0.3,
     clearcoat: 0.0,
     transmission: 0.0,
-    emissiveIntensity: 2.5,
+    emissiveIntensity: 0.04,
     extrusionDepth: 10,
     bevelEnabled: true,
     bevelThickness: 0.16,
@@ -165,7 +262,7 @@ export const MOTION_RECIPES: MotionRecipe[] = [
       },
       {
         id: 'rotation',
-        name: 'Spin',
+        name: 'Rotation',
         color: '#a48bff',
         min: 0.0,
         max: 2.0,
@@ -191,22 +288,25 @@ export const MOTION_RECIPES: MotionRecipe[] = [
     ]
   },
   {
-    id: 'liquid-gold',
-    name: 'Liquid Gold Sweep',
-    description: 'Rich metallic gold with a smooth directional sweep.',
-    emoji: '🏆',
-    tag: 'PREMIUM',
-    materialPreset: 'gold',
-    enableGradient: false,
-    colorA: '#ffd700',
-    colorASecondary: '#ffd700',
-    colorB: '#ffc837',
-    colorBSecondary: '#ffc837',
-    roughness: 0.18,
-    metalness: 0.95,
-    clearcoat: 0.5,
+    id: 'pearl-shift',
+    name: 'Pearl Shift',
+    description: 'Soft iridescent ceramic with a polished directional sweep.',
+    emoji: 'P',
+    tag: 'SOFT',
+    materialPreset: 'pearl',
+    enableGradient: true,
+    colorA: '#FDF4FF',
+    colorASecondary: '#BAE6FD',
+    colorB: '#E9D5FF',
+    colorBSecondary: '#F8FAFC',
+    roughness: 0.42,
+    metalness: 0.0,
+    reflectance: 0.86,
+    clearcoat: 0.72,
+    clearcoatRoughness: 0.22,
     transmission: 0.0,
-    emissiveIntensity: 0.0,
+    thickness: 0.6,
+    emissiveIntensity: 0.035,
     extrusionDepth: 10,
     bevelEnabled: true,
     bevelThickness: 0.12,
@@ -220,7 +320,7 @@ export const MOTION_RECIPES: MotionRecipe[] = [
       {
         id: 'transition',
         name: 'Morph',
-        color: '#ffd700',
+        color: '#d8b4fe',
         min: 0,
         max: 1.0,
         defaultValue: 0.0,
@@ -244,7 +344,7 @@ export const MOTION_RECIPES: MotionRecipe[] = [
       },
       {
         id: 'rotation',
-        name: 'Spin',
+        name: 'Rotation',
         color: '#a48bff',
         min: 0.0,
         max: 2.0,
@@ -254,7 +354,7 @@ export const MOTION_RECIPES: MotionRecipe[] = [
       {
         id: 'lighting',
         name: 'Light',
-        color: '#fb8500',
+        color: '#bae6fd',
         min: 0.0,
         max: 10,
         defaultValue: 1.8,
