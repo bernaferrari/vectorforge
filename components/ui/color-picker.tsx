@@ -1,8 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDown } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { bindWindowPointerDrag, bindWindowTouchMouseDrag } from "@/lib/drag-events"
 
@@ -495,6 +495,22 @@ function SolidColorEditor({
       handleTextChange(hsvToHex(next[0], next[1], next[2]))
     }
   }
+  const formatSelect = (
+    <Select value={format} onValueChange={(next) => setFormat(next as ColorFormat)}>
+      <SelectTrigger
+        size="sm"
+        className="h-8 w-[72px] shrink-0 rounded-lg border-border bg-muted/60 px-3 text-[11px] text-foreground hover:bg-muted/75"
+      >
+        <SelectValue>{format}</SelectValue>
+      </SelectTrigger>
+      <SelectContent align="start" className="min-w-[72px]">
+        <SelectItem value="HEX">HEX</SelectItem>
+        <SelectItem value="RGB">RGB</SelectItem>
+        <SelectItem value="HSL">HSL</SelectItem>
+        <SelectItem value="HSB">HSB</SelectItem>
+      </SelectContent>
+    </Select>
+  )
 
   return (
     <div className={cn("space-y-3", framed && "rounded-xl border border-border bg-popover p-3 pb-2 text-popover-foreground shadow-xl")}>
@@ -559,19 +575,7 @@ function SolidColorEditor({
 
       {format === "HEX" ? null : (
         <div className="flex items-center gap-2 text-[12px]">
-          <div className="relative h-8 w-[72px] shrink-0 rounded-lg border border-border bg-muted/60">
-            <select
-              value={format}
-              onChange={(event) => setFormat(event.target.value as ColorFormat)}
-              className="h-full w-full appearance-none rounded-lg bg-transparent pl-3 pr-8 text-foreground outline-none"
-            >
-              <option value="HEX">HEX</option>
-              <option value="RGB">RGB</option>
-              <option value="HSL">HSL</option>
-              <option value="HSB">HSB</option>
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          </div>
+          {formatSelect}
           <div className={cn(
             "grid min-w-0 flex-1 gap-px rounded-lg bg-border",
             ENABLE_ALPHA ? "grid-cols-4" : "grid-cols-3"
@@ -606,21 +610,7 @@ function SolidColorEditor({
 
       {format === "HEX" && (
       <div className="flex items-center gap-2">
-        {format === "HEX" && (
-          <div className="relative h-8 w-[72px] shrink-0 rounded-lg border border-border bg-muted/60">
-            <select
-              value={format}
-              onChange={(event) => setFormat(event.target.value as ColorFormat)}
-              className="h-full w-full appearance-none rounded-lg bg-transparent pl-3 pr-8 text-[11px] text-foreground outline-none"
-            >
-              <option value="HEX">HEX</option>
-              <option value="RGB">RGB</option>
-              <option value="HSL">HSL</option>
-              <option value="HSB">HSB</option>
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          </div>
-        )}
+        {formatSelect}
         <div className="flex h-8 min-w-0 flex-1 items-center gap-1 rounded-lg border border-border bg-muted/45 px-2.5">
           <span className="font-mono text-[10px] font-bold text-muted-foreground">#</span>
           <input

@@ -2,7 +2,19 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Trash2, Diamond, Plus, Minus, Magnet, RotateCw, Blend, ArrowRight, SquareSplitHorizontal } from 'lucide-react';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { bindWindowMouseDrag, bindWindowPointerDrag } from '@/lib/drag-events';
 import {
   fetchMaterialSymbolIcon,
@@ -223,13 +235,10 @@ const TimelineContextMenu = ({ menu, onClose }: { menu: TimelineMenuState; onClo
   if (!menu) return null;
 
   return (
-    <div
-      role="menu"
-      className="fixed z-[100] min-w-44 rounded-xl border border-border bg-popover/98 p-1.5 text-foreground shadow-2xl backdrop-blur-xl"
-      style={{ left: menu.x, top: menu.y }}
+    <ContextMenuContent
+      className="min-w-44 rounded-xl border-border bg-popover/98 p-1.5 text-foreground backdrop-blur-xl"
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
-      onContextMenu={(event) => event.preventDefault()}
     >
       {menu.title && (
         <div className="px-2 pb-1 pt-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
@@ -238,38 +247,25 @@ const TimelineContextMenu = ({ menu, onClose }: { menu: TimelineMenuState; onClo
       )}
       {menu.items.map((item, index) => {
         if (item.type === 'separator') {
-          return <div key={`separator-${index}`} className="my-1 h-px bg-muted/75" />;
+          return <ContextMenuSeparator key={`separator-${index}`} className="my-1 bg-muted/75" />;
         }
 
         if (item.type === 'submenu') {
           return (
-            <div key={`${item.label}-${index}`} className="group/submenu relative">
-              <button
-                type="button"
-                role="menuitem"
-                aria-haspopup="menu"
-                className="flex h-7 w-full items-center justify-between gap-5 rounded-lg px-2 text-left text-[11px] text-foreground transition-colors hover:bg-muted/75 hover:text-foreground focus-visible:bg-muted/75 focus-visible:text-foreground focus-visible:outline-none"
-              >
+            <ContextMenuSub key={`${item.label}-${index}`}>
+              <ContextMenuSubTrigger className="h-7 gap-5 rounded-lg px-2 text-[11px]">
                 <span className="truncate">{item.label}</span>
-                <span className="flex items-center gap-2">
-                  {item.shortcut && <span className="text-[10px] text-muted-foreground">{item.shortcut}</span>}
-                  <span className="text-[13px] leading-none text-muted-foreground">›</span>
-                </span>
-              </button>
-              <div
-                role="menu"
-                className="invisible absolute left-full top-0 z-[101] ml-1 min-w-36 rounded-xl border border-border bg-popover/98 p-1.5 text-foreground opacity-0 shadow-2xl backdrop-blur-xl transition-opacity group-hover/submenu:visible group-hover/submenu:opacity-100 group-focus-within/submenu:visible group-focus-within/submenu:opacity-100"
-              >
+                {item.shortcut && <ContextMenuShortcut className="text-[10px] tracking-normal">{item.shortcut}</ContextMenuShortcut>}
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="min-w-36 rounded-xl border-border bg-popover/98 p-1.5 text-foreground backdrop-blur-xl">
                 {item.items.map((child, childIndex) => (
-                  <button
+                  <ContextMenuItem
                     key={`${child.label}-${childIndex}`}
-                    type="button"
-                    role="menuitem"
                     onClick={() => {
                       child.onSelect();
                       onClose();
                     }}
-                    className="flex h-7 w-full items-center justify-between gap-4 rounded-lg px-2 text-left text-[11px] text-foreground transition-colors hover:bg-muted/75 hover:text-foreground focus-visible:bg-muted/75 focus-visible:text-foreground focus-visible:outline-none"
+                    className="h-7 justify-between gap-4 rounded-lg px-2 text-[11px]"
                   >
                     <span className="flex min-w-0 items-center gap-2">
                       {child.easing && (
@@ -287,29 +283,24 @@ const TimelineContextMenu = ({ menu, onClose }: { menu: TimelineMenuState; onClo
                       <span className="truncate">{child.label}</span>
                     </span>
                     {child.active && <span className="size-1.5 rounded-full bg-foreground" />}
-                  </button>
+                  </ContextMenuItem>
                 ))}
-              </div>
-            </div>
+              </ContextMenuSubContent>
+            </ContextMenuSub>
           );
         }
 
         return (
-          <button
+          <ContextMenuItem
             key={`${item.label}-${index}`}
-            type="button"
-            role="menuitem"
             disabled={item.disabled}
+            variant={item.danger ? 'destructive' : 'default'}
             onClick={() => {
               if (item.disabled) return;
               item.onSelect();
               onClose();
             }}
-            className={`flex h-7 w-full items-center justify-between gap-5 rounded-lg px-2 text-left text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
-              item.danger
-                ? 'text-red-300 hover:bg-red-500/10 hover:text-red-200'
-                : 'text-foreground hover:bg-muted/75 hover:text-foreground'
-            }`}
+            className="h-7 justify-between gap-5 rounded-lg px-2 text-[11px]"
           >
             <span className="flex min-w-0 items-center gap-2">
               {item.easing && (
@@ -326,12 +317,12 @@ const TimelineContextMenu = ({ menu, onClose }: { menu: TimelineMenuState; onClo
               )}
               <span className="truncate">{item.label}</span>
             </span>
-            {item.shortcut && <span className="font-mono text-[10px] text-muted-foreground">{item.shortcut}</span>}
+            {item.shortcut && <ContextMenuShortcut className="font-mono text-[10px] tracking-normal">{item.shortcut}</ContextMenuShortcut>}
             {item.active && !item.shortcut && <span className="size-1.5 rounded-full bg-foreground" />}
-          </button>
+          </ContextMenuItem>
         );
       })}
-    </div>
+    </ContextMenuContent>
   );
 };
 
@@ -738,14 +729,10 @@ export const Timeline: React.FC<TimelineProps> = ({
   }, []);
 
   const openContextMenu = (event: React.MouseEvent, title: string, items: TimelineMenuItem[]) => {
-    event.preventDefault();
-    event.stopPropagation();
     setGoToEditor(null);
-    const menuWidth = 190;
-    const menuHeight = 40 + items.length * 30;
     setContextMenu({
-      x: Math.min(event.clientX, window.innerWidth - menuWidth - 8),
-      y: Math.min(event.clientY, window.innerHeight - menuHeight - 8),
+      x: event.clientX,
+      y: event.clientY,
       title,
       items,
     });
@@ -1333,6 +1320,10 @@ export const Timeline: React.FC<TimelineProps> = ({
   const playheadX = xForFrac(currentTime / duration);
 
   return (
+    <ContextMenu onOpenChange={(open) => {
+      if (!open) setContextMenu(null);
+    }}>
+      <ContextMenuTrigger className="contents">
     <div className="flex h-full flex-col overflow-hidden bg-background  font-sans select-none">
       {/* Tracks */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -1394,40 +1385,36 @@ export const Timeline: React.FC<TimelineProps> = ({
               </PopoverContent>
             </Popover>
             <div className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                aria-label={snapEnabled ? 'Disable timeline snapping' : 'Enable timeline snapping'}
-                aria-pressed={snapEnabled}
-                title={snapEnabled ? 'Snap to keyframes on' : 'Snap to keyframes off'}
-                onClick={() => setSnapEnabled((enabled) => !enabled)}
-                className={`group relative flex size-5 shrink-0 items-center justify-center rounded transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40 ${
-                  snapEnabled
-                    ? 'bg-accent text-foreground'
-                    : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
-                }`}
-              >
-                <Magnet className="size-3" />
-                <span className="pointer-events-none absolute left-1/2 top-7 z-[80] -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[10px] font-medium text-foreground opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                  Snap to keyframes
-                </span>
-              </button>
-              <button
-                type="button"
-                aria-label={loop ? 'Disable loop playback' : 'Enable loop playback'}
-                aria-pressed={loop}
-                title={loop ? 'Loop playback on' : 'Loop playback off'}
-                onClick={() => onLoopChange(!loop)}
-                className={`group relative flex size-5 shrink-0 items-center justify-center rounded transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40 ${
-                  loop
-                    ? 'bg-accent text-foreground'
-                    : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
-                }`}
-              >
-                <RotateCw className="size-3" />
-                <span className="pointer-events-none absolute left-1/2 top-7 z-[80] -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[10px] font-medium text-foreground opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                  Loop playback
-                </span>
-              </button>
+              <Tooltip>
+                <TooltipTrigger
+                  aria-label={snapEnabled ? 'Disable timeline snapping' : 'Enable timeline snapping'}
+                  aria-pressed={snapEnabled}
+                  onClick={() => setSnapEnabled((enabled) => !enabled)}
+                  className={`flex size-5 shrink-0 items-center justify-center rounded transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40 ${
+                    snapEnabled
+                      ? 'bg-accent text-foreground'
+                      : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
+                  }`}
+                >
+                  <Magnet className="size-3" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Snap to keyframes</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  aria-label={loop ? 'Disable loop playback' : 'Enable loop playback'}
+                  aria-pressed={loop}
+                  onClick={() => onLoopChange(!loop)}
+                  className={`flex size-5 shrink-0 items-center justify-center rounded transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40 ${
+                    loop
+                      ? 'bg-accent text-foreground'
+                      : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
+                  }`}
+                >
+                  <RotateCw className="size-3" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Loop playback</TooltipContent>
+              </Tooltip>
             </div>
           </div>
           <div
@@ -1592,6 +1579,16 @@ export const Timeline: React.FC<TimelineProps> = ({
             }}
             className="sticky top-0 z-50 h-7 cursor-col-resize border-b border-border bg-background shadow-[0_1px_0_rgba(255,255,255,0.04)]  "
           >
+            <div
+              className="pointer-events-none absolute inset-y-0 left-0 bg-muted/35"
+              style={{ width: EDGE_INSET }}
+              aria-hidden="true"
+            />
+            <div
+              className="pointer-events-none absolute inset-y-0 right-0 bg-muted/35"
+              style={{ width: EDGE_INSET }}
+              aria-hidden="true"
+            />
             {Array.from({ length: Math.floor(duration) + 1 }).map((_, i) => (
               <div key={i} className="pointer-events-none absolute top-0 bottom-0" style={{ left: xForFrac(i / duration) }}>
                 {i > 0 && <div className="absolute top-0 bottom-0 w-px bg-muted/50" />}
@@ -1605,6 +1602,16 @@ export const Timeline: React.FC<TimelineProps> = ({
 
           {/* Lanes */}
           <div className="relative">
+            <div
+              className="pointer-events-none absolute inset-y-0 left-0 bg-muted/25"
+              style={{ width: EDGE_INSET }}
+              aria-hidden="true"
+            />
+            <div
+              className="pointer-events-none absolute inset-y-0 right-0 bg-muted/25"
+              style={{ width: EDGE_INSET }}
+              aria-hidden="true"
+            />
             {/* Shape lane: the morph sequence */}
             <div
               className={`relative h-9 border-b border-border transition-colors ${selectedShapeId ? 'bg-muted/45' : 'hover:bg-muted/35'}`}
@@ -2153,8 +2160,15 @@ export const Timeline: React.FC<TimelineProps> = ({
                     };
 
                     return (
-                      <React.Fragment key={kf.id}>
-                      <button
+                      <Popover
+                        key={kf.id}
+                        open={editingTime}
+                        onOpenChange={(open) => {
+                          if (open) return;
+                          if (timeEditor?.trackId === track.id && timeEditor.kfId === kf.id) commitTimeEditor();
+                        }}
+                      >
+                      <PopoverTrigger
                         type="button"
                         title={`${track.name} · ${formatValueLabel(track, kf.value)} @ ${kf.time.toFixed(2)}s`}
                         className={`absolute top-1/2 flex size-4 -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center transition-transform hover:scale-110 active:cursor-grabbing focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40 ${selected ? 'scale-110' : ''}`}
@@ -2188,16 +2202,18 @@ export const Timeline: React.FC<TimelineProps> = ({
                           onTimeChange(kf.time);
                         }}
                       >
-                        <TimelineDiamond
-                          color={track.color}
-                          borderColor="rgba(0,0,0,0.85)"
-                          selected={selected}
-                        />
-                      </button>
+                          <TimelineDiamond
+                            color={track.color}
+                            borderColor="rgba(0,0,0,0.85)"
+                            selected={selected}
+                          />
+                      </PopoverTrigger>
                         {editingTime && (
-                          <div
-                            className="absolute z-50 w-32 -translate-x-1/2 rounded-lg bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-foreground/10"
-                            style={{ left: xForFrac(kf.time / duration) }}
+                          <PopoverContent
+                            side="top"
+                            align="center"
+                            sideOffset={8}
+                            className="w-32 border-border bg-popover p-2 text-popover-foreground"
                             onMouseDown={(e) => e.stopPropagation()}
                             onClick={(e) => e.stopPropagation()}
                             onContextMenu={(e) => e.stopPropagation()}
@@ -2209,17 +2225,22 @@ export const Timeline: React.FC<TimelineProps> = ({
                                 value={timeEditor.draft}
                                 onChange={(event) => setTimeEditor((current) => current ? { ...current, draft: event.target.value } : current)}
                                 onKeyDown={(event) => {
-                                  if (event.key === 'Enter') commitTimeEditor();
-                                  if (event.key === 'Escape') setTimeEditor(null);
+                                  if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    commitTimeEditor();
+                                  }
+                                  if (event.key === 'Escape') {
+                                    event.preventDefault();
+                                    setTimeEditor(null);
+                                  }
                                 }}
-                                onBlur={commitTimeEditor}
                                 className="min-w-0 flex-1 bg-transparent px-2 text-right font-mono text-[12px] text-foreground outline-none"
                               />
                               <span className="pr-2 text-[10px] text-muted-foreground">s</span>
                             </div>
-                          </div>
+                          </PopoverContent>
                         )}
-                      </React.Fragment>
+                      </Popover>
                     );
                   })}
                 </div>
@@ -2229,7 +2250,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             {/* Playhead across all lanes */}
             <div className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-foreground/25" style={{ left: playheadX }} />
           </div>
-          <div className="w-24 shrink-0" aria-hidden="true" />
+          <div className="w-24 shrink-0 border-l border-border bg-muted/25" aria-hidden="true" />
           </div>
           <div className="pointer-events-auto fixed bottom-2 right-2 z-[70] flex h-auto w-max items-center gap-px rounded-full border border-border bg-background/85 p-0.5 shadow-md backdrop-blur-xl">
             <button
@@ -2266,9 +2287,23 @@ export const Timeline: React.FC<TimelineProps> = ({
       </div>
       </div>
       {goToEditor && (
-        <div
-          className="fixed z-[110] w-32 rounded-xl border border-border bg-popover p-2 text-popover-foreground shadow-2xl"
+        <Popover
+          open
+          onOpenChange={(open) => {
+            if (!open) commitGoToEditor();
+          }}
+        >
+        <PopoverTrigger
+          aria-hidden="true"
+          tabIndex={-1}
+          className="fixed size-px opacity-0"
           style={{ left: goToEditor.x, top: goToEditor.y }}
+        />
+        <PopoverContent
+          side="bottom"
+          align="start"
+          sideOffset={6}
+          className="w-32 border-border bg-popover p-2 text-popover-foreground"
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
@@ -2294,9 +2329,12 @@ export const Timeline: React.FC<TimelineProps> = ({
             />
             <span className="pr-2 text-[10px] text-muted-foreground">s</span>
           </div>
-        </div>
+        </PopoverContent>
+        </Popover>
       )}
-      <TimelineContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
     </div>
+      </ContextMenuTrigger>
+      <TimelineContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
+    </ContextMenu>
   );
 };

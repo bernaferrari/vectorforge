@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Download, Video, Check, Copy, Box, X } from 'lucide-react';
+import { Download, Video, Check, Copy, Box } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import confetti from 'canvas-confetti';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -71,8 +72,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [activeTab, setActiveTab] = useState<'options' | 'r3f' | 'android'>('options');
   const [isRecording, setIsRecording] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
-
-  if (!isOpen) return null;
 
   // Generate dynamic React Three Fiber code template
   const generateR3fCode = () => {
@@ -205,8 +204,8 @@ implementation("com.google.android.filament:filament-android:<filament-version>"
 implementation("com.google.android.filament:gltfio-android:<filament-version>")
 implementation("com.google.android.filament:filament-utils-android:<filament-version>")
 
-Export GLTF from this editor, then place it at:
-app/src/main/assets/exports/icon.gltf
+Export GLB from this editor, then place it at:
+app/src/main/assets/exports/icon.glb
 */
 
 package com.example.icon3d
@@ -291,7 +290,7 @@ class FilamentIconView(context: Context) : SurfaceView(context), Choreographer.F
         }
         uiHelper.attachTo(this)
 
-        loadModel("exports/icon.gltf")
+        loadModel("exports/icon.glb")
         Choreographer.getInstance().postFrameCallback(this)
     }
 
@@ -397,22 +396,14 @@ class FilamentIconView(context: Context) : SurfaceView(context), Choreographer.F
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm animate-fade-in">
-      <div className="w-[640px] max-w-[calc(100vw-32px)] max-h-[calc(100vh-40px)] overflow-hidden rounded-xl border border-white/[0.08] bg-[#101114] font-sans shadow-2xl">
-        <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
-          <h2 className="text-sm font-semibold text-white">Export</h2>
-          <button
-            type="button"
-            aria-label="Close export"
-            onClick={onClose}
-            className="flex size-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-h-[calc(100vh-40px)] w-[640px] max-w-[calc(100vw-32px)] gap-0 overflow-hidden p-0 shadow-2xl sm:max-w-[640px]">
+        <DialogHeader className="border-b border-border px-4 py-3 pr-11">
+          <DialogTitle className="text-sm font-semibold text-foreground">Export</DialogTitle>
+        </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)} className="gap-0">
-          <div className="border-b border-white/[0.07] px-4 py-3">
+        <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)} className="min-h-0 min-w-0 gap-0">
+          <div className="border-b border-border px-4 py-3">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="options">Assets</TabsTrigger>
               <TabsTrigger value="r3f">React</TabsTrigger>
@@ -420,32 +411,32 @@ class FilamentIconView(context: Context) : SurfaceView(context), Choreographer.F
             </TabsList>
           </div>
 
-          <div className="bg-[#111214]">
-            <TabsContent value="options" className="p-4 outline-none">
-              <div className="flex flex-col divide-y divide-white/[0.07] overflow-hidden rounded-lg border border-white/[0.08] bg-black/20">
+          <div className="min-h-0 min-w-0 overflow-hidden bg-background">
+            <TabsContent value="options" className="min-w-0 p-4 outline-none">
+              <div className="flex flex-col divide-y divide-border overflow-hidden rounded-lg border border-border bg-muted/35">
                 <div className="flex items-center gap-3 p-3">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.035] text-zinc-300">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground">
                     <Box className="size-4" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-medium text-white">3D model</h3>
-                    <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">Export the current extruded SVG as a glTF file.</p>
+                    <h3 className="text-sm font-medium text-foreground">3D model</h3>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">Export the current icon as a Filament-ready binary glTF asset.</p>
                   </div>
                   <Button variant="secondary" className="shrink-0 gap-1.5" onClick={onExportGltf}>
                     <Download className="size-3.5" />
-                    GLTF
+                    GLB
                   </Button>
                 </div>
 
                 <div className="flex items-center gap-3 p-3">
                   <div className={`flex size-9 shrink-0 items-center justify-center rounded-md border ${
-                    isRecording ? 'border-red-500/25 bg-red-500/10 text-red-300' : 'border-white/[0.08] bg-white/[0.035] text-zinc-300'
+                    isRecording ? 'border-red-500/25 bg-red-500/10 text-red-500' : 'border-border bg-background text-muted-foreground'
                   }`}>
                     <Video className={`size-4 ${isRecording ? 'animate-pulse' : ''}`} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-medium text-white">Video</h3>
-                    <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">Record the canvas as a WebM video from the live preview.</p>
+                    <h3 className="text-sm font-medium text-foreground">Video</h3>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">Record the canvas as a WebM video from the live preview.</p>
                   </div>
                   <Button
                     variant={isRecording ? 'destructive' : 'secondary'}
@@ -459,42 +450,42 @@ class FilamentIconView(context: Context) : SurfaceView(context), Choreographer.F
               </div>
             </TabsContent>
 
-            <TabsContent value="r3f" className="relative p-4 outline-none">
+            <TabsContent value="r3f" className="relative min-w-0 p-4 outline-none">
               <div className="absolute right-6 top-6 z-10">
                 <Button 
                   size="sm" 
                   variant="ghost" 
-                  className="border border-white/[0.08] bg-black/70 text-white hover:bg-black"
+                  className="border border-border bg-background/90 text-foreground shadow-sm hover:bg-muted"
                   onClick={() => handleCopyCode(generateR3fCode())}
                 >
                   {isCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
                   {isCopied ? 'Copied!' : 'Copy Code'}
                 </Button>
               </div>
-              <pre className="max-h-[56vh] w-full overflow-auto rounded-lg border border-white/[0.08] bg-black/45 p-4 font-mono text-[11px] leading-relaxed text-zinc-500">
+              <pre className="block max-h-[56vh] w-full max-w-full overflow-auto rounded-lg border border-border bg-muted/35 p-4 font-mono text-[11px] leading-relaxed text-muted-foreground">
                 <code>{generateR3fCode()}</code>
               </pre>
             </TabsContent>
 
-            <TabsContent value="android" className="relative p-4 outline-none">
+            <TabsContent value="android" className="relative min-w-0 p-4 outline-none">
               <div className="absolute right-6 top-6 z-10">
                 <Button 
                   size="sm" 
                   variant="ghost" 
-                  className="border border-white/[0.08] bg-black/70 text-white hover:bg-black"
+                  className="border border-border bg-background/90 text-foreground shadow-sm hover:bg-muted"
                   onClick={() => handleCopyCode(generateAndroidFilamentCode())}
                 >
                   {isCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
                   {isCopied ? 'Copied!' : 'Copy Code'}
                 </Button>
               </div>
-              <pre className="max-h-[56vh] w-full overflow-auto rounded-lg border border-white/[0.08] bg-black/45 p-4 font-mono text-[11px] leading-relaxed text-zinc-500">
+              <pre className="block max-h-[56vh] w-full max-w-full overflow-auto rounded-lg border border-border bg-muted/35 p-4 font-mono text-[11px] leading-relaxed text-muted-foreground">
                 <code>{generateAndroidFilamentCode()}</code>
               </pre>
             </TabsContent>
           </div>
         </Tabs>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };
