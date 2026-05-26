@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Trash2, Diamond, Plus, Magnet, RotateCw, Blend, ArrowRight, SquareSplitHorizontal } from 'lucide-react';
+import { Trash2, Diamond, Plus, Minus, Magnet, RotateCw, Blend, ArrowRight, SquareSplitHorizontal } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { bindWindowMouseDrag, bindWindowPointerDrag } from '@/lib/drag-events';
 import {
@@ -99,6 +99,7 @@ export interface WipeDirectionOption {
 
 interface TimelineProps {
   duration: number; // in seconds
+  onDurationChange: (duration: number) => void;
   currentTime: number;
   onTimeChange: (time: number) => void;
   onScrubStart?: () => void;
@@ -146,14 +147,14 @@ const EasingPicker: React.FC<{ value: EasingType; onChange: (e: EasingType) => v
   <Popover>
     <PopoverTrigger
       title={`Easing: ${EASING_OPTIONS.find((o) => o.value === value)?.label ?? value}`}
-      className="flex size-5 shrink-0 items-center justify-center rounded text-zinc-500 hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+      className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
       onClick={(e) => e.stopPropagation()}
     >
       <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
         <path d={easingCurvePath(value)} stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     </PopoverTrigger>
-    <PopoverContent align="end" side="top" sideOffset={6} className="w-40 border-white/[0.09] bg-[#15171a] p-1 text-zinc-100">
+    <PopoverContent align="end" side="top" sideOffset={6} className="w-40 border-border bg-popover p-1 text-foreground">
       {EASING_OPTIONS.map((o) => {
         const active = o.value === value;
         return (
@@ -161,7 +162,7 @@ const EasingPicker: React.FC<{ value: EasingType; onChange: (e: EasingType) => v
             key={o.value}
             type="button"
             onClick={() => onChange(o.value)}
-            className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[11px] transition-colors ${active ? 'bg-white/[0.1] text-white' : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-100'}`}
+            className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[11px] transition-colors ${active ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}`}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
               <path d={easingCurvePath(o.value)} stroke={active ? '#fff' : '#71717a'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -224,20 +225,20 @@ const TimelineContextMenu = ({ menu, onClose }: { menu: TimelineMenuState; onClo
   return (
     <div
       role="menu"
-      className="fixed z-[100] min-w-44 rounded-xl border border-white/[0.10] bg-[#18191c]/98 p-1.5 text-zinc-100 shadow-2xl backdrop-blur-xl"
+      className="fixed z-[100] min-w-44 rounded-xl border border-border bg-popover/98 p-1.5 text-foreground shadow-2xl backdrop-blur-xl"
       style={{ left: menu.x, top: menu.y }}
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
       onContextMenu={(event) => event.preventDefault()}
     >
       {menu.title && (
-        <div className="px-2 pb-1 pt-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-500">
+        <div className="px-2 pb-1 pt-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
           {menu.title}
         </div>
       )}
       {menu.items.map((item, index) => {
         if (item.type === 'separator') {
-          return <div key={`separator-${index}`} className="my-1 h-px bg-white/[0.07]" />;
+          return <div key={`separator-${index}`} className="my-1 h-px bg-muted/75" />;
         }
 
         if (item.type === 'submenu') {
@@ -247,17 +248,17 @@ const TimelineContextMenu = ({ menu, onClose }: { menu: TimelineMenuState; onClo
                 type="button"
                 role="menuitem"
                 aria-haspopup="menu"
-                className="flex h-7 w-full items-center justify-between gap-5 rounded-lg px-2 text-left text-[11px] text-zinc-300 transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:bg-white/[0.07] focus-visible:text-white focus-visible:outline-none"
+                className="flex h-7 w-full items-center justify-between gap-5 rounded-lg px-2 text-left text-[11px] text-foreground transition-colors hover:bg-muted/75 hover:text-foreground focus-visible:bg-muted/75 focus-visible:text-foreground focus-visible:outline-none"
               >
                 <span className="truncate">{item.label}</span>
                 <span className="flex items-center gap-2">
-                  {item.shortcut && <span className="text-[10px] text-zinc-600">{item.shortcut}</span>}
-                  <span className="text-[13px] leading-none text-zinc-500">›</span>
+                  {item.shortcut && <span className="text-[10px] text-muted-foreground">{item.shortcut}</span>}
+                  <span className="text-[13px] leading-none text-muted-foreground">›</span>
                 </span>
               </button>
               <div
                 role="menu"
-                className="invisible absolute left-full top-0 z-[101] ml-1 min-w-36 rounded-xl border border-white/[0.10] bg-[#18191c]/98 p-1.5 text-zinc-100 opacity-0 shadow-2xl backdrop-blur-xl transition-opacity group-hover/submenu:visible group-hover/submenu:opacity-100 group-focus-within/submenu:visible group-focus-within/submenu:opacity-100"
+                className="invisible absolute left-full top-0 z-[101] ml-1 min-w-36 rounded-xl border border-border bg-popover/98 p-1.5 text-foreground opacity-0 shadow-2xl backdrop-blur-xl transition-opacity group-hover/submenu:visible group-hover/submenu:opacity-100 group-focus-within/submenu:visible group-focus-within/submenu:opacity-100"
               >
                 {item.items.map((child, childIndex) => (
                   <button
@@ -268,14 +269,15 @@ const TimelineContextMenu = ({ menu, onClose }: { menu: TimelineMenuState; onClo
                       child.onSelect();
                       onClose();
                     }}
-                    className="flex h-7 w-full items-center justify-between gap-4 rounded-lg px-2 text-left text-[11px] text-zinc-300 transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:bg-white/[0.07] focus-visible:text-white focus-visible:outline-none"
+                    className="flex h-7 w-full items-center justify-between gap-4 rounded-lg px-2 text-left text-[11px] text-foreground transition-colors hover:bg-muted/75 hover:text-foreground focus-visible:bg-muted/75 focus-visible:text-foreground focus-visible:outline-none"
                   >
                     <span className="flex min-w-0 items-center gap-2">
                       {child.easing && (
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
                           <path
                             d={easingCurvePath(child.easing)}
-                            stroke={child.active ? '#ffffff' : '#71717a'}
+                            stroke="currentColor"
+                            className={child.active ? 'text-foreground' : 'text-muted-foreground'}
                             strokeWidth="1.5"
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -284,7 +286,7 @@ const TimelineContextMenu = ({ menu, onClose }: { menu: TimelineMenuState; onClo
                       )}
                       <span className="truncate">{child.label}</span>
                     </span>
-                    {child.active && <span className="size-1.5 rounded-full bg-white" />}
+                    {child.active && <span className="size-1.5 rounded-full bg-foreground" />}
                   </button>
                 ))}
               </div>
@@ -306,7 +308,7 @@ const TimelineContextMenu = ({ menu, onClose }: { menu: TimelineMenuState; onClo
             className={`flex h-7 w-full items-center justify-between gap-5 rounded-lg px-2 text-left text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
               item.danger
                 ? 'text-red-300 hover:bg-red-500/10 hover:text-red-200'
-                : 'text-zinc-300 hover:bg-white/[0.07] hover:text-white'
+                : 'text-foreground hover:bg-muted/75 hover:text-foreground'
             }`}
           >
             <span className="flex min-w-0 items-center gap-2">
@@ -314,7 +316,8 @@ const TimelineContextMenu = ({ menu, onClose }: { menu: TimelineMenuState; onClo
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
                   <path
                     d={easingCurvePath(item.easing)}
-                    stroke={item.active ? '#ffffff' : '#71717a'}
+                    stroke="currentColor"
+                    className={item.active ? 'text-foreground' : 'text-muted-foreground'}
                     strokeWidth="1.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -323,8 +326,8 @@ const TimelineContextMenu = ({ menu, onClose }: { menu: TimelineMenuState; onClo
               )}
               <span className="truncate">{item.label}</span>
             </span>
-            {item.shortcut && <span className="font-mono text-[10px] text-zinc-600">{item.shortcut}</span>}
-            {item.active && !item.shortcut && <span className="size-1.5 rounded-full bg-white" />}
+            {item.shortcut && <span className="font-mono text-[10px] text-muted-foreground">{item.shortcut}</span>}
+            {item.active && !item.shortcut && <span className="size-1.5 rounded-full bg-foreground" />}
           </button>
         );
       })}
@@ -552,6 +555,12 @@ export const interpolateFillKeyframes = (
 
 const RAIL_WIDTH = 140;
 const SNAP_THRESHOLD_SECONDS = 0.08;
+const TIMELINE_ZOOM_MIN = 1;
+const TIMELINE_ZOOM_MAX = 8;
+const TIMELINE_ZOOM_STEP = 0.25;
+const isEditableTarget = (target: EventTarget | null) =>
+  target instanceof HTMLElement &&
+  Boolean(target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'));
 // Horizontal breathing room so keyframes at t=0 and t=duration aren't clipped at the edges.
 const EDGE_INSET = 12;
 // Map a 0..1 fraction of the timeline to a CSS position inside the inset lane area.
@@ -570,7 +579,7 @@ const TimelineDiamond = ({
   selected?: boolean;
   className?: string;
 }) => (
-  <svg viewBox="0 0 16 16" className={`size-4 drop-shadow-[0_1px_1px_rgba(0,0,0,0.55)] ${className}`} aria-hidden="true">
+  <svg viewBox="0 0 16 16" className={`size-4 ${className}`} aria-hidden="true">
     {selected && (
       <rect
         x="2.55"
@@ -603,6 +612,7 @@ const TimelineDiamond = ({
 
 export const Timeline: React.FC<TimelineProps> = ({
   duration,
+  onDurationChange,
   currentTime,
   onTimeChange,
   onScrubStart,
@@ -635,7 +645,9 @@ export const Timeline: React.FC<TimelineProps> = ({
   const [selectedKeyframe, setSelectedKeyframe] = useState<{ trackId: string; kfId: string } | null>(null);
   const [openClipEditor, setOpenClipEditor] = useState<string | null>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const [timelineZoom, setTimelineZoom] = useState(1);
   const [timeEditor, setTimeEditor] = useState<{ trackId: string; kfId: string; draft: string } | null>(null);
+  const [durationEditor, setDurationEditor] = useState<string | null>(null);
   const [goToEditor, setGoToEditor] = useState<{ x: number; y: number; draft: string } | null>(null);
   const [contextMenu, setContextMenu] = useState<TimelineMenuState>(null);
   const [shapeSearchQuery, setShapeSearchQuery] = useState('');
@@ -655,6 +667,8 @@ export const Timeline: React.FC<TimelineProps> = ({
   const keyframeDraggedRef = useRef(false);
   const skipGoToCommitRef = useRef(false);
   const laneRef = useRef<HTMLDivElement>(null);
+  const leftRailBodyRef = useRef<HTMLDivElement>(null);
+  const timelineScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -673,6 +687,55 @@ export const Timeline: React.FC<TimelineProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [contextMenu]);
+
+  const fitTimeline = () => {
+    setTimelineZoom(1);
+    window.requestAnimationFrame(() => {
+      if (timelineScrollRef.current) timelineScrollRef.current.scrollLeft = 0;
+    });
+  };
+
+  const commitDurationEditor = () => {
+    if (durationEditor === null) return;
+    const parsed = Number.parseFloat(durationEditor);
+    if (Number.isFinite(parsed)) {
+      onDurationChange(Math.max(0.5, Math.min(30, Number(parsed.toFixed(1)))));
+    }
+    setDurationEditor(null);
+  };
+
+  const openDurationEditor = () => setDurationEditor(duration.toFixed(1));
+
+  const applyDuration = (value: number) => {
+    onDurationChange(Math.max(0.5, Math.min(30, Number(value.toFixed(1)))));
+    setDurationEditor(null);
+  };
+
+  const adjustTimelineZoom = (delta: number) => {
+    setTimelineZoom((zoom) => Number(Math.max(TIMELINE_ZOOM_MIN, Math.min(TIMELINE_ZOOM_MAX, zoom + delta)).toFixed(2)));
+  };
+
+  useEffect(() => {
+    const handleTimelineZoomShortcut = (event: KeyboardEvent) => {
+      if (isEditableTarget(event.target)) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key === '+' || event.key === '=') {
+        event.preventDefault();
+        adjustTimelineZoom(TIMELINE_ZOOM_STEP);
+      }
+      if (event.key === '-' || event.key === '_') {
+        event.preventDefault();
+        adjustTimelineZoom(-TIMELINE_ZOOM_STEP);
+      }
+      if (event.key === '0') {
+        event.preventDefault();
+        fitTimeline();
+      }
+    };
+
+    window.addEventListener('keydown', handleTimelineZoomShortcut);
+    return () => window.removeEventListener('keydown', handleTimelineZoomShortcut);
+  }, []);
 
   const openContextMenu = (event: React.MouseEvent, title: string, items: TimelineMenuItem[]) => {
     event.preventDefault();
@@ -751,7 +814,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           'play_arrow', 'shopping_cart', 'add', 'close', 'check', 'menu', 'camera_alt', 'image', 'music_note', 'mail',
           'chat', 'call', 'calendar_month', 'lock', 'folder', 'shopping_bag', 'location_on', 'public', 'rocket_launch', 'diamond',
           'notifications', 'cloud', 'shield', 'trophy', 'mood', 'download', 'upload', 'edit', 'delete', 'visibility',
-          'favorite_border', 'bookmark', 'share', 'refresh', 'sync', 'layers', 'dashboard', 'terminal', 'code', 'auto_awesome',
+          'favorite', 'bookmark', 'share', 'refresh', 'sync', 'layers', 'dashboard', 'terminal', 'code', 'auto_awesome',
           'brush', 'format_paint', 'lightbulb', 'extension', 'widgets', 'animation', 'view_in_ar', 'deployed_code', 'gesture', 'emoji_objects',
         ];
     const filtered = query
@@ -942,6 +1005,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   };
 
   const handleScrubStart = (e: React.MouseEvent) => {
+    setSelectedKeyframe(null);
     onScrubStart?.();
     onTimeChange(timeFromClientX(e.clientX, { bypass: e.altKey }));
     bindWindowMouseDrag({
@@ -1269,17 +1333,66 @@ export const Timeline: React.FC<TimelineProps> = ({
   const playheadX = xForFrac(currentTime / duration);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-background dark:bg-[#0f1012] font-sans select-none">
+    <div className="flex h-full flex-col overflow-hidden bg-background  font-sans select-none">
       {/* Tracks */}
-      <div className="flex min-h-0 flex-1 overflow-y-auto">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Left rail: track names */}
-        <div className="shrink-0 border-r border-border bg-muted/35 dark:border-white/[0.06] dark:bg-[#101113]" style={{ width: RAIL_WIDTH }}>
-          <div className="sticky top-0 z-50 flex h-7 items-center gap-2 border-b border-border bg-background py-0 pl-2 pr-1 font-mono text-[10px] tabular-nums shadow-[0_1px_0_rgba(255,255,255,0.04)] dark:border-white/[0.05] dark:bg-[#101113]">
-            <div className="min-w-0 flex-1">
-              <span className="text-zinc-300">{currentTime.toFixed(2)}</span>
-              <span className="px-1 text-zinc-700">/</span>
-              <span className="text-zinc-600">{duration.toFixed(1)}s</span>
-            </div>
+        <div className="flex shrink-0 flex-col overflow-visible border-r border-border bg-muted/35" style={{ width: RAIL_WIDTH }}>
+          <div className="z-50 flex h-7 shrink-0 items-center gap-2 border-b border-border bg-background py-0 pl-2 pr-1 font-mono text-[10px] tabular-nums shadow-[0_1px_0_rgba(255,255,255,0.04)]">
+            <Popover
+              open={durationEditor !== null}
+              onOpenChange={(open) => {
+                if (open) openDurationEditor();
+                else commitDurationEditor();
+              }}
+            >
+              <PopoverTrigger
+                title="Timeline duration"
+                className="min-w-0 flex flex-1 items-center rounded px-1 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
+              >
+                <span className="text-foreground">{currentTime.toFixed(2)}</span>
+                <span className="px-1 text-muted-foreground">/</span>
+                <span className="text-muted-foreground">{duration.toFixed(1)}s</span>
+              </PopoverTrigger>
+              <PopoverContent align="start" side="top" sideOffset={8} className="w-52 border-border bg-popover p-3 text-popover-foreground shadow-2xl">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Duration</span>
+                  <span className="font-mono text-[10px] text-muted-foreground">0.5-30s</span>
+                </div>
+                <div className="flex h-9 items-center rounded-lg border border-border bg-muted/55 focus-within:border-ring/50">
+                  <input
+                    autoFocus
+                    value={durationEditor ?? duration.toFixed(1)}
+                    onChange={(event) => setDurationEditor(event.currentTarget.value)}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        commitDurationEditor();
+                      }
+                      if (event.key === 'Escape') {
+                        event.preventDefault();
+                        setDurationEditor(null);
+                      }
+                    }}
+                    className="min-w-0 flex-1 bg-transparent px-2 text-right font-mono text-[13px] text-foreground outline-none"
+                  />
+                  <span className="pr-2 text-[11px] text-muted-foreground">s</span>
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-1">
+                  {[3, 5, 10].map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => applyDuration(value)}
+                      className="h-7 rounded-md text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
+                    >
+                      {value}s
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
             <div className="flex shrink-0 items-center gap-1">
               <button
                 type="button"
@@ -1287,14 +1400,14 @@ export const Timeline: React.FC<TimelineProps> = ({
                 aria-pressed={snapEnabled}
                 title={snapEnabled ? 'Snap to keyframes on' : 'Snap to keyframes off'}
                 onClick={() => setSnapEnabled((enabled) => !enabled)}
-                className={`group relative flex size-5 shrink-0 items-center justify-center rounded transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30 ${
+                className={`group relative flex size-5 shrink-0 items-center justify-center rounded transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40 ${
                   snapEnabled
-                    ? 'bg-white/[0.1] text-zinc-100'
-                    : 'text-zinc-600 hover:bg-white/[0.06] hover:text-zinc-300'
+                    ? 'bg-accent text-foreground'
+                    : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
                 }`}
               >
                 <Magnet className="size-3" />
-                <span className="pointer-events-none absolute left-1/2 top-7 z-[80] -translate-x-1/2 whitespace-nowrap rounded-md border border-white/[0.08] bg-[#18191c] px-2 py-1 text-[10px] font-medium text-zinc-200 opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                <span className="pointer-events-none absolute left-1/2 top-7 z-[80] -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[10px] font-medium text-foreground opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                   Snap to keyframes
                 </span>
               </button>
@@ -1304,28 +1417,39 @@ export const Timeline: React.FC<TimelineProps> = ({
                 aria-pressed={loop}
                 title={loop ? 'Loop playback on' : 'Loop playback off'}
                 onClick={() => onLoopChange(!loop)}
-                className={`group relative flex size-5 shrink-0 items-center justify-center rounded transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30 ${
+                className={`group relative flex size-5 shrink-0 items-center justify-center rounded transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40 ${
                   loop
-                    ? 'bg-white/[0.1] text-zinc-100'
-                    : 'text-zinc-600 hover:bg-white/[0.06] hover:text-zinc-300'
+                    ? 'bg-accent text-foreground'
+                    : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
                 }`}
               >
                 <RotateCw className="size-3" />
-                <span className="pointer-events-none absolute left-1/2 top-7 z-[80] -translate-x-1/2 whitespace-nowrap rounded-md border border-white/[0.08] bg-[#18191c] px-2 py-1 text-[10px] font-medium text-zinc-200 opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                <span className="pointer-events-none absolute left-1/2 top-7 z-[80] -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[10px] font-medium text-foreground opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                   Loop playback
                 </span>
               </button>
             </div>
           </div>
+          <div
+            className="relative min-h-0 flex-1 overflow-hidden"
+            onWheel={(event) => {
+              const scroller = timelineScrollRef.current;
+              if (!scroller) return;
+              event.preventDefault();
+              scroller.scrollTop += event.deltaY;
+              scroller.scrollLeft += event.deltaX;
+            }}
+          >
+          <div ref={leftRailBodyRef} className="will-change-transform">
           {/* Shape lane label + add */}
-          <div className={`group flex h-9 items-center gap-2 border-b border-white/[0.04] px-3 transition-colors ${selectedShapeId ? 'bg-white/[0.06]' : 'hover:bg-white/[0.025]'}`}>
-            <span className={`flex-1 truncate text-[11px] font-semibold ${selectedShapeId ? 'text-zinc-100' : 'text-zinc-300'}`}>Shape</span>
+          <div className={`group flex h-9 items-center gap-2 border-b border-border px-3 transition-colors ${selectedShapeId ? 'bg-muted/70' : 'hover:bg-muted/40'}`}>
+            <span className={`flex-1 truncate text-[11px] font-semibold ${selectedShapeId ? 'text-foreground' : 'text-foreground'}`}>Shape</span>
             <button
               type="button"
               aria-label="Add shape"
               title="Add shape at playhead"
               onClick={onAddShape}
-              className="flex size-5 shrink-0 items-center justify-center rounded text-zinc-500 hover:text-white"
+              className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
             >
               <Plus className="size-3.5" />
             </button>
@@ -1335,7 +1459,10 @@ export const Timeline: React.FC<TimelineProps> = ({
               key={row.id}
               role="button"
               tabIndex={0}
-              onClick={() => onActivePropertyRowChange?.(row.id)}
+              onClick={() => {
+                setSelectedKeyframe(null);
+                onActivePropertyRowChange?.(row.id);
+              }}
               onContextMenu={(event) => openContextMenu(event, row.name, [
                 goToMenuItem(event, currentTime, () => onActivePropertyRowChange?.(row.id)),
                 { type: 'separator' },
@@ -1351,14 +1478,15 @@ export const Timeline: React.FC<TimelineProps> = ({
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
+                  setSelectedKeyframe(null);
                   onActivePropertyRowChange?.(row.id);
                 }
               }}
-              className="group flex h-9 items-center gap-2 border-b border-white/[0.04] px-3 transition-colors hover:bg-white/[0.025]"
+              className="group flex h-9 items-center gap-2 border-b border-border px-3 transition-colors hover:bg-muted/40"
             >
               <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: row.color }} />
-              <span className="flex-1 truncate text-[11px] font-medium text-zinc-400">{row.name}</span>
-              <span className="font-mono text-[10px] text-zinc-600">{row.keyframes.length}</span>
+              <span className="flex-1 truncate text-[11px] font-medium text-muted-foreground">{row.name}</span>
+              <span className="font-mono text-[10px] text-muted-foreground">{row.keyframes.length}</span>
             </div>
           ))}
           {tracks.map((track) => {
@@ -1370,7 +1498,10 @@ export const Timeline: React.FC<TimelineProps> = ({
                 key={track.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => selectTrack(track.id)}
+                onClick={() => {
+                  setSelectedKeyframe(null);
+                  selectTrack(track.id);
+                }}
                 onContextMenu={(event) => openContextMenu(event, track.name, [
                   goToMenuItem(event, currentTime, () => selectTrack(track.id)),
                   { type: 'separator' },
@@ -1393,15 +1524,16 @@ export const Timeline: React.FC<TimelineProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
+                    setSelectedKeyframe(null);
                     selectTrack(track.id);
                   }
                 }}
-                className={`group flex h-9 items-center gap-2 border-b border-white/[0.04] px-3 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-white/30 ${
-                  isActive ? 'bg-white/[0.06]' : 'hover:bg-white/[0.025]'
+                className={`group flex h-9 items-center gap-2 border-b border-border px-3 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/40 ${
+                  isActive ? 'bg-muted/70' : 'hover:bg-muted/40'
                 }`}
               >
                 <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: track.color }} />
-                <span className={`flex-1 truncate text-[11px] font-medium ${isActive ? 'text-zinc-100' : 'text-zinc-400'}`}>
+                <span className={`flex-1 truncate text-[11px] font-medium ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}>
                   {track.name}
                 </span>
                 {animated && (
@@ -1421,10 +1553,10 @@ export const Timeline: React.FC<TimelineProps> = ({
                   }}
                   className={`flex size-5 shrink-0 items-center justify-center rounded transition-colors ${
                     keyedAtPlayhead
-                      ? 'text-white opacity-100'
+                      ? 'text-foreground opacity-100'
                       : animated
-                      ? 'text-zinc-500 opacity-0 hover:text-white group-hover:opacity-100'
-                      : 'text-zinc-600 hover:text-white'
+                      ? 'text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100'
+                      : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   <Diamond className="size-3" style={{ fill: keyedAtPlayhead ? track.color : 'transparent', color: keyedAtPlayhead ? track.color : undefined }} />
@@ -1432,10 +1564,22 @@ export const Timeline: React.FC<TimelineProps> = ({
               </div>
             );
           })}
+          </div>
+          </div>
         </div>
 
         {/* Right: ruler + lanes */}
-        <div className="relative min-w-0 flex-1">
+        <div
+          ref={timelineScrollRef}
+          className="relative min-w-0 flex-1 overflow-auto"
+          onScroll={(event) => {
+            if (leftRailBodyRef.current) {
+              leftRailBodyRef.current.style.transform = `translateY(${-event.currentTarget.scrollTop}px)`;
+            }
+          }}
+        >
+          <div className="flex min-w-full">
+          <div className="relative shrink-0" style={{ width: `${timelineZoom * 100}%`, minWidth: '100%' }}>
           {/* Ruler */}
           <div
             ref={laneRef}
@@ -1446,16 +1590,16 @@ export const Timeline: React.FC<TimelineProps> = ({
                 goToMenuItem(event, t),
               ]);
             }}
-            className="sticky top-0 z-50 h-7 cursor-col-resize border-b border-border bg-background shadow-[0_1px_0_rgba(255,255,255,0.04)] dark:border-white/[0.05] dark:bg-[#101113]"
+            className="sticky top-0 z-50 h-7 cursor-col-resize border-b border-border bg-background shadow-[0_1px_0_rgba(255,255,255,0.04)]  "
           >
             {Array.from({ length: Math.floor(duration) + 1 }).map((_, i) => (
               <div key={i} className="pointer-events-none absolute top-0 bottom-0" style={{ left: xForFrac(i / duration) }}>
-                {i > 0 && <div className="absolute top-0 bottom-0 w-px bg-white/[0.04]" />}
-                <span className="absolute top-1 pl-1 font-mono text-[9px] text-zinc-600">{i}s</span>
+                {i > 0 && <div className="absolute top-0 bottom-0 w-px bg-muted/50" />}
+                <span className="absolute top-1 pl-1 font-mono text-[9px] text-muted-foreground">{i}s</span>
               </div>
             ))}
-            <div className="pointer-events-none absolute top-0 bottom-0 z-20 w-px bg-white" style={{ left: playheadX }}>
-              <div className="absolute -top-px -left-[5px] size-2.5 rounded-full bg-white shadow" />
+            <div className="pointer-events-none absolute top-0 bottom-0 z-20 w-px bg-foreground" style={{ left: playheadX }}>
+              <div className="absolute -top-px left-1/2 h-3.5 w-3 -translate-x-1/2 rounded-b-[5px] rounded-t-[2px] bg-foreground shadow-sm" />
             </div>
           </div>
 
@@ -1463,8 +1607,12 @@ export const Timeline: React.FC<TimelineProps> = ({
           <div className="relative">
             {/* Shape lane: the morph sequence */}
             <div
-              className={`relative h-9 border-b border-white/[0.04] transition-colors ${selectedShapeId ? 'bg-white/[0.03]' : 'hover:bg-white/[0.015]'}`}
-              onMouseDown={(e) => { onScrubStart?.(); onTimeChange(timeFromClientX(e.clientX)); }}
+              className={`relative h-9 border-b border-border transition-colors ${selectedShapeId ? 'bg-muted/45' : 'hover:bg-muted/35'}`}
+              onMouseDown={(e) => {
+                setSelectedKeyframe(null);
+                onScrubStart?.();
+                onTimeChange(timeFromClientX(e.clientX));
+              }}
               onContextMenu={(event) => {
                 const t = timeFromClientX(event.clientX, { bypass: event.altKey });
                 openContextMenu(event, 'Shape', [
@@ -1501,7 +1649,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                           ...easingMenuItems(stop.easing, (easing) => onShapeEasingChange(stop.id, easing)),
                         ]);
                       }}
-                      className="group/morph absolute top-1/2 z-20 flex h-7 -translate-y-1/2 cursor-pointer items-center justify-center overflow-hidden border-y border-white/[0.07] transition-[filter] hover:brightness-125 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-white/40"
+                      className="group/morph absolute top-1/2 z-20 flex h-7 -translate-y-1/2 cursor-pointer items-center justify-center overflow-hidden border-y border-border transition-[filter] hover:brightness-125 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/40"
                       style={{
                         left: xForFrac(mStart / duration),
                         width: widthForSpan(Math.max(0, mEnd - mStart) / duration),
@@ -1509,9 +1657,9 @@ export const Timeline: React.FC<TimelineProps> = ({
                         background: `linear-gradient(90deg, ${stop.color}26, ${next.color}26)`,
                       }}
                     >
-                      <BlockIcon className="size-3 text-white/65 transition-colors group-hover/morph:text-white" strokeWidth={2.25} />
+                      <BlockIcon className="size-3 text-foreground/65 transition-colors group-hover/morph:text-foreground" strokeWidth={2.25} />
                     </PopoverTrigger>
-                    <PopoverContent align="center" side="top" sideOffset={10} className="w-60 border-white/[0.09] bg-[#15171a] p-3 text-zinc-100 shadow-2xl">
+                    <PopoverContent align="center" side="top" sideOffset={10} className="w-60 border-border bg-popover p-3 text-foreground shadow-2xl">
                       {(() => {
                         const isFade = stop.wipeDirection.x === 0 && stop.wipeDirection.y === 0;
                         const mode: 'fade' | 'wipe' | 'none' =
@@ -1529,7 +1677,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                         return (
                           <>
                             <div className="flex items-center justify-between px-0.5 pb-2.5">
-                              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-400">Transition</span>
+                              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Transition</span>
                               {mode !== 'none' && (
                                 <EasingPicker value={stop.easing} onChange={(easing) => onShapeEasingChange(stop.id, easing)} />
                               )}
@@ -1543,8 +1691,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                                   onClick={() => selectMode(opt.id)}
                                   className={`flex flex-col items-center gap-1 rounded-lg border py-2 text-[10px] font-medium transition-colors ${
                                     mode === opt.id
-                                      ? 'border-white/40 bg-white/[0.08] text-white'
-                                      : 'border-white/[0.07] bg-black/20 text-zinc-500 hover:border-white/20 hover:text-zinc-200'
+                                      ? 'border-ring/60 bg-accent text-foreground'
+                                      : 'border-border bg-muted/45 text-muted-foreground hover:border-border hover:text-foreground'
                                   }`}
                                 >
                                   {opt.icon}
@@ -1555,24 +1703,24 @@ export const Timeline: React.FC<TimelineProps> = ({
 
                             {mode === 'wipe' && (
                               <div className="mt-3 flex justify-center">
-                                <div className="relative size-[108px] rounded-full border border-white/[0.08] bg-black/25 shadow-inner">
+                                <div className="relative size-[88px] rounded-full border border-border bg-muted/45">
                                   {wipeDirections
                                     .filter((dir) => !(dir.x === 0 && dir.y === 0))
                                     .map((dir) => {
                                       const active = stop.wipeDirection.x === dir.x && stop.wipeDirection.y === dir.y;
                                       const len = Math.hypot(dir.x, dir.y) || 1;
-                                      const left = 50 + (dir.x / len) * 37;
-                                      const top = 50 - (dir.y / len) * 37;
+                                      const left = 50 + (dir.x / len) * 30;
+                                      const top = 50 - (dir.y / len) * 30;
                                       return (
                                         <button
                                           key={dir.label}
                                           type="button"
                                           title={dir.tooltip}
                                           onClick={() => onShapeBlendChange(stop.id, { wipeDirection: { x: dir.x, y: dir.y } })}
-                                          className={`absolute flex size-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-[13px] transition-all ${
+                                          className={`absolute flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-[11px] transition-colors ${
                                             active
-                                              ? 'scale-110 border-white bg-white text-zinc-950'
-                                              : 'border-white/10 bg-white/[0.04] text-zinc-400 hover:border-white/30 hover:text-white'
+                                              ? 'border-foreground bg-foreground text-background'
+                                              : 'border-border bg-muted/50 text-muted-foreground hover:border-ring/50 hover:text-foreground'
                                           }`}
                                           style={{ left: `${left}%`, top: `${top}%` }}
                                         >
@@ -1580,18 +1728,10 @@ export const Timeline: React.FC<TimelineProps> = ({
                                         </button>
                                       );
                                     })}
-                                  <span className="absolute left-1/2 top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/30" />
+                                  <span className="absolute left-1/2 top-1/2 size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted-foreground/45" />
                                 </div>
                               </div>
                             )}
-
-                            <p className="mt-2.5 text-center text-[10px] leading-snug text-zinc-500">
-                              {mode === 'fade'
-                                ? 'Cross-dissolves across the morph window. Drag its edges to set the duration.'
-                                : mode === 'wipe'
-                                  ? 'Wipes in the chosen direction across the morph window.'
-                                  : 'Hard cut at the middle of the morph window.'}
-                            </p>
                           </>
                         );
                       })()}
@@ -1604,7 +1744,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                     className="absolute top-1/2 z-40 flex h-7 w-2.5 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize touch-none items-center justify-center"
                     style={{ left: xForFrac(mStart / duration) }}
                   >
-                    <span className="h-5 w-[3px] rounded-full bg-white/45 transition-colors hover:bg-white" />
+                    <span className="h-5 w-[3px] rounded-full bg-foreground/45 transition-colors hover:bg-foreground" />
                   </div>
                   <div
                     title="Drag to set when the morph ends"
@@ -1612,7 +1752,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                     className="absolute top-1/2 z-40 flex h-7 w-2.5 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize touch-none items-center justify-center"
                     style={{ left: xForFrac(mEnd / duration) }}
                   >
-                    <span className="h-5 w-[3px] rounded-full bg-white/45 transition-colors hover:bg-white" />
+                    <span className="h-5 w-[3px] rounded-full bg-foreground/45 transition-colors hover:bg-foreground" />
                   </div>
                   </React.Fragment>
                 );
@@ -1666,7 +1806,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                         minWidth: 32,
                         backgroundColor: selected ? `${stop.color}33` : `${stop.color}1c`,
                         borderColor: selected ? '#ffffff' : `${stop.color}59`,
-                        boxShadow: selected ? `0 0 0 1px ${stop.color}, 0 2px 8px rgba(0,0,0,0.4)` : 'none',
+                        boxShadow: 'none',
                         zIndex: selected ? 25 : 16,
                       }}
                     >
@@ -1675,27 +1815,27 @@ export const Timeline: React.FC<TimelineProps> = ({
                         style={{ color: stop.color, backgroundColor: `${stop.color}26` }}
                         dangerouslySetInnerHTML={{ __html: stop.svgContent }}
                       />
-                      <span className="min-w-0 truncate text-[10px] font-medium text-zinc-100">{shapeLabel(stop)}</span>
+                      <span className="min-w-0 truncate text-[10px] font-medium text-foreground">{shapeLabel(stop)}</span>
                       {isOnly && (
-                        <span className="ml-auto shrink truncate pl-2 text-[10px] text-zinc-500">add another shape to animate</span>
+                        <span className="ml-auto shrink truncate pl-2 text-[10px] text-muted-foreground">add another shape to animate</span>
                       )}
                     </PopoverTrigger>
                     <PopoverContent
                       align="center"
                       side="top"
                       sideOffset={10}
-                      className="w-[520px] border-white/[0.09] bg-[#15171a] p-3 text-zinc-100 shadow-2xl"
+                      className="w-[520px] border-border bg-popover p-3 text-foreground shadow-2xl"
                       onPointerDown={(event) => event.stopPropagation()}
                       onMouseDown={(event) => event.stopPropagation()}
                       onClick={(event) => event.stopPropagation()}
                       onContextMenu={(event) => event.stopPropagation()}
                     >
                       <div className="mb-3 flex items-center justify-between">
-                        <div className="text-[12px] font-medium text-zinc-200">Shape</div>
+                        <div className="text-[12px] font-medium text-foreground">Shape</div>
                         <div className="flex items-center gap-1">
-                          <button type="button" onClick={() => { onUploadShape(stop.id); onOpenShapePicker(null); }} className="h-7 rounded-md px-2 text-[10px] text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200">Upload SVG</button>
+                          <button type="button" onClick={() => { onUploadShape(stop.id); onOpenShapePicker(null); }} className="h-7 rounded-md px-2 text-[10px] text-muted-foreground hover:bg-muted/70 hover:text-foreground">Upload SVG</button>
                           {shapes.length > 1 && (
-                            <button type="button" aria-label="Remove shape" title="Remove shape" onClick={() => { onRemoveShape(stop.id); onOpenShapePicker(null); }} className="flex size-7 items-center justify-center rounded-md text-zinc-500 hover:bg-red-500/10 hover:text-red-400">
+                            <button type="button" aria-label="Remove shape" title="Remove shape" onClick={() => { onRemoveShape(stop.id); onOpenShapePicker(null); }} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-red-500/10 hover:text-red-400">
                               <Trash2 size={13} />
                             </button>
                           )}
@@ -1707,7 +1847,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                           <PopoverTrigger
                             aria-label="Symbol options"
                             title="Symbol options"
-                            className="grid size-9 shrink-0 place-items-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-zinc-400 transition-colors hover:border-white/20 hover:bg-white/[0.07] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25"
+                            className="grid size-9 shrink-0 place-items-center rounded-lg border border-border bg-muted/50 text-muted-foreground transition-colors hover:border-border hover:bg-muted/75 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25"
                           >
                             <span className={`${materialSymbolClass} text-[21px] leading-none`} style={materialSymbolFontStyle(materialSymbolSettings)}>tune</span>
                           </PopoverTrigger>
@@ -1715,14 +1855,14 @@ export const Timeline: React.FC<TimelineProps> = ({
                             align="start"
                             side="left"
                             sideOffset={8}
-                            className="w-64 border-white/[0.09] bg-[#15171a] p-2.5 text-zinc-100 shadow-2xl"
+                            className="w-64 border-border bg-popover p-2.5 text-foreground shadow-2xl"
                             onPointerDown={(event) => event.stopPropagation()}
                             onMouseDown={(event) => event.stopPropagation()}
                             onClick={(event) => event.stopPropagation()}
                             onContextMenu={(event) => event.stopPropagation()}
                           >
-                            <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-zinc-500">Symbol options</div>
-                            <div className="mb-2 grid grid-cols-3 rounded-lg bg-white/[0.04] p-0.5">
+                            <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Symbol options</div>
+                            <div className="mb-2 grid grid-cols-3 rounded-lg bg-muted/50 p-0.5">
                               {(['outlined', 'rounded', 'sharp'] as const).map((style) => (
                                 <button
                                   key={style}
@@ -1730,8 +1870,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                                   onClick={() => setMaterialSymbolStyle(style)}
                                   className={`h-7 rounded-md text-[10px] capitalize transition-colors ${
                                     materialSymbolStyle === style
-                                      ? 'bg-white text-zinc-950'
-                                      : 'text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200'
+                                      ? 'bg-foreground text-background'
+                                      : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
                                   }`}
                                 >
                                   {style}
@@ -1745,8 +1885,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                                 onClick={() => updateMaterialSymbolSetting('fill', materialSymbolSettings.fill ? 0 : 1)}
                                 className={`h-8 rounded-lg px-2 text-[10px] font-medium transition-colors ${
                                   materialSymbolSettings.fill
-                                    ? 'bg-white text-zinc-950'
-                                    : 'bg-white/[0.04] text-zinc-500 hover:bg-white/[0.08] hover:text-zinc-200'
+                                    ? 'bg-foreground text-background'
+                                    : 'bg-muted/50 text-muted-foreground hover:bg-accent hover:text-foreground'
                                 }`}
                               >
                                 Fill
@@ -1756,8 +1896,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                                 { key: 'grade' as const, label: 'G', min: -50, max: 200, step: 25 },
                                 { key: 'opticalSize' as const, label: 'O', min: 20, max: 48, step: 1 },
                               ].map((control) => (
-                                <label key={control.key} className="flex h-8 items-center rounded-lg bg-white/[0.04] ring-1 ring-white/[0.07]">
-                                  <span className="px-2 text-[9px] font-medium text-zinc-600">{control.label}</span>
+                                <label key={control.key} className="flex h-8 items-center rounded-lg bg-muted/50 ring-1 ring-white/[0.07]">
+                                  <span className="px-2 text-[9px] font-medium text-muted-foreground">{control.label}</span>
                                   <input
                                     type="number"
                                     min={control.min}
@@ -1768,7 +1908,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                                       const next = Math.max(control.min, Math.min(control.max, Number(event.currentTarget.value) || control.min));
                                       updateMaterialSymbolSetting(control.key, next);
                                     }}
-                                    className="min-w-0 flex-1 bg-transparent pr-2 text-right font-mono text-[10px] text-zinc-200 outline-none"
+                                    className="min-w-0 flex-1 bg-transparent pr-2 text-right font-mono text-[10px] text-foreground outline-none"
                                   />
                                 </label>
                               ))}
@@ -1788,7 +1928,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                             }
                           }}
                           placeholder="Search symbols"
-                          className="h-9 min-w-0 flex-1 rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 text-[12px] text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-white/25"
+                          className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-muted/50 px-3 text-[12px] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring/50"
                         />
                         <button
                           type="button"
@@ -1796,7 +1936,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                           title="Use typed symbol"
                           disabled={!normalizedShapeQuery || materialSymbolStatus.state === 'loading'}
                           onClick={() => importMaterialSymbol(stop.id)}
-                          className="grid size-9 shrink-0 place-items-center rounded-lg bg-white text-zinc-950 transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-white/[0.08] disabled:text-zinc-600"
+                          className="grid size-9 shrink-0 place-items-center rounded-lg bg-foreground text-background transition-colors hover:bg-foreground/85 disabled:cursor-not-allowed disabled:bg-accent disabled:text-muted-foreground"
                         >
                           {materialSymbolStatus.state === 'loading' ? (
                             <span className="size-3 animate-pulse rounded-full bg-current" />
@@ -1813,7 +1953,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                             type="button"
                             title={symbolName.replace(/_/g, ' ')}
                             onClick={() => chooseMaterialSymbol(stop.id, symbolName)}
-                            className="grid aspect-square place-items-center rounded-lg border border-transparent text-zinc-300 transition-colors hover:border-white/[0.12] hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                            className="grid aspect-square place-items-center rounded-lg border border-transparent text-foreground transition-colors hover:border-border hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                           >
                             <span className={`${materialSymbolClass} text-[24px] leading-none`} style={materialSymbolFontStyle(materialSymbolSettings)}>{symbolName}</span>
                           </button>
@@ -1823,10 +1963,10 @@ export const Timeline: React.FC<TimelineProps> = ({
                             type="button"
                             onClick={() => importMaterialSymbol(stop.id)}
                             disabled={materialSymbolStatus.state === 'loading'}
-                            className="col-span-10 flex h-10 items-center justify-between rounded-lg border border-dashed border-white/[0.09] bg-white/[0.025] px-3 text-left text-[11px] text-zinc-400 transition-colors hover:border-white/20 hover:bg-white/[0.05] hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+                            className="col-span-10 flex h-10 items-center justify-between rounded-lg border border-dashed border-border bg-muted/40 px-3 text-left text-[11px] text-muted-foreground transition-colors hover:border-border hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             <span className="truncate">{normalizedShapeQuery.replace(/_/g, ' ')}</span>
-                            <span className="text-[10px] text-zinc-600">Use typed name</span>
+                            <span className="text-[10px] text-muted-foreground">Use typed name</span>
                           </button>
                         )}
                       </div>
@@ -1836,10 +1976,10 @@ export const Timeline: React.FC<TimelineProps> = ({
                       )}
 
                       {visibleShapeOptions.length > 0 && (
-                        <details className="border-t border-white/[0.06] pt-2">
-                          <summary className="flex cursor-pointer list-none items-center justify-between px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-zinc-500 marker:hidden">
+                        <details className="border-t border-border pt-2">
+                          <summary className="flex cursor-pointer list-none items-center justify-between px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground marker:hidden">
                             <span>Presets</span>
-                            <span className="normal-case tracking-normal text-zinc-700">fallback</span>
+                            <span className="normal-case tracking-normal text-muted-foreground">fallback</span>
                           </summary>
                           <div className="mt-2 grid max-h-20 grid-cols-10 gap-1 overflow-y-auto pr-1">
                             {visibleShapeOptions.map((opt) => {
@@ -1850,7 +1990,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                                   type="button"
                                   title={opt.name}
                                   onClick={() => { onShapeIconChange(stop.id, opt); onOpenShapePicker(null); }}
-                                  className={`grid aspect-square place-items-center rounded-lg border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${active ? 'bg-white/[0.08]' : 'border-white/[0.07] bg-white/[0.025] text-zinc-400 hover:border-white/[0.16] hover:bg-white/[0.05]'}`}
+                                  className={`grid aspect-square place-items-center rounded-lg border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${active ? 'bg-accent' : 'border-border bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted/60'}`}
                                   style={active ? { borderColor: opt.defaultTint } : undefined}
                                 >
                                   <div className="size-4 [&_svg]:h-full [&_svg]:w-full [&_svg]:fill-current [&_svg]:stroke-current" style={{ color: opt.defaultTint }} dangerouslySetInnerHTML={{ __html: opt.svgContent }} />
@@ -1869,8 +2009,9 @@ export const Timeline: React.FC<TimelineProps> = ({
             {visiblePropertyRows.map((row) => (
               <div
                 key={row.id}
-                className="relative h-9 border-b border-white/[0.04] transition-colors hover:bg-white/[0.015]"
+                className="relative h-9 border-b border-border transition-colors hover:bg-muted/35"
                 onMouseDown={(e) => {
+                  setSelectedKeyframe(null);
                   onScrubStart?.();
                   onTimeChange(timeFromClientX(e.clientX));
                 }}
@@ -1890,7 +2031,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                     type="button"
                     key={keyframe.id}
                     title={`${row.name}${keyframe.label ? ` · ${keyframe.label}` : ''} @ ${keyframe.time.toFixed(2)}s`}
-                    className="absolute top-1/2 flex size-4 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
+                    className="absolute top-1/2 flex size-4 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
                     style={{
                       left: xForFrac(keyframe.time / duration),
                       zIndex: 14,
@@ -1929,10 +2070,11 @@ export const Timeline: React.FC<TimelineProps> = ({
               return (
                 <div
                   key={track.id}
-                  className={`relative h-9 border-b border-white/[0.04] transition-colors ${
-                    isActive ? 'bg-white/[0.03]' : 'hover:bg-white/[0.015]'
+                  className={`relative h-9 border-b border-border transition-colors ${
+                    isActive ? 'bg-muted/45' : 'hover:bg-muted/35'
                   }`}
                   onMouseDown={(e) => {
+                    setSelectedKeyframe(null);
                     onScrubStart?.();
                     selectTrack(track.id);
                     onTimeChange(timeFromClientX(e.clientX));
@@ -1991,8 +2133,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                   {/* Constant (un-animated) hint */}
                   {!animated && (
                     <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 items-center">
-                      <div className="h-px w-full bg-white/[0.05]" />
-                      <span className="absolute left-2 rounded bg-[#0f1012] pr-1 text-[10px] text-zinc-600">
+                      <div className="h-px w-full bg-muted/60" />
+                      <span className="absolute left-2 rounded bg-background/95 px-1 text-[10px] text-muted-foreground">
                         {formatValueLabel(track, track.defaultValue)} · constant
                       </span>
                     </div>
@@ -2015,7 +2157,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                       <button
                         type="button"
                         title={`${track.name} · ${formatValueLabel(track, kf.value)} @ ${kf.time.toFixed(2)}s`}
-                        className={`absolute top-1/2 flex size-4 -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center transition-transform hover:scale-110 active:cursor-grabbing focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 ${selected ? 'scale-110' : ''}`}
+                        className={`absolute top-1/2 flex size-4 -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center transition-transform hover:scale-110 active:cursor-grabbing focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40 ${selected ? 'scale-110' : ''}`}
                         style={{
                           left: xForFrac(kf.time / duration),
                           zIndex: selected ? 30 : 15,
@@ -2085,13 +2227,47 @@ export const Timeline: React.FC<TimelineProps> = ({
             })}
 
             {/* Playhead across all lanes */}
-            <div className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-white/25" style={{ left: playheadX }} />
+            <div className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-foreground/25" style={{ left: playheadX }} />
+          </div>
+          <div className="w-24 shrink-0" aria-hidden="true" />
+          </div>
+          <div className="pointer-events-auto fixed bottom-2 right-2 z-[70] flex h-auto w-max items-center gap-px rounded-full border border-border bg-background/85 p-0.5 shadow-md backdrop-blur-xl">
+            <button
+              type="button"
+              aria-label="Zoom timeline out"
+              title="Zoom out (-)"
+              disabled={timelineZoom <= TIMELINE_ZOOM_MIN}
+              onClick={() => adjustTimelineZoom(-TIMELINE_ZOOM_STEP)}
+              className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground disabled:pointer-events-none disabled:opacity-30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
+            >
+              <Minus className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              aria-label="Fit timeline"
+              title="Fit timeline (0)"
+              onClick={fitTimeline}
+              className="flex h-6 min-w-10 shrink-0 items-center justify-center rounded-full px-2 font-mono text-[10px] text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
+            >
+              {Math.round(timelineZoom * 100)}%
+            </button>
+            <button
+              type="button"
+              aria-label="Zoom timeline in"
+              title="Zoom in (+)"
+              disabled={timelineZoom >= TIMELINE_ZOOM_MAX}
+              onClick={() => adjustTimelineZoom(TIMELINE_ZOOM_STEP)}
+              className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground disabled:pointer-events-none disabled:opacity-30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
+            >
+              <Plus className="size-3.5" />
+            </button>
           </div>
         </div>
       </div>
+      </div>
       {goToEditor && (
         <div
-          className="fixed z-[110] w-32 rounded-xl border border-white/[0.10] bg-popover p-2 text-popover-foreground shadow-2xl"
+          className="fixed z-[110] w-32 rounded-xl border border-border bg-popover p-2 text-popover-foreground shadow-2xl"
           style={{ left: goToEditor.x, top: goToEditor.y }}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}

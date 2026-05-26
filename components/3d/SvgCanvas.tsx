@@ -70,6 +70,7 @@ export interface SvgCanvasProps {
   pathOverridesB?: PathOverride[];
   onZoomChange?: (zoom: number) => void;
   onViewRotationCommit?: (rotationDelta: { x: number; y: number; z: number }) => void;
+  onViewRotationSet?: (rotation: Partial<{ x: number; y: number; z: number }>) => void;
 }
 
 export interface SvgCanvasRef {
@@ -85,6 +86,8 @@ const MODEL_SCALE = 0.12;
 const ICON_VIEWBOX_SIZE = 24;
 const DEFAULT_VIEWPORT_FRACTION = 0.5;
 const CAMERA_FOV = 40;
+const MAX_BEVEL_SEGMENTS = 24;
+const GIZMO_SNAP_DEGREES = 45;
 
 const applySvgModelScale = (group: THREE.Group) => {
   group.scale.set(MODEL_SCALE, -MODEL_SCALE, MODEL_SCALE);
@@ -528,6 +531,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
   const rotationVelocityRef = useRef({ x: 0, y: 0 });
   const activePointerIdRef = useRef<number | null>(null);
   const onViewRotationCommitRef = useRef(props.onViewRotationCommit);
+  const onViewRotationSetRef = useRef(props.onViewRotationSet);
   const liveRenderPropsRef = useRef({
     transitionType: props.transitionType,
     transitionProgress: props.transitionProgress,
@@ -575,6 +579,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     keyLightIntensity: props.keyLightIntensity
   };
   onViewRotationCommitRef.current = props.onViewRotationCommit;
+  onViewRotationSetRef.current = props.onViewRotationSet;
   viewInertiaEnabledRef.current = props.viewInertiaEnabled ?? true;
 
   const applyViewRotationDelta = (delta: { x: number; y: number }) => {
@@ -699,7 +704,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     const baseDepth = Math.max(0.02, finiteNumber(props.extrusionDepth, 1));
     const baseBevelSize = Math.max(0, finiteNumber(props.bevelSize, 0));
     const baseBevelThickness = Math.max(0, finiteNumber(props.bevelThickness, 0));
-    const baseBevelSegments = Math.max(0, Math.min(10, Math.round(finiteNumber(props.bevelSegments, 1))));
+    const baseBevelSegments = Math.max(0, Math.min(MAX_BEVEL_SEGMENTS, Math.round(finiteNumber(props.bevelSegments, 1))));
     const curveSegments = Math.max(8, Math.min(64, Math.round(1 / Math.max(0.015, finiteNumber(props.geometryQuality, 0.045)))));
     const layerSpacing = finiteNumber(props.layerSpacing, 0);
 
@@ -863,6 +868,18 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       y: THREE.MathUtils.radToDeg(rotation.y) - current.y,
       z: -current.z,
     });
+  };
+
+  const nudgeViewRotation = (axis: 'x' | 'y', direction: -1 | 1) => {
+    isInertiaActiveRef.current = false;
+    rotationVelocityRef.current = { x: 0, y: 0 };
+    const current = liveRenderPropsRef.current.rotationOffset;
+    const currentValue = current[axis];
+    const epsilon = 0.001;
+    const targetValue = direction > 0
+      ? Math.floor((currentValue + epsilon) / GIZMO_SNAP_DEGREES) * GIZMO_SNAP_DEGREES + GIZMO_SNAP_DEGREES
+      : Math.ceil((currentValue - epsilon) / GIZMO_SNAP_DEGREES) * GIZMO_SNAP_DEGREES - GIZMO_SNAP_DEGREES;
+    onViewRotationSetRef.current?.({ [axis]: targetValue });
   };
 
   // 2D SVG Orientation Compass Updater (updates line/circle/text endpoints)
@@ -1421,26 +1438,52 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       {/* Interactive 3D Orientation Gizmo — minimal, Figma-like (no chrome, centered with the play bar) */}
       <svg
         viewBox="0 0 80 80"
-        className="absolute bottom-0.5 right-5 w-[84px] h-[84px] pointer-events-auto select-none z-20"
+        className="group/gizmo absolute bottom-0.5 right-5 w-[84px] h-[84px] pointer-events-auto select-none z-20"
       >
+        <g className="pointer-events-none opacity-0 transition-opacity duration-150 group-hover/gizmo:pointer-events-auto group-hover/gizmo:opacity-100 group-focus-within/gizmo:pointer-events-auto group-focus-within/gizmo:opacity-100">
+          <g className="cursor-pointer text-emerald-300/55 transition-colors hover:text-emerald-200" onClick={() => nudgeViewRotation('x', 1)}>
+            <title>Tilt up 45 degrees</title>
+            <rect x="30" y="0" width="20" height="20" rx="10" className="fill-transparent" />
+            <path d="M40 5.8 35.8 11h8.4Z" className="fill-current opacity-90" />
+          </g>
+          <g className="cursor-pointer text-emerald-300/55 transition-colors hover:text-emerald-200" onClick={() => nudgeViewRotation('x', -1)}>
+            <title>Tilt down 45 degrees</title>
+            <rect x="30" y="60" width="20" height="20" rx="10" className="fill-transparent" />
+            <path d="M40 74.2 35.8 69h8.4Z" className="fill-current opacity-90" />
+          </g>
+          <g className="cursor-pointer text-rose-300/55 transition-colors hover:text-rose-200" onClick={() => nudgeViewRotation('y', 1)}>
+            <title>Rotate left 45 degrees</title>
+            <rect x="0" y="30" width="20" height="20" rx="10" className="fill-transparent" />
+            <path d="M5.8 40 11 35.8v8.4Z" className="fill-current opacity-90" />
+          </g>
+          <g className="cursor-pointer text-rose-300/55 transition-colors hover:text-rose-200" onClick={() => nudgeViewRotation('y', -1)}>
+            <title>Rotate right 45 degrees</title>
+            <rect x="60" y="30" width="20" height="20" rx="10" className="fill-transparent" />
+            <path d="M74.2 40 69 35.8v8.4Z" className="fill-current opacity-90" />
+          </g>
+        </g>
+
         {/* Basis Axis Lines (thin, muted) */}
         <line ref={lineXRef} x1="40" y1="40" x2="40" y2="40" className="stroke-rose-400/70 stroke-[1.5]" strokeLinecap="round" />
         <line ref={lineYRef} x1="40" y1="40" x2="40" y2="40" className="stroke-emerald-400/70 stroke-[1.5]" strokeLinecap="round" />
         <line ref={lineZRef} x1="40" y1="40" x2="40" y2="40" className="stroke-sky-400/70 stroke-[1.5]" strokeLinecap="round" />
 
-        {/* Interactive Axis Endpoints */}
-        <g ref={markerXRef} className="cursor-pointer group" transform="translate(40 40)" onClick={() => setViewRotation({ x: 0, y: -Math.PI / 2 })}>
-          <circle cx="0" cy="0" r="7" className="fill-rose-500/15 stroke-rose-400/80 stroke-1 group-hover:fill-rose-500/35 transition-colors" />
+        {/* Axis Endpoints */}
+        <g ref={markerXRef} transform="translate(40 40)">
+          <circle cx="0" cy="0" r="8" className="fill-black/35 blur-[1px]" />
+          <circle cx="0" cy="0" r="7" className="fill-rose-500/18 stroke-rose-400/85 stroke-1" />
           <text x="0" y="0.3" className="fill-rose-200 font-sans font-semibold text-[7px] select-none" textAnchor="middle" dominantBaseline="central">X</text>
         </g>
 
-        <g ref={markerYRef} className="cursor-pointer group" transform="translate(40 40)" onClick={() => setViewRotation({ x: -Math.PI / 2, y: 0 })}>
-          <circle cx="0" cy="0" r="7" className="fill-emerald-500/15 stroke-emerald-400/80 stroke-1 group-hover:fill-emerald-500/35 transition-colors" />
+        <g ref={markerYRef} transform="translate(40 40)">
+          <circle cx="0" cy="0" r="8" className="fill-black/35 blur-[1px]" />
+          <circle cx="0" cy="0" r="7" className="fill-emerald-500/18 stroke-emerald-400/85 stroke-1" />
           <text x="0" y="0.3" className="fill-emerald-200 font-sans font-semibold text-[7px] select-none" textAnchor="middle" dominantBaseline="central">Y</text>
         </g>
 
-        <g ref={markerZRef} className="cursor-pointer group" transform="translate(40 40)" onClick={() => setViewRotation({ x: 0, y: 0 })}>
-          <circle cx="0" cy="0" r="7" className="fill-sky-500/15 stroke-sky-400/80 stroke-1 group-hover:fill-sky-500/35 transition-colors" />
+        <g ref={markerZRef} transform="translate(40 40)">
+          <circle cx="0" cy="0" r="8" className="fill-black/35 blur-[1px]" />
+          <circle cx="0" cy="0" r="7" className="fill-sky-500/18 stroke-sky-400/85 stroke-1" />
           <text x="0" y="0.3" className="fill-sky-200 font-sans font-semibold text-[7px] select-none" textAnchor="middle" dominantBaseline="central">Z</text>
         </g>
 

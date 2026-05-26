@@ -182,14 +182,15 @@ const isEditableShortcutTarget = (target: EventTarget | null) =>
 const normalizeDegrees = (value: number) => ((value % 360) + 360) % 360;
 
 type FillMode = 'solid' | 'gradient';
-type MotionTrackId = 'extrusion' | 'rotation' | 'scale' | 'lighting';
+type MotionTrackId = 'extrusion' | 'rotation' | 'scale' | 'move' | 'lighting';
 type LightPosition = { x: number; y: number; z: number };
-type LightPositionKeyframe = {
+type Vector3Keyframe = {
   id: string;
   time: number;
   value: LightPosition;
   easing: EasingType;
 };
+type LightPositionKeyframe = Vector3Keyframe;
 type MaterialSettings = {
   roughness: number;
   metalness: number;
@@ -214,16 +215,19 @@ const FILL_MODES: Array<{ id: FillMode; label: string }> = [
 ];
 
 const EXTRUDE_DEFAULT = 10;
-const EXTRUDE_MAX = 20;
+const EXTRUDE_MAX = 60;
 const SCALE_DEFAULT = 1;
 const SCALE_MAX = 3;
 const GEOMETRY_QUALITY_DEFAULT = 0.045;
 const LIGHT_MAX = 25;
+const MAX_BEVEL_SEGMENTS = 24;
+const MOVE_COLOR = '#38bdf8';
 
 const MOTION_TRACK_NAMES: Record<MotionTrackId, string> = {
   extrusion: 'Extrude',
   rotation: 'Rotation',
   scale: 'Scale',
+  move: 'Move',
   lighting: 'Brightness',
 };
 
@@ -276,7 +280,7 @@ const normalizeFillStops = (stops: Array<{ id?: string; color: string; position:
 const interpolateLightPositionKeyframes = (
   time: number,
   fallback: LightPosition,
-  keyframes: LightPositionKeyframe[]
+  keyframes: Vector3Keyframe[]
 ): LightPosition => {
   if (keyframes.length === 0) return fallback;
   const sorted = [...keyframes].sort((a, b) => a.time - b.time);
@@ -322,6 +326,7 @@ function NumberField({
   min,
   max,
   step,
+  scrubStep,
   prefix,
   suffix = '',
   precision = 1,
@@ -333,6 +338,7 @@ function NumberField({
   min: number;
   max: number;
   step: number;
+  scrubStep?: number;
   prefix?: string;
   suffix?: string;
   precision?: number;
@@ -363,21 +369,22 @@ function NumberField({
     e.currentTarget.setPointerCapture?.(e.pointerId);
     const startX = e.clientX;
     const startValue = value;
+    const effectiveScrubStep = scrubStep ?? (step < 0.05 ? step * 2 : step);
     let moved = false;
     bindWindowPointerDrag({
       onMove: (ev) => {
-      const dx = ev.clientX - startX;
-      if (Math.abs(dx) > 3) moved = true;
-      if (!moved) return;
-      document.body.style.cursor = 'ew-resize';
-      const next = clampNumber(startValue + Math.round(dx / 4) * step, min, max);
-      const rounded = Number(next.toFixed(precision));
-      setDraft(rounded.toFixed(precision));
-      onChange(rounded);
+        const dx = ev.clientX - startX;
+        if (Math.abs(dx) > 3) moved = true;
+        if (!moved) return;
+        document.body.style.cursor = 'ew-resize';
+        const next = clampNumber(startValue + Math.round(dx / 3) * effectiveScrubStep, min, max);
+        const rounded = Number(next.toFixed(precision));
+        setDraft(rounded.toFixed(precision));
+        onChange(rounded);
       },
       onEnd: () => {
-      document.body.style.cursor = '';
-      if (!moved) inputRef.current?.focus();
+        document.body.style.cursor = '';
+        if (!moved) inputRef.current?.focus();
       },
     });
   };
@@ -389,9 +396,9 @@ function NumberField({
         document.body.style.cursor = '';
       }}
       title="Drag to adjust · click to type"
-      className={`flex h-7 cursor-ew-resize items-center rounded-md border border-white/[0.08] bg-black/20 px-1.5 focus-within:border-white/20 ${className}`}
+      className={`flex h-7 cursor-ew-resize items-center rounded-md border border-input bg-muted/55 px-1.5 text-foreground focus-within:border-ring/50 ${className}`}
     >
-      {prefix && <span className="pr-1 text-[9px] font-medium text-zinc-500">{prefix}</span>}
+      {prefix && <span className="pr-1 text-[9px] font-medium text-muted-foreground">{prefix}</span>}
       <input
         ref={inputRef}
         type="text"
@@ -414,9 +421,9 @@ function NumberField({
             onChange(clampNumber(value + step * direction, min, max));
           }
         }}
-        className={`min-w-0 flex-1 cursor-ew-resize bg-transparent font-mono text-[10px] text-zinc-300 outline-none focus:cursor-text ${inputClassName}`}
+        className={`min-w-0 flex-1 cursor-ew-resize bg-transparent font-mono text-[10px] text-foreground outline-none focus:cursor-text ${inputClassName}`}
       />
-      {suffix && <span className="pl-0.5 text-[10px] text-zinc-600">{suffix}</span>}
+      {suffix && <span className="pl-0.5 text-[10px] text-muted-foreground">{suffix}</span>}
     </div>
   );
 }
@@ -470,35 +477,35 @@ function LightDirectionPicker({
     <Popover>
       <PopoverTrigger
         title="Light direction & color"
-        className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-white/[0.08] bg-black/20 pl-1 pr-1.5 transition-colors hover:border-white/25 hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+        className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-muted/45 pl-1 pr-1.5 transition-colors hover:border-ring/50 hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       >
-        <span className="size-4 rounded-full border border-white/20 shadow-inner" style={{ background: triggerSphere }} />
-        <ChevronDown className="size-3 text-zinc-500" />
+        <span className="size-4 rounded-full border border-border shadow-inner" style={{ background: triggerSphere }} />
+        <ChevronDown className="size-3 text-muted-foreground" />
       </PopoverTrigger>
       <PopoverContent
         align="end"
         sideOffset={6}
-        className="w-[196px] rounded-xl border border-white/[0.1] bg-[#141518]/95 p-3 text-white shadow-2xl backdrop-blur-xl"
+        className="w-[196px] rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-2xl backdrop-blur-xl"
       >
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-500">Light Source</span>
+          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Light Source</span>
           <button
             type="button"
             aria-label={`${isKeyed ? 'Remove' : 'Add'} light keyframe`}
             title={`${isKeyed ? 'Remove' : 'Add'} light keyframe`}
             onClick={onToggleKeyframe}
             className={`flex size-5 items-center justify-center rounded border transition-colors ${
-              isKeyed ? 'border-white/30 bg-white/[0.09]' : 'border-white/[0.08] bg-black/20 hover:bg-white/[0.05]'
+              isKeyed ? 'border-ring/50 bg-accent' : 'border-border bg-muted/45 hover:bg-muted/60'
             }`}
           >
-            <span className="size-2 rotate-45 border border-white/30" style={{ backgroundColor: isKeyed ? '#ffd9a0' : 'transparent' }} />
+            <span className="size-2 rotate-45 border border-ring/50" style={{ backgroundColor: isKeyed ? '#ffd9a0' : 'transparent' }} />
           </button>
         </div>
 
         <div
           ref={padRef}
           onPointerDown={handlePadDown}
-          className="relative mt-2.5 aspect-square w-full cursor-grab touch-none overflow-hidden rounded-full border border-white/10 shadow-inner active:cursor-grabbing"
+          className="relative mt-2.5 aspect-square w-full cursor-grab touch-none overflow-hidden rounded-full border border-border shadow-inner active:cursor-grabbing"
           style={{ background: `radial-gradient(circle at ${hx}% ${hy}%, #ffffff, ${color} 24%, #27272a 68%, #0b0b0d)` }}
         >
           <span
@@ -506,13 +513,13 @@ function LightDirectionPicker({
             style={{ left: `${hx}%`, top: `${hy}%` }}
           />
         </div>
-        <p className="mt-2 text-center text-[10px] text-zinc-500">Drag to move the light</p>
+        <p className="mt-2 text-center text-[10px] text-muted-foreground">Drag to move the light</p>
 
         <div className="mt-2.5">
           <ColorPicker
             value={color}
             onChange={onColorChange}
-            className="h-8 rounded-lg border-white/[0.08] bg-black/20 px-2 py-1.5"
+            className="h-8 rounded-lg border-border bg-muted/45 px-2 py-1.5"
           />
         </div>
       </PopoverContent>
@@ -636,6 +643,7 @@ export default function AppLayout() {
       y: recipe.translateY ?? 0,
       z: recipe.translateZ ?? 0,
     });
+    setMoveKeyframes([]);
     setCenterPull(recipe.centerPull ?? 0);
     setKeyLightIntensity(recipe.keyLightIntensity);
     setKeyLightPosition({ x: 5, y: 5, z: 4 });
@@ -848,6 +856,7 @@ export default function AppLayout() {
   const [layerSpacing, setLayerSpacing] = useState<number>(0.8);
   const [objectScale, setObjectScale] = useState<number>(SCALE_DEFAULT);
   const [moveOffset, setMoveOffset] = useState<LightPosition>({ x: 0, y: 0, z: 0 });
+  const [moveKeyframes, setMoveKeyframes] = useState<Vector3Keyframe[]>([]);
   const [centerPull, setCenterPull] = useState<number>(0);
 
   const [enableGradient, setEnableGradient] = useState<boolean>(true);
@@ -940,6 +949,7 @@ export default function AppLayout() {
     extrusion: useRef<HTMLDivElement>(null),
     rotation: useRef<HTMLDivElement>(null),
     scale: useRef<HTMLDivElement>(null),
+    move: useRef<HTMLDivElement>(null),
     lighting: useRef<HTMLDivElement>(null),
   };
 
@@ -963,7 +973,8 @@ export default function AppLayout() {
   };
 
   const selectTimelinePropertyRow = (rowId: string) => {
-    scrollInspectorPropertyIntoView(rowId as 'fill' | 'material' | 'light-position');
+    if (rowId === 'move') setSelectedMotionTrackId('move');
+    scrollInspectorPropertyIntoView(rowId as 'fill' | 'material' | 'light-position' | 'move');
   };
 
   // Single predictable rule for editing a property value:
@@ -1094,6 +1105,63 @@ export default function AppLayout() {
         };
       });
     });
+  };
+
+  const handleViewRotationSet = (target: Partial<{ x: number; y: number; z: number }>) => {
+    setSelectedMotionTrackId('rotation');
+    setActiveRecipeId(null);
+    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const normalizedTarget = {
+      x: target.x === undefined ? undefined : normalizeDegrees(target.x),
+      y: target.y === undefined ? undefined : normalizeDegrees(target.y),
+      z: target.z === undefined ? undefined : normalizeDegrees(target.z),
+    };
+
+    setRotationOffset((prev) => ({
+      x: normalizedTarget.x ?? prev.x,
+      y: normalizedTarget.y ?? prev.y,
+      z: normalizedTarget.z ?? prev.z,
+    }));
+
+    const targetY = normalizedTarget.y;
+    if (targetY === undefined) return;
+    setTracks((prevTracks) => prevTracks.map((track) => {
+      if (track.id !== 'rotation') return track;
+      const clampedValue = clampNumber(targetY, track.min, track.max);
+      if (track.keyframes.length === 0) {
+        return { ...track, defaultValue: clampedValue };
+      }
+
+      const exactKeyframe = track.keyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+      if (exactKeyframe) {
+        return {
+          ...track,
+          defaultValue: clampedValue,
+          keyframes: track.keyframes.map((keyframe) =>
+            keyframe.id === exactKeyframe.id ? { ...keyframe, value: clampedValue } : keyframe
+          )
+        };
+      }
+
+      const previousKeyframe = [...track.keyframes]
+        .sort((a, b) => a.time - b.time)
+        .filter((keyframe) => keyframe.time <= playheadTime)
+        .pop();
+
+      return {
+        ...track,
+        defaultValue: clampedValue,
+        keyframes: [
+          ...track.keyframes,
+          {
+            id: `${track.id}-${Date.now().toString(36)}`,
+            time: playheadTime,
+            value: clampedValue,
+            easing: previousKeyframe?.easing ?? 'ease-in-out'
+          }
+        ].sort((a, b) => a.time - b.time)
+      };
+    }));
   };
 
   const handleBrightnessChange = (newValue: number) => {
@@ -1237,6 +1305,8 @@ export default function AppLayout() {
     ? interpolateKeyframes(currentTime, scaleTrack)
     : objectScale;
 
+  const activeMoveOffset = interpolateLightPositionKeyframes(currentTime, moveOffset, moveKeyframes);
+
   const activeKeyLightIntensity = lightingTrack.keyframes.length > 0
     ? interpolateKeyframes(currentTime, lightingTrack)
     : keyLightIntensity;
@@ -1314,6 +1384,65 @@ export default function AppLayout() {
           id: `light-position-${Date.now().toString(36)}`,
           time: playheadTime,
           value: activeKeyLightPosition,
+          easing: previousKeyframe?.easing ?? 'ease-in-out',
+        }
+      ].sort((a, b) => a.time - b.time);
+    });
+  };
+
+  const moveKeyframeAtPlayhead = () => {
+    const playheadTime = Number(currentTime.toFixed(2));
+    return moveKeyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+  };
+
+  const toggleMoveKeyframeAtPlayhead = () => {
+    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    setSelectedMotionTrackId('move');
+    setActiveRecipeId(null);
+    setMoveKeyframes((prev) => {
+      const existing = prev.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+      if (existing) return prev.filter((keyframe) => keyframe.id !== existing.id);
+
+      const previousKeyframe = [...prev]
+        .sort((a, b) => a.time - b.time)
+        .filter((keyframe) => keyframe.time <= playheadTime)
+        .pop();
+
+      return [
+        ...prev,
+        {
+          id: `move-${Date.now().toString(36)}`,
+          time: playheadTime,
+          value: activeMoveOffset,
+          easing: previousKeyframe?.easing ?? 'ease-in-out',
+        }
+      ].sort((a, b) => a.time - b.time);
+    });
+  };
+
+  const updateMoveAxis = (axis: keyof LightPosition, value: number) => {
+    const clamped = clampNumber(value, -100, 100);
+    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const nextMove = { ...activeMoveOffset, [axis]: clamped };
+    setSelectedMotionTrackId('move');
+    setActiveRecipeId(null);
+    setMoveOffset(nextMove);
+    setMoveKeyframes((prev) => {
+      if (prev.length === 0) return prev;
+      const existing = prev.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+      if (existing) {
+        return prev.map((keyframe) => keyframe.id === existing.id ? { ...keyframe, value: nextMove } : keyframe);
+      }
+      const previousKeyframe = [...prev]
+        .sort((a, b) => a.time - b.time)
+        .filter((keyframe) => keyframe.time <= playheadTime)
+        .pop();
+      return [
+        ...prev,
+        {
+          id: `move-${Date.now().toString(36)}`,
+          time: playheadTime,
+          value: nextMove,
           easing: previousKeyframe?.easing ?? 'ease-in-out',
         }
       ].sort((a, b) => a.time - b.time);
@@ -1457,14 +1586,14 @@ export default function AppLayout() {
           event.stopPropagation();
           toggleMaterialKeyframeAtPlayhead();
         }}
-        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
           isKeyedHere
-            ? 'bg-white/[0.06] text-white'
-            : 'text-zinc-600 hover:bg-white/[0.05] hover:text-zinc-300'
+            ? 'bg-muted/70 text-foreground'
+            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
         }`}
       >
         <span
-          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-black/80' : 'border-white/20'}`}
+          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-background' : 'border-border'}`}
           style={{ backgroundColor: isKeyedHere ? '#a78bfa' : 'transparent' }}
         />
       </button>
@@ -1482,15 +1611,40 @@ export default function AppLayout() {
           event.stopPropagation();
           toggleLightPositionKeyframeAtPlayhead();
         }}
-        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
           isKeyedHere
-            ? 'bg-white/[0.06] text-white'
-            : 'text-zinc-600 hover:bg-white/[0.05] hover:text-zinc-300'
+            ? 'bg-muted/70 text-foreground'
+            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
         }`}
       >
         <span
-          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-black/80' : 'border-white/20'}`}
+          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-background' : 'border-border'}`}
           style={{ backgroundColor: isKeyedHere ? '#ff5b9a' : 'transparent' }}
+        />
+      </button>
+    );
+  };
+
+  const renderMoveKeyframeControl = () => {
+    const isKeyedHere = Boolean(moveKeyframeAtPlayhead());
+    return (
+      <button
+        type="button"
+        aria-label={`${isKeyedHere ? 'Remove' : 'Add'} move keyframe at current time`}
+        title={`${isKeyedHere ? 'Remove' : 'Add'} move keyframe`}
+        onClick={(event) => {
+          event.stopPropagation();
+          toggleMoveKeyframeAtPlayhead();
+        }}
+        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
+          isKeyedHere
+            ? 'bg-muted/70 text-foreground'
+            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+        }`}
+      >
+        <span
+          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-background' : 'border-border'}`}
+          style={{ backgroundColor: isKeyedHere ? MOVE_COLOR : 'transparent' }}
         />
       </button>
     );
@@ -1498,7 +1652,7 @@ export default function AppLayout() {
 
   const motionPropertyRowClass = (trackId: MotionTrackId) =>
     `flex items-center gap-3 rounded-md -mx-1 px-1 py-1 transition-colors ${
-      selectedMotionTrackId === trackId ? 'bg-white/[0.055]' : 'hover:bg-white/[0.025]'
+      selectedMotionTrackId === trackId ? 'bg-muted/70' : 'hover:bg-muted/40'
     }`;
 
   const renderKeyframeControl = (track: TimelineTrack, value: number) => {
@@ -1512,14 +1666,14 @@ export default function AppLayout() {
           event.stopPropagation();
           toggleKeyframeAtPlayhead(track, value);
         }}
-        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
           isKeyedHere
-            ? 'bg-white/[0.06] text-white'
-            : 'text-zinc-600 hover:bg-white/[0.05] hover:text-zinc-300'
+            ? 'bg-muted/70 text-foreground'
+            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
         }`}
       >
         <span
-          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-black/80' : 'border-white/20'}`}
+          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-background' : 'border-border'}`}
           style={{ backgroundColor: isKeyedHere ? track.color : 'transparent' }}
         />
       </button>
@@ -1582,14 +1736,14 @@ export default function AppLayout() {
           event.stopPropagation();
           toggleSelectedShapeColorKeyframe();
         }}
-        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
           isKeyedHere
-            ? 'bg-white/[0.06] text-white'
-            : 'text-zinc-600 hover:bg-white/[0.05] hover:text-zinc-300'
+            ? 'bg-muted/70 text-foreground'
+            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
         }`}
       >
         <span
-          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-black/80' : 'border-white/20'}`}
+          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-background' : 'border-border'}`}
           style={{
             background: isKeyedHere
               ? `linear-gradient(135deg, ${selectedShapeFill}, ${selectedShapeFillSecondary})`
@@ -1681,6 +1835,7 @@ export default function AppLayout() {
     ...shapeTransitionBreakpoints,
     ...shapes.flatMap((shape) => (shape.fillKeyframes ?? []).map((keyframe) => keyframe.time)),
     ...tracks.flatMap((track) => track.keyframes.map((keyframe) => keyframe.time)),
+    ...moveKeyframes.map((keyframe) => keyframe.time),
     ...keyLightPositionKeyframes.map((keyframe) => keyframe.time),
     ...materialKeyframes.map((keyframe) => keyframe.time),
   ].map((time) => Number(clampNumber(time, 0, duration).toFixed(2)))))
@@ -1705,6 +1860,12 @@ export default function AppLayout() {
   };
 
   const goToEnd = () => goToTime(duration);
+  const handleDurationChange = (value: number) => {
+    const next = clampNumber(value, 0.5, 30);
+    setDuration(next);
+    setCurrentTime((time) => clampNumber(time, 0, next));
+    setActiveRecipeId(null);
+  };
 
   const handleTracksChange = (nextTracks: TimelineTrack[]) => {
     setTracks(nextTracks);
@@ -1730,6 +1891,16 @@ export default function AppLayout() {
         id: keyframe.id,
         time: keyframe.time,
         label: `X ${keyframe.value.x.toFixed(1)} Y ${keyframe.value.y.toFixed(1)} Z ${keyframe.value.z.toFixed(1)}`,
+      })),
+    }] : []),
+    ...(moveKeyframes.length ? [{
+      id: 'move',
+      name: 'Move',
+      color: MOVE_COLOR,
+      keyframes: moveKeyframes.map((keyframe) => ({
+        id: keyframe.id,
+        time: keyframe.time,
+        label: `X ${keyframe.value.x.toFixed(0)} Y ${keyframe.value.y.toFixed(0)} Z ${keyframe.value.z.toFixed(0)}`,
       })),
     }] : []),
     ...(materialKeyframes.length ? [{
@@ -1758,6 +1929,10 @@ export default function AppLayout() {
       setKeyLightPositionKeyframes([]);
       markCustom();
     }
+    if (rowId === 'move') {
+      setMoveKeyframes([]);
+      markCustom();
+    }
     if (rowId === 'material') {
       setMaterialKeyframes([]);
       markCustom();
@@ -1775,6 +1950,10 @@ export default function AppLayout() {
     }
     if (rowId === 'light-position') {
       setKeyLightPositionKeyframes((prev) => prev.filter((keyframe) => keyframe.id !== keyframeId));
+      markCustom();
+    }
+    if (rowId === 'move') {
+      setMoveKeyframes((prev) => prev.filter((keyframe) => keyframe.id !== keyframeId));
       markCustom();
     }
     if (rowId === 'material') {
@@ -1852,9 +2031,6 @@ export default function AppLayout() {
             {zenMode ? <PanelLeftOpen className="mx-auto size-4" /> : <PanelLeftClose className="mx-auto size-4" />}
           </button>
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="size-8 rounded-lg bg-foreground text-background flex items-center justify-center">
-              <Box className="size-4" />
-            </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-foreground text-sm tracking-tight">VectorForge</span>
@@ -1945,7 +2121,7 @@ export default function AppLayout() {
               transitionProgress={activeTransitionProgress}
               rotationOffset={{ x: rotationOffset.x, y: activeRotationY, z: rotationOffset.z }}
               objectScale={activeObjectScale}
-              moveOffset={moveOffset}
+              moveOffset={activeMoveOffset}
               centerPull={centerPull}
               isPlaying={isPlaying}
               ambientColor={ambientColor}
@@ -1960,6 +2136,7 @@ export default function AppLayout() {
               showCenterPoint={showCenterPoint}
               onZoomChange={setZoom}
               onViewRotationCommit={handleViewRotationCommit}
+              onViewRotationSet={handleViewRotationSet}
             />
 
             {/* Drag & drop an SVG to replace the selected shape */}
@@ -1969,7 +2146,7 @@ export default function AppLayout() {
                   <Upload className="size-8 text-white/70" />
                   <div className="text-center">
                     <span className="block text-sm font-semibold text-white">Drop SVG here</span>
-                    <span className="mt-1 block text-[10px] uppercase tracking-wider text-zinc-500">Replaces the selected shape</span>
+                    <span className="mt-1 block text-[10px] uppercase tracking-wider text-muted-foreground">Replaces the selected shape</span>
                   </div>
                 </div>
               </div>
@@ -1984,7 +2161,7 @@ export default function AppLayout() {
                 >
                   <MoreHorizontal className="size-4" />
                 </PopoverTrigger>
-                <PopoverContent align="end" side="bottom" sideOffset={8} className="w-44 border-white/[0.09] bg-[#15171a] p-2 text-zinc-100">
+                <PopoverContent align="end" side="bottom" sideOffset={8} className="w-44 border-border bg-popover p-2 text-popover-foreground">
                   <button
                     type="button"
                     onClick={() => {
@@ -1992,16 +2169,16 @@ export default function AppLayout() {
                       setZoom(1);
                       canvas3DRef.current?.resetRotation();
                     }}
-                    className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                    className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                   >
-                    <span className="text-[11px] text-zinc-300">Reset view</span>
+                    <span className="text-[11px] text-foreground">Reset view</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setViewInertiaEnabled((enabled) => !enabled)}
-                    className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                    className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                   >
-                    <span className="text-[11px] text-zinc-300">Inertia</span>
+                    <span className="text-[11px] text-foreground">Inertia</span>
                     <Switch
                       checked={viewInertiaEnabled}
                       onCheckedChange={(checked) => setViewInertiaEnabled(checked)}
@@ -2012,9 +2189,9 @@ export default function AppLayout() {
                   <button
                     type="button"
                     onClick={() => setShowCenterPoint((visible) => !visible)}
-                    className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                    className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                   >
-                    <span className="text-[11px] text-zinc-300">Center point</span>
+                    <span className="text-[11px] text-foreground">Center point</span>
                     <Switch
                       checked={showCenterPoint}
                       onCheckedChange={(checked) => setShowCenterPoint(checked)}
@@ -2026,7 +2203,7 @@ export default function AppLayout() {
               </Popover>
             </div>
 
-            <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/75 px-3 py-2 shadow-2xl backdrop-blur-xl transition-colors hover:border-border dark:border-white/10 dark:bg-black/65 dark:hover:border-white/20">
+            <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/75 px-3 py-2 shadow-2xl backdrop-blur-xl transition-colors hover:border-border dark:border-white/10 dark:bg-black/65 dark:hover:border-border">
               <Button
                 size="icon"
                 variant="ghost"
@@ -2034,7 +2211,7 @@ export default function AppLayout() {
                 disabled={atTimelineStart}
                 aria-label="Go to start"
                 title="Go to start"
-                className="size-8 rounded-full text-zinc-400 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-30"
+                className="size-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
               >
                 <SkipBack size={14} />
               </Button>
@@ -2045,7 +2222,7 @@ export default function AppLayout() {
                 disabled={previousBreakpoint === undefined}
                 aria-label="Previous breakpoint"
                 title="Previous breakpoint"
-                className="size-8 rounded-full text-zinc-400 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-30"
+                className="size-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
               >
                 <ChevronLeft size={16} />
               </Button>
@@ -2053,7 +2230,7 @@ export default function AppLayout() {
                 size="icon"
                 onClick={handlePlayToggle}
                 aria-label={isPlaying ? 'Pause' : 'Play'}
-                className="size-10 rounded-full bg-white text-zinc-950 hover:bg-zinc-200"
+                className="size-10 rounded-full bg-foreground text-background hover:bg-foreground/85"
               >
                 {isPlaying ? <Pause size={16} className="fill-current" /> : <Play size={16} className="fill-current" />}
               </Button>
@@ -2064,7 +2241,7 @@ export default function AppLayout() {
                 disabled={nextBreakpoint === undefined}
                 aria-label="Next breakpoint"
                 title="Next breakpoint"
-                className="size-8 rounded-full text-zinc-400 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-30"
+                className="size-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
               >
                 <ChevronRight size={16} />
               </Button>
@@ -2075,7 +2252,7 @@ export default function AppLayout() {
                 disabled={atTimelineEnd}
                 aria-label="Go to end"
                 title="Go to end"
-                className="size-8 rounded-full text-zinc-400 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-30"
+                className="size-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
               >
                 <SkipForward size={14} />
               </Button>
@@ -2084,7 +2261,7 @@ export default function AppLayout() {
                   size="sm"
                   variant="ghost"
                   onClick={() => setZenMode(false)}
-                  className="h-7 rounded-full px-2 text-[11px] text-zinc-500 hover:bg-white/10 hover:text-white"
+                  className="h-7 rounded-full px-2 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                   Exit
                 </Button>
@@ -2095,22 +2272,22 @@ export default function AppLayout() {
         </div>
 
         <div className={`transition-all duration-300 ease-out flex flex-col shrink-0 overflow-y-auto bg-background dark:bg-[#0f1012] ${
-          zenMode ? 'w-0 opacity-0 border-l-0 pointer-events-none p-0' : 'w-[328px] border-l border-white/[0.07] px-4 py-4 gap-5'
+          zenMode ? 'w-0 opacity-0 border-l-0 pointer-events-none p-0' : 'w-[328px] border-l border-border px-4 py-4 gap-5'
         }`}>
 
           {/* Style */}
-          <div className="flex flex-col gap-3 border-b border-white/[0.07] pb-4">
+          <div className="flex flex-col gap-3 border-b border-border pb-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
+              <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 <Wand2 className="size-3.5" />
                 Style
               </div>
-              <span className="text-[10px] text-zinc-500">{MATERIAL_METADATA[materialPreset].name}</span>
+              <span className="text-[10px] text-muted-foreground">{MATERIAL_METADATA[materialPreset].name}</span>
             </div>
 
             <div ref={inspectorRefs.fill} className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 flex-col">
-                <span className="text-[10px] font-medium text-zinc-500">Fill</span>
+                <span className="text-[10px] font-medium text-muted-foreground">Fill</span>
               </div>
               <div className="ml-auto flex items-center justify-end gap-2">
                 <div className="w-[126px]">
@@ -2125,7 +2302,7 @@ export default function AppLayout() {
                     onStopsChange={updateSelectedShapeFillStops}
                     secondaryValue={selectedShapeFillSecondary}
                     onSecondaryChange={(val) => updateSelectedShapeColor(val, true)}
-                    className="h-7 w-full rounded-md px-2 py-0 bg-white/[0.035] border-white/[0.08]"
+                    className="h-7 w-full rounded-md px-2 py-0 bg-muted/45 border-border text-foreground"
                   />
                 </div>
                 <div className="flex shrink-0 flex-col gap-1">
@@ -2136,7 +2313,7 @@ export default function AppLayout() {
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between px-0.5">
-                <span className="text-[10px] font-medium text-zinc-500">Finish</span>
+                <span className="text-[10px] font-medium text-muted-foreground">Finish</span>
               </div>
               <div className="grid grid-cols-6 gap-1.5">
                 {FINISH_PRESETS.map((preset) => {
@@ -2152,12 +2329,12 @@ export default function AppLayout() {
                         setActiveRecipeId(null);
                         setMaterialKeyframes([]);
                       }}
-                      className={`group/finish relative flex h-8 min-w-0 items-center justify-center rounded-md border shadow-[inset_0_0_0_1px_rgba(255,255,255,0.025)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
-                        isActive ? 'border-white/30 bg-white/[0.075]' : 'border-white/[0.095] bg-white/[0.03] hover:border-white/[0.18] hover:bg-white/[0.05]'
+                      className={`group/finish relative flex h-8 min-w-0 items-center justify-center rounded-md border shadow-[inset_0_0_0_1px_rgba(255,255,255,0.025)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
+                        isActive ? 'border-ring/50 bg-accent' : 'border-border bg-muted/45 hover:border-ring/50 hover:bg-muted/60'
                       }`}
                     >
                       <span className="size-4 shrink-0 rounded-full border border-white/[0.16] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.22)]" style={{ background: MATERIAL_PREVIEW[preset] }} />
-                      <span className="pointer-events-none absolute -top-7 left-1/2 z-30 -translate-x-1/2 rounded-md border border-white/[0.08] bg-[#18191c] px-2 py-1 text-[10px] font-medium text-zinc-200 opacity-0 shadow-xl transition-opacity group-hover/finish:opacity-100 group-focus-visible/finish:opacity-100">
+                      <span className="pointer-events-none absolute -top-7 left-1/2 z-30 -translate-x-1/2 rounded-md border border-border bg-popover px-2 py-1 text-[10px] font-medium text-popover-foreground opacity-0 shadow-xl transition-opacity group-hover/finish:opacity-100 group-focus-visible/finish:opacity-100">
                         {MATERIAL_METADATA[preset].name}
                       </span>
                     </button>
@@ -2166,12 +2343,12 @@ export default function AppLayout() {
               </div>
             </div>
 
-            <div ref={inspectorRefs.material} className="space-y-2 border-t border-white/[0.07] pt-3 animate-fade-in">
+            <div ref={inspectorRefs.material} className="space-y-2 border-t border-border pt-3 animate-fade-in">
               <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={() => setIsAdvancedMaterialOpen((open) => !open)}
-                  className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md text-left text-[10px] font-medium text-zinc-500 transition-colors hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                  className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md text-left text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                   aria-expanded={isAdvancedMaterialOpen}
                 >
                   <ChevronRight className={`size-3 transition-transform ${isAdvancedMaterialOpen ? 'rotate-90' : ''}`} />
@@ -2192,7 +2369,7 @@ export default function AppLayout() {
                 { key: 'emissiveIntensity' as const, label: 'Emission', value: activeMaterialSettings.emissiveIntensity, min: 0, max: 5, step: 0.1, fmt: (v: number) => v.toFixed(1) },
               ].map(({ key, label, value, min, max, step, fmt }) => (
                 <div key={key} className="flex items-center justify-between gap-3">
-                  <span className="w-24 shrink-0 text-[11px] text-zinc-400">{label}</span>
+                  <span className="w-24 shrink-0 text-[11px] text-muted-foreground">{label}</span>
                   <NumberField value={value} min={min} max={max} step={step} precision={fmt(value).includes('.') ? fmt(value).split('.')[1].length : 0} onChange={(next) => updateMaterialSetting(key, next, min, max)} />
                 </div>
               ))}
@@ -2200,15 +2377,15 @@ export default function AppLayout() {
           </div>
 
           {/* Shape */}
-          <div className="flex flex-col gap-3 border-b border-white/[0.07] pb-4">
-            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
+          <div className="flex flex-col gap-3 border-b border-border pb-4">
+            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
               <Cuboid className="size-3.5" />
               Geometry
             </div>
 
             {/* Extrude */}
             <div ref={inspectorRefs.extrusion} className={motionPropertyRowClass('extrusion')} onClick={() => setSelectedMotionTrackId('extrusion')}>
-              <span className="text-[11px] text-zinc-400 w-24 shrink-0">
+              <span className="text-[11px] text-muted-foreground w-24 shrink-0">
                 Extrude
                 {extrusionTrack.keyframes.length > 0 && <span className="inline-block w-1 h-1 rounded-full bg-emerald-500 ml-1 align-middle" />}
               </span>
@@ -2217,7 +2394,7 @@ export default function AppLayout() {
                 return (
                   <>
                     <span className="flex-1" />
-                    <NumberField value={depthValue} min={0.2} max={EXTRUDE_MAX} step={0.25} precision={2} onChange={(value) => { handleDepthChange(value); setActiveRecipeId(null); }} />
+                    <NumberField value={depthValue} min={0.2} max={EXTRUDE_MAX} step={0.25} scrubStep={1} precision={2} onChange={(value) => { handleDepthChange(value); setActiveRecipeId(null); }} />
                     {renderKeyframeControl(extrusionTrack, depthValue)}
                   </>
                 );
@@ -2226,7 +2403,7 @@ export default function AppLayout() {
 
             {hasLayerGapControls && (
               <div className="flex items-center justify-between gap-3">
-                <span className="text-[11px] text-zinc-400 w-24 shrink-0">Layer Gap</span>
+                <span className="text-[11px] text-muted-foreground w-24 shrink-0">Layer Gap</span>
                 {(() => {
                   const gapValue = finiteNumber(layerSpacing, 0);
                   return (
@@ -2241,13 +2418,13 @@ export default function AppLayout() {
 
             {/* Rounded edges — same row rhythm as Extrude: label · value · trailing control */}
             <div className="flex items-center gap-3 -mx-1 px-1 py-1">
-              <span className="w-24 shrink-0 text-[11px] text-zinc-400">Rounded Edges</span>
+              <span className="w-24 shrink-0 text-[11px] text-muted-foreground">Rounded Edges</span>
               <span className="flex-1" />
               {bevelEnabled && (
                 <NumberField
                   value={bevelSegments}
                   min={1}
-                  max={10}
+                  max={MAX_BEVEL_SEGMENTS}
                   step={1}
                   precision={0}
                   className="w-[62px] animate-fade-in"
@@ -2266,7 +2443,7 @@ export default function AppLayout() {
               </div>
             </div>
             <div className="flex items-center justify-between gap-3 -mx-1 px-1 py-1">
-              <span className="w-24 shrink-0 text-[11px] text-zinc-400">Quality</span>
+              <span className="w-24 shrink-0 text-[11px] text-muted-foreground">Quality</span>
               <span className="flex-1" />
               <NumberField
                 value={geometryQuality}
@@ -2284,28 +2461,9 @@ export default function AppLayout() {
 
           {/* Motion */}
           <div className="flex flex-col gap-1.5 pb-4">
-            <div className="flex items-center gap-2 pb-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
+            <div className="flex items-center gap-2 pb-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
               <Orbit className="size-3.5" />
               Motion
-            </div>
-
-            <div className="flex items-center justify-between gap-3 -mx-1 px-1 py-1">
-              <span className="w-24 shrink-0 text-[11px] text-zinc-400">Duration</span>
-              <span className="flex-1" />
-              <NumberField
-                value={duration}
-                min={0.5}
-                max={30}
-                step={0.1}
-                precision={1}
-                suffix="s"
-                onChange={(value) => {
-                  const next = clampNumber(value, 0.5, 30);
-                  setDuration(next);
-                  setCurrentTime((time) => clampNumber(time, 0, next));
-                  setActiveRecipeId(null);
-                }}
-              />
             </div>
 
             {/* Rotation — X/Y/Z, Y is the animated hero rotation */}
@@ -2345,8 +2503,8 @@ export default function AppLayout() {
 
             {/* Scale */}
             <div ref={inspectorRefs.scale} className={motionPropertyRowClass('scale')} onClick={() => setSelectedMotionTrackId('scale')}>
-              <Maximize2 className="size-3.5 shrink-0 text-zinc-500" />
-              <span className="w-10 shrink-0 text-[11px] text-zinc-300">Scale</span>
+              <Maximize2 className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="w-10 shrink-0 text-[11px] text-foreground">Scale</span>
               {(() => {
                 const scaleValue = finiteNumber(scaleTrack.keyframes.length > 0 ? activeObjectScale : objectScale, SCALE_DEFAULT);
                 return (
@@ -2366,8 +2524,8 @@ export default function AppLayout() {
               })()}
             </div>
 
-            <div className="flex items-center justify-between gap-3 -mx-1 px-1 py-1">
-              <span className="w-14 shrink-0 text-[11px] text-zinc-400">Move</span>
+            <div ref={inspectorRefs.move} className={motionPropertyRowClass('move')} onClick={() => setSelectedMotionTrackId('move')}>
+              <span className="w-14 shrink-0 text-[11px] text-muted-foreground">Move</span>
               <span className="flex-1" />
               <div className="flex h-7 items-center gap-1.5">
                 {([
@@ -2377,7 +2535,7 @@ export default function AppLayout() {
                 ]).map(({ label, axis }) => (
                   <NumberField
                     key={axis}
-                    value={moveOffset[axis]}
+                    value={activeMoveOffset[axis]}
                     min={-100}
                     max={100}
                     step={1}
@@ -2386,16 +2544,16 @@ export default function AppLayout() {
                     className="h-7 w-[55px]"
                     inputClassName="text-right pr-0.5"
                     onChange={(value) => {
-                      setMoveOffset((prev) => ({ ...prev, [axis]: clampNumber(value, -100, 100) }));
-                      setActiveRecipeId(null);
+                      updateMoveAxis(axis, value);
                     }}
                   />
                 ))}
               </div>
+              {renderMoveKeyframeControl()}
             </div>
 
             <div className="flex items-center justify-between gap-3 -mx-1 px-1 py-1">
-              <span className="w-24 shrink-0 text-[11px] text-zinc-400">Center Pull</span>
+              <span className="w-24 shrink-0 text-[11px] text-muted-foreground">Center Pull</span>
               <span className="flex-1" />
               <NumberField
                 value={centerPull}
@@ -2422,7 +2580,7 @@ export default function AppLayout() {
                   onToggleKeyframe={toggleLightPositionKeyframeAtPlayhead}
                 />
               </div>
-              <span className="w-10 shrink-0 text-[11px] text-zinc-300">Light</span>
+              <span className="w-10 shrink-0 text-[11px] text-foreground">Light</span>
               {(() => {
                 const brightnessValue = finiteNumber(lightingTrack.keyframes.length > 0 ? activeKeyLightIntensity : keyLightIntensity, 1);
                 return (
@@ -2446,6 +2604,7 @@ export default function AppLayout() {
       <div className={`transition-all duration-500 ease-in-out shrink-0 overflow-hidden ${zenMode ? 'h-0 border-t-0' : 'h-[184px] border-t border-border bg-background dark:bg-[#0f1012]'}`}>
         <Timeline
           duration={duration}
+          onDurationChange={handleDurationChange}
           currentTime={currentTime}
           onTimeChange={setCurrentTime}
           onScrubStart={handleScrubStart}

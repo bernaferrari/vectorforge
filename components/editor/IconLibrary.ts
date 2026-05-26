@@ -109,27 +109,15 @@ export async function fetchMaterialSymbolIcon(name: string, style: MaterialSymbo
 export async function fetchMaterialSymbolNames(): Promise<string[]> {
   if (materialSymbolNamesCache) return materialSymbolNamesCache;
 
-  try {
-    const response = await fetch('https://api.github.com/repos/google/material-design-icons/git/trees/master?recursive=1');
-    if (!response.ok) throw new Error('GitHub catalog unavailable');
-    const data = await response.json() as { tree?: Array<{ path?: string; type?: string }> };
-    const names = new Set<string>();
-    for (const entry of data.tree ?? []) {
-      const match = entry.path?.match(/^symbols\/web\/([^/]+)\/materialsymbolsoutlined\/\1_24px\.svg$/);
-      if (match) names.add(match[1]);
-    }
-    if (names.size > 0) {
-      materialSymbolNamesCache = Array.from(names).sort((a, b) => a.localeCompare(b));
-      return materialSymbolNamesCache;
-    }
-  } catch {
-    // Fall through to the lighter Google Fonts metadata endpoint.
+  const response = await fetch('https://api.github.com/repos/google/material-design-icons/git/trees/master?recursive=1');
+  if (!response.ok) throw new Error('Material Symbols catalog unavailable.');
+  const data = await response.json() as { tree?: Array<{ path?: string; type?: string }> };
+  const names = new Set<string>();
+  for (const entry of data.tree ?? []) {
+    const match = entry.path?.match(/^symbols\/web\/([^/]+)\/materialsymbolsoutlined\/\1_24px\.svg$/);
+    if (match) names.add(match[1]);
   }
-
-  const response = await fetch('https://fonts.google.com/metadata/icons');
-  const raw = await response.text();
-  const data = JSON.parse(raw.replace(/^\)\]\}'\n?/, '')) as { icons?: Array<{ name: string }> };
-  materialSymbolNamesCache = Array.from(new Set((data.icons ?? []).map((icon) => icon.name))).sort((a, b) => a.localeCompare(b));
+  materialSymbolNamesCache = Array.from(names).sort((a, b) => a.localeCompare(b));
   return materialSymbolNamesCache;
 }
 

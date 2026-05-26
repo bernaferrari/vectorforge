@@ -497,13 +497,13 @@ function SolidColorEditor({
   }
 
   return (
-    <div className={cn("space-y-3", framed && "rounded-xl border border-white/[0.08] bg-[#242424] p-3 pb-2 shadow-xl")}>
+    <div className={cn("space-y-3", framed && "rounded-xl border border-border bg-popover p-3 pb-2 text-popover-foreground shadow-xl")}>
       <div
         ref={canvasRef}
         onMouseDown={handleCanvasStart}
         onTouchStart={handleCanvasStart}
         className={cn(
-          "relative w-full cursor-crosshair select-none overflow-hidden rounded-lg border border-white/[0.08] bg-[#242424] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.18)]",
+          "relative w-full cursor-crosshair select-none overflow-hidden rounded-lg border border-border bg-muted shadow-[inset_0_0_0_1px_hsl(var(--border)/0.45)]",
           compact ? "h-40" : "h-56"
         )}
       >
@@ -514,7 +514,7 @@ function SolidColorEditor({
           }}
         />
         <div
-          className="absolute z-10 flex size-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-transparent shadow-[0_1px_7px_rgba(0,0,0,0.65)]"
+          className="absolute z-10 flex size-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-background bg-transparent shadow-[0_1px_7px_rgba(0,0,0,0.45)]"
           style={{
             left: `${s}%`,
             top: `${100 - v}%`,
@@ -526,13 +526,13 @@ function SolidColorEditor({
         ref={hueRef}
         onMouseDown={handleHueStart}
         onTouchStart={handleHueStart}
-        className="relative h-4.5 w-full cursor-pointer rounded-full border border-black/30 shadow-inner"
+        className="relative h-4.5 w-full cursor-pointer rounded-full border border-border shadow-inner"
         style={{
           background: "linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)",
         }}
       >
         <div
-          className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-transparent shadow-[0_1px_4px_rgba(0,0,0,0.55)]"
+          className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background bg-transparent shadow-[0_1px_4px_rgba(0,0,0,0.38)]"
           style={{ left: `clamp(8px, ${(h / 360) * 100}%, calc(100% - 8px))` }}
         />
       </div>
@@ -542,7 +542,7 @@ function SolidColorEditor({
           ref={alphaRef}
           onMouseDown={handleAlphaStart}
           onTouchStart={handleAlphaStart}
-          className="relative h-4.5 w-full cursor-pointer rounded-full border border-black/30 shadow-inner"
+          className="relative h-4.5 w-full cursor-pointer rounded-full border border-border shadow-inner"
           style={{
             backgroundColor: "#fff",
             backgroundImage: `linear-gradient(to right, rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0), rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 1)), linear-gradient(45deg, #8b8b8b 25%, transparent 25%), linear-gradient(-45deg, #8b8b8b 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #8b8b8b 75%), linear-gradient(-45deg, transparent 75%, #8b8b8b 75%)`,
@@ -551,7 +551,7 @@ function SolidColorEditor({
           }}
         >
           <div
-            className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-transparent shadow-[0_1px_4px_rgba(0,0,0,0.55)]"
+            className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background bg-transparent shadow-[0_1px_4px_rgba(0,0,0,0.38)]"
             style={{ left: `clamp(8px, ${alpha * 100}%, calc(100% - 8px))` }}
           />
         </div>
@@ -559,21 +559,21 @@ function SolidColorEditor({
 
       {format === "HEX" ? null : (
         <div className="flex items-center gap-2 text-[12px]">
-          <div className="relative h-8 w-[72px] shrink-0 rounded-lg border border-white/[0.09] bg-white/[0.06]">
+          <div className="relative h-8 w-[72px] shrink-0 rounded-lg border border-border bg-muted/60">
             <select
               value={format}
               onChange={(event) => setFormat(event.target.value as ColorFormat)}
-              className="h-full w-full appearance-none rounded-lg bg-transparent pl-3 pr-8 text-zinc-100 outline-none"
+              className="h-full w-full appearance-none rounded-lg bg-transparent pl-3 pr-8 text-foreground outline-none"
             >
               <option value="HEX">HEX</option>
               <option value="RGB">RGB</option>
               <option value="HSL">HSL</option>
               <option value="HSB">HSB</option>
             </select>
-            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-zinc-300" />
+            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           </div>
           <div className={cn(
-            "grid min-w-0 flex-1 gap-px rounded-lg bg-black/25",
+            "grid min-w-0 flex-1 gap-px rounded-lg bg-border",
             ENABLE_ALPHA ? "grid-cols-4" : "grid-cols-3"
           )}>
           {formatValues.map((value, index) => (
@@ -583,21 +583,21 @@ function SolidColorEditor({
               value={Math.round(value)}
               onChange={(event) => updateFormatValue(index, event.target.value)}
               className={cn(
-                "h-8 min-w-0 border border-white/[0.07] bg-white/[0.04] text-center font-mono text-zinc-100 outline-none",
+                "h-8 min-w-0 border border-border bg-muted/45 text-center font-mono text-foreground outline-none",
                 index === 0 && "rounded-l-lg",
                 index === formatValues.length - 1 && !ENABLE_ALPHA && "rounded-r-lg"
               )}
             />
           ))}
           {ENABLE_ALPHA && (
-            <div className="flex h-8 min-w-0 items-center rounded-r-lg border border-white/[0.07] bg-white/[0.04] px-1 font-mono text-zinc-100">
+            <div className="flex h-8 min-w-0 items-center rounded-r-lg border border-border bg-muted/45 px-1 font-mono text-foreground">
               <input
                 type="text"
                 value={Math.round(alpha * 100)}
                 onChange={(event) => handleAlphaChange(event.target.value)}
-                className="min-w-0 flex-1 border-0 bg-transparent p-0 text-center font-mono text-zinc-100 outline-none"
+                className="min-w-0 flex-1 border-0 bg-transparent p-0 text-center font-mono text-foreground outline-none"
               />
-              <span className="text-zinc-400">%</span>
+              <span className="text-muted-foreground">%</span>
             </div>
           )}
           </div>
@@ -607,22 +607,22 @@ function SolidColorEditor({
       {format === "HEX" && (
       <div className="flex items-center gap-2">
         {format === "HEX" && (
-          <div className="relative h-8 w-[72px] shrink-0 rounded-lg border border-white/[0.09] bg-white/[0.06]">
+          <div className="relative h-8 w-[72px] shrink-0 rounded-lg border border-border bg-muted/60">
             <select
               value={format}
               onChange={(event) => setFormat(event.target.value as ColorFormat)}
-              className="h-full w-full appearance-none rounded-lg bg-transparent pl-3 pr-8 text-[11px] text-zinc-200 outline-none"
+              className="h-full w-full appearance-none rounded-lg bg-transparent pl-3 pr-8 text-[11px] text-foreground outline-none"
             >
               <option value="HEX">HEX</option>
               <option value="RGB">RGB</option>
               <option value="HSL">HSL</option>
               <option value="HSB">HSB</option>
             </select>
-            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-zinc-300" />
+            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           </div>
         )}
-        <div className="flex h-8 min-w-0 flex-1 items-center gap-1 rounded-lg border border-white/[0.07] bg-black/25 px-2.5">
-          <span className="font-mono text-[10px] font-bold text-zinc-500">#</span>
+        <div className="flex h-8 min-w-0 flex-1 items-center gap-1 rounded-lg border border-border bg-muted/45 px-2.5">
+          <span className="font-mono text-[10px] font-bold text-muted-foreground">#</span>
           <input
             type="text"
             value={inputText.replace(/^#/, "")}
@@ -630,7 +630,7 @@ function SolidColorEditor({
             onKeyDown={handleKeyDown}
             onBlur={handleBlur}
             placeholder="FFFFFF"
-            className="min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-xs uppercase text-white outline-none focus:ring-0"
+            className="min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-xs uppercase text-foreground outline-none focus:ring-0"
           />
         </div>
       </div>
@@ -972,22 +972,22 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
     <Popover>
       <PopoverTrigger
         className={cn(
-          "flex items-center gap-2 rounded-lg border border-white/[0.08] bg-black/20 px-2.5 py-2 text-left transition-colors hover:border-white/20 hover:bg-white/[0.04] focus:outline-none focus:ring-2 focus:ring-white/25 active:scale-[0.99]",
+          "flex items-center gap-2 rounded-lg border border-border bg-muted/45 px-2.5 py-2 text-left transition-colors hover:border-ring/50 hover:bg-muted/70 focus:outline-none focus:ring-2 focus:ring-ring/35 active:scale-[0.99]",
           className
         )}
       >
         <div
-          className="size-4 shrink-0 rounded-md border border-white/15 shadow-sm"
+          className="size-4 shrink-0 rounded-md border border-border shadow-sm"
           style={{ background: isGradient ? gradientCss : primaryHex }}
         />
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px] font-medium uppercase tracking-wide text-zinc-300">
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] font-medium uppercase tracking-wide text-foreground">
           {isGradient ? "Gradient" : primaryHex}
         </span>
       </PopoverTrigger>
 
       <PopoverContent
         className={cn(
-          "overflow-hidden rounded-xl border border-white/[0.12] bg-[#2b2b2b]/98 p-0 text-white shadow-2xl backdrop-blur-xl z-50 select-none",
+          "z-50 select-none overflow-hidden rounded-xl border border-border bg-popover p-0 text-popover-foreground shadow-2xl backdrop-blur-xl",
           "w-[260px]"
         )}
         align="start"
@@ -996,7 +996,7 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
         <div className={cn("space-y-3", isGradient ? "py-2 pb-2" : "p-3 pb-2")}>
           {supportsGradient && (
             <div className={cn(
-              "flex items-center gap-1 rounded-lg border border-white/[0.08] bg-black/25 p-0.5",
+              "flex items-center gap-1 rounded-lg border border-border bg-muted/45 p-0.5",
               isGradient && "mx-2"
             )}>
               <button
@@ -1004,7 +1004,7 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
                 onClick={() => onGradientToggle?.(false)}
                 className={cn(
                   "h-7 flex-1 rounded-md text-[10px] font-medium transition-colors",
-                  !isGradient ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200"
+                  !isGradient ? "bg-foreground text-background shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
                 Solid
@@ -1019,7 +1019,7 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
                   }}
                   className={cn(
                     "h-7 flex-1 rounded-md text-[10px] font-medium transition-colors",
-                    isGradient && gradientType === type.id ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200"
+                    isGradient && gradientType === type.id ? "bg-foreground text-background shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
                   {type.label}
@@ -1032,7 +1032,7 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
             <div className="space-y-3">
               <div
                 ref={gradientRailRef}
-                className="relative mx-5 mt-6 h-9 rounded-md border border-white/[0.10] bg-white/[0.04]"
+                className="relative mx-5 mt-6 h-9 rounded-md border border-border bg-muted/35"
                 onPointerDown={(event) => {
                   if (event.button !== 0) return
                   event.preventDefault()
@@ -1052,22 +1052,22 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
                     className={cn(
                       "absolute -top-5 flex size-7 -translate-x-1/2 touch-none items-center justify-center rounded-[7px] shadow-[0_2px_7px_rgba(0,0,0,0.35)] transition-colors after:absolute after:left-1/2 after:bottom-[-5px] after:h-0 after:w-0 after:-translate-x-1/2 after:border-x-[5px] after:border-t-[6px] after:border-x-transparent",
                       activeStop === stop || openStopEditor === stop
-                        ? "bg-[#1797e8] after:border-t-[#1797e8]"
-                        : "bg-[#4a4a4a] after:border-t-[#4a4a4a] hover:bg-[#565656] hover:after:border-t-[#565656]"
+                        ? "bg-primary after:border-t-primary"
+                        : "bg-muted after:border-t-muted hover:bg-muted/80 hover:after:border-t-muted/80"
                     )}
                     style={{ left: `${normalizedStops[stop].position * 100}%` }}
                   >
-                    <span className="relative z-10 size-4.5 rounded-[5px] border border-white/35 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]" style={{ backgroundColor: normalizedStops[stop].color }} />
+                    <span className="relative z-10 size-4.5 rounded-[5px] border border-background/65 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]" style={{ backgroundColor: normalizedStops[stop].color }} />
                   </button>
                 ))}
               </div>
 
               <div className="space-y-2">
                 <div className="grid h-6 grid-cols-[1fr_28px] items-center px-2">
-                  <span className="text-[13px] font-semibold text-zinc-100">Stops</span>
+                  <span className="text-[13px] font-semibold text-foreground">Stops</span>
                   <button
                     type="button"
-                    className="ml-1 flex size-6 items-center justify-center rounded-md text-xl font-light leading-none text-zinc-100 hover:bg-white/[0.06]"
+                    className="ml-1 flex size-6 items-center justify-center rounded-md text-xl font-light leading-none text-foreground hover:bg-muted"
                     onClick={() => {
                       const position = 0.5
                       const nextStops = [...normalizedStops, { color: colorAtPosition(position), position }]
@@ -1093,11 +1093,11 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
                       }}
                       className={cn(
                         "grid h-9 w-full grid-cols-[48px_minmax(0,1fr)_28px] items-center gap-x-2 px-2 text-left text-[13px]",
-                        active ? "bg-[#53607f]" : "hover:bg-white/[0.04]"
+                        active ? "bg-accent text-accent-foreground" : "hover:bg-muted/60"
                       )}
                     >
                       <label
-                        className="flex h-7 items-center rounded-md bg-white/[0.07] px-1.5 font-mono tabular-nums text-zinc-100 focus-within:ring-2 focus-within:ring-white/25"
+                        className="flex h-7 items-center rounded-md bg-muted/60 px-1.5 font-mono tabular-nums text-foreground focus-within:ring-2 focus-within:ring-ring/35"
                         onClick={(event) => event.stopPropagation()}
                         onPointerDown={(event) => event.stopPropagation()}
                       >
@@ -1107,7 +1107,7 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
                           inputMode="decimal"
                           aria-label={`Stop ${stop + 1} position`}
                           defaultValue={Math.round(stopItem.position * 100)}
-                          className="h-full min-w-0 flex-1 bg-transparent p-0 text-center font-mono text-[13px] text-zinc-100 outline-none"
+                          className="h-full min-w-0 flex-1 bg-transparent p-0 text-center font-mono text-[13px] text-foreground outline-none"
                           onFocus={(event) => {
                             setActiveStop(stop)
                             event.currentTarget.select()
@@ -1124,9 +1124,9 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
                             }
                           }}
                         />
-                        <span className="text-[12px] text-zinc-400">%</span>
+                        <span className="text-[12px] text-muted-foreground">%</span>
                       </label>
-                      <span className="flex h-7 min-w-0 items-center gap-2 rounded-md bg-white/[0.07] px-2 font-mono uppercase text-zinc-100 focus-within:ring-2 focus-within:ring-white/25" onClick={(event) => event.stopPropagation()}>
+                      <span className="flex h-7 min-w-0 items-center gap-2 rounded-md bg-muted/60 px-2 font-mono uppercase text-foreground focus-within:ring-2 focus-within:ring-ring/35" onClick={(event) => event.stopPropagation()}>
                         <Popover
                           open={openStopEditor === stop}
                           onOpenChange={(open) => {
@@ -1134,12 +1134,12 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
                             if (open) setActiveStop(stop)
                           }}
                         >
-                          <PopoverTrigger className="size-4.5 shrink-0 rounded-[4px] border border-white/15 focus:outline-none focus:ring-2 focus:ring-white/30" style={{ backgroundColor: stopColor }} />
+                          <PopoverTrigger className="size-4.5 shrink-0 rounded-[4px] border border-border focus:outline-none focus:ring-2 focus:ring-ring/35" style={{ backgroundColor: stopColor }} />
                           <PopoverContent
                             align="start"
                             side="left"
                             sideOffset={12}
-                            className="w-[210px] rounded-xl border border-white/[0.12] bg-[#242424]/98 p-3 pb-2 text-white shadow-2xl backdrop-blur-xl"
+                            className="w-[210px] rounded-xl border border-border bg-popover p-3 pb-2 text-popover-foreground shadow-2xl backdrop-blur-xl"
                           >
                             <SolidColorEditor
                               h={h}
@@ -1172,7 +1172,7 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
                           spellCheck={false}
                           aria-label={`Stop ${stop + 1} color`}
                           defaultValue={stopColor.replace(/^#/, "").toUpperCase()}
-                          className="h-full min-w-0 flex-1 bg-transparent p-0 font-mono text-[12px] uppercase text-white outline-none"
+                          className="h-full min-w-0 flex-1 bg-transparent p-0 font-mono text-[12px] uppercase text-foreground outline-none"
                           onFocus={(event) => {
                             setActiveStop(stop)
                             event.currentTarget.select()
@@ -1197,10 +1197,10 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
                         aria-label="Remove gradient stop"
                         disabled={!canRemoveStop}
                         className={cn(
-                          "ml-0.5 flex size-6 items-center justify-center rounded-md text-xl font-light focus:outline-none focus:ring-2 focus:ring-white/30",
+                          "ml-0.5 flex size-6 items-center justify-center rounded-md text-xl font-light focus:outline-none focus:ring-2 focus:ring-ring/35",
                           canRemoveStop
-                            ? "text-zinc-300 hover:bg-white/[0.06] hover:text-white"
-                            : "cursor-default text-zinc-600"
+                            ? "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            : "cursor-default text-muted-foreground/35"
                         )}
                         onClick={(event) => {
                           event.stopPropagation()
@@ -1216,7 +1216,7 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
               </div>
 
               <div className="space-y-1.5 px-2">
-                <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-500">Presets</div>
+                <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Presets</div>
                 <div className="grid grid-cols-4 gap-1.5">
                   {GRADIENT_PRESETS.map((preset) => (
                     <button
@@ -1224,7 +1224,7 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
                       type="button"
                       title={preset.name}
                       aria-label={`Use ${preset.name} gradient`}
-                      className="group flex h-8 min-w-0 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.03] p-1 transition-colors hover:border-white/20 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-white/25"
+                      className="group flex h-8 min-w-0 items-center justify-center rounded-md border border-border bg-muted/35 p-1 transition-colors hover:border-ring/50 hover:bg-muted/60 focus:outline-none focus:ring-2 focus:ring-ring/35"
                       onPointerDown={(event) => {
                         event.preventDefault()
                         event.stopPropagation()
@@ -1233,7 +1233,7 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
                       onClick={(event) => event.stopPropagation()}
                     >
                       <span
-                        className="block h-full w-full rounded-[5px] border border-white/[0.10] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)]"
+                        className="block h-full w-full rounded-[5px] border border-border shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)]"
                         style={{ background: gradientPreviewCss(preset.type, preset.stops) }}
                       />
                     </button>
