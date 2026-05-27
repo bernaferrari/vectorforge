@@ -204,13 +204,12 @@ const WipePairPreview: React.FC<{
   return (
     <span className="relative grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted/45 ring-1 ring-border transition-[background-color,box-shadow] duration-200 ease-out group-hover/pair:bg-muted/65 group-hover/pair:ring-ring/45">
       <span className="absolute inset-0 bg-ring/10 opacity-0 transition-opacity duration-200 ease-out group-hover/pair:opacity-100" />
-      <span className={`${className} absolute left-1/2 top-1/2 grid size-6 -translate-x-1/2 -translate-y-1/2 place-items-center text-center text-[24px] leading-[24px] text-foreground`} style={style}>
-        {pair.enabled}
+      <span className="wipe-pair-preview-layer wipe-pair-preview-base absolute inset-0 grid place-items-center">
+        <span className={`${className} absolute left-1/2 top-1/2 grid size-6 -translate-x-1/2 -translate-y-1/2 place-items-center text-center text-[24px] leading-[24px] text-foreground`} style={style}>
+          {pair.enabled}
+        </span>
       </span>
-      <span
-        className="absolute inset-0 grid place-items-center [clip-path:polygon(-24%_-24%,-24%_-24%,-24%_-24%,-24%_-24%,-24%_-24%,-24%_-24%)] transition-[clip-path] duration-300 ease-out group-hover/pair:[clip-path:polygon(-24%_-24%,124%_-24%,124%_124%,124%_124%,-24%_124%,-24%_-24%)]"
-        style={style}
-      >
+      <span className="wipe-pair-preview-layer wipe-pair-preview-wiped absolute inset-0 grid place-items-center">
         <span className={`${className} absolute left-1/2 top-1/2 grid size-6 -translate-x-1/2 -translate-y-1/2 place-items-center text-center text-[24px] leading-[24px] text-foreground`} style={style}>
           {disabledSymbol}
         </span>
@@ -712,7 +711,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   const [materialSymbolNames, setMaterialSymbolNames] = useState<string[]>([]);
   const [materialCatalogLoading, setMaterialCatalogLoading] = useState(false);
   const [materialSymbolStatus, setMaterialSymbolStatus] = useState<{ state: 'idle' | 'loading' | 'error'; message?: string }>({ state: 'idle' });
-  const [useRealWipePairSymbol, setUseRealWipePairSymbol] = useState(false);
+  const [wipePairMode, setWipePairMode] = useState<'slash' | 'morph'>('slash');
   const shapeDraggedRef = useRef(false);
   const morphResizedRef = useRef(false);
   const keyframeDraggedRef = useRef(false);
@@ -939,7 +938,7 @@ export const Timeline: React.FC<TimelineProps> = ({
         const [enabled, disabled] = await Promise.all([
           fetchMaterialSymbolIcon(pair.enabled, materialSymbolStyle),
           fetchMaterialSymbolIcon(pair.disabled, materialSymbolStyle, {
-            syntheticOffSlash: !useRealWipePairSymbol,
+            syntheticOffSlash: wipePairMode === 'slash',
           }),
         ]);
         onShapeWipePairChange(shapeId, enabled, disabled);
@@ -2299,12 +2298,12 @@ export const Timeline: React.FC<TimelineProps> = ({
                         <div className="mb-3 border-t border-border pt-2">
                           <div className="mb-2 flex items-center justify-between px-0.5">
                             <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Wipe pairs</span>
-                            <label className="flex cursor-pointer items-center gap-1.5 text-[10px] text-muted-foreground" title="Use the real Material Symbol off glyph instead of adding a slash over the base glyph">
-                              <span>{useRealWipePairSymbol ? 'true' : 'fake'}</span>
+                            <label className="flex cursor-pointer items-center gap-1.5 text-[10px] text-muted-foreground" title="Morph uses the real Material Symbol off glyph. Slash adds a clean overlay to the base glyph.">
+                              <span>{wipePairMode === 'morph' ? 'Morph' : 'Slash'}</span>
                               <Switch
                                 size="sm"
-                                checked={useRealWipePairSymbol}
-                                onCheckedChange={setUseRealWipePairSymbol}
+                                checked={wipePairMode === 'morph'}
+                                onCheckedChange={(checked) => setWipePairMode(checked ? 'morph' : 'slash')}
                                 onClick={(event) => event.stopPropagation()}
                               />
                             </label>
@@ -2314,15 +2313,15 @@ export const Timeline: React.FC<TimelineProps> = ({
                               <button
                                 key={`wipe-pair-${stop.id}-${pair.enabled}-${pair.disabled}`}
                                 type="button"
-                                title={`${pair.label}: ${pair.enabled} → ${useRealWipePairSymbol ? pair.disabled : `${pair.disabled} (slash overlay)`}`}
+                                title={`${pair.label}: ${pair.enabled} → ${wipePairMode === 'morph' ? pair.disabled : `${pair.disabled} (slash overlay)`}`}
                                 onClick={() => chooseWipePair(stop.id, pair)}
-                                className="group/pair flex h-11 min-w-0 items-center gap-2 rounded-lg border border-border bg-muted/35 px-2 text-left transition-colors hover:border-ring/45 hover:bg-muted/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                                className="wipe-pair-option group/pair flex h-11 min-w-0 items-center gap-2 rounded-lg border border-border bg-muted/35 px-2 text-left transition-colors hover:border-ring/45 hover:bg-muted/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                               >
                                 <WipePairPreview
                                   pair={pair}
                                   className={materialSymbolClass}
                                   style={materialSymbolFontStyle(materialSymbolSettings)}
-                                  mode={useRealWipePairSymbol ? 'real' : 'slash'}
+                                  mode={wipePairMode === 'morph' ? 'real' : 'slash'}
                                 />
                                 <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">{pair.label}</span>
                               </button>

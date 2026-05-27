@@ -161,6 +161,56 @@
   font-family: "Material Symbols Sharp";
 }
 
+@property --wipe-pair-progress {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: -18%;
+}
+
+.wipe-pair-preview-layer {
+  --wipe-pair-progress: -18%;
+  --wipe-pair-feather: 0.8%;
+  transition: --wipe-pair-progress 530ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: --wipe-pair-progress;
+}
+
+.wipe-pair-preview-base {
+  -webkit-mask-image: linear-gradient(
+    135deg,
+    transparent 0 calc(var(--wipe-pair-progress) - var(--wipe-pair-feather)),
+    #000 calc(var(--wipe-pair-progress) + var(--wipe-pair-feather)) 100%
+  );
+  mask-image: linear-gradient(
+    135deg,
+    transparent 0 calc(var(--wipe-pair-progress) - var(--wipe-pair-feather)),
+    #000 calc(var(--wipe-pair-progress) + var(--wipe-pair-feather)) 100%
+  );
+}
+
+.wipe-pair-preview-wiped {
+  -webkit-mask-image: linear-gradient(
+    135deg,
+    #000 0 calc(var(--wipe-pair-progress) - var(--wipe-pair-feather)),
+    transparent calc(var(--wipe-pair-progress) + var(--wipe-pair-feather)) 100%
+  );
+  mask-image: linear-gradient(
+    135deg,
+    #000 0 calc(var(--wipe-pair-progress) - var(--wipe-pair-feather)),
+    transparent calc(var(--wipe-pair-progress) + var(--wipe-pair-feather)) 100%
+  );
+}
+
+.wipe-pair-option:hover .wipe-pair-preview-layer,
+.wipe-pair-option:focus-visible .wipe-pair-preview-layer {
+  --wipe-pair-progress: 118%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wipe-pair-preview-layer {
+    transition: none;
+  }
+}
+
 /* =========================================================================
    CUSTOM SHADCN-STYLE PREMIUM COMPONENT STYLING
    ========================================================================= */

@@ -13,12 +13,13 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { ColorPicker, CompactColorInput } from '@/components/ui/color-picker';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { PRESET_ICONS, PresetIcon } from './IconLibrary';
+import { fetchMaterialSymbolIcon, PRESET_ICONS, PresetIcon } from './IconLibrary';
 import { SvgCanvas, SvgCanvasRef } from '../3d/SvgCanvas';
 import { MaterialPresetId } from '../3d/MaterialPresets';
 import { Timeline, TimelineTrack, TimelinePropertyRow, interpolateKeyframes, interpolateFillKeyframes, applyEasing, EasingType, ShapeStop, FillStop, FillKeyframe, FillGradientType, DEFAULT_TRANSITION_START, DEFAULT_TRANSITION_END } from './Timeline';
 import { ExportModal } from './ExportModal';
 import { MOTION_RECIPES } from './MotionRecipes';
+import { MATERIAL_WIPE_READY_PAIRS } from './MaterialWipePairs';
 import { bindWindowPointerDrag } from '@/lib/drag-events';
 
 const directions = [
@@ -765,16 +766,45 @@ export default function AppLayout() {
     setIsPlaying(false);
   };
 
-  // Seed the default heart→star sequence and apply the default look on mount.
+  // Seed the default sequence with a wipe-ready Material Symbol pair.
   useEffect(() => {
-    const heart = PRESET_ICONS.find((i) => i.id === 'heart');
-    const star = PRESET_ICONS.find((i) => i.id === 'star');
-    if (!heart || !star) return;
-    const initial = [makeStop(heart, 1.0), makeStop(star, 4.0)];
-    setShapes(initial);
-    setSelectedShapeId(initial[0].id);
+    let cancelled = false;
     const recipe = MOTION_RECIPES.find((r) => r.id === 'google-metal');
-    if (recipe) applyRecipe(recipe, initial);
+    const applyInitialShapes = (initial: ShapeStop[]) => {
+      if (cancelled) return;
+      setShapes(initial);
+      setSelectedShapeId(initial[0]?.id ?? null);
+      if (recipe) applyRecipe(recipe, initial);
+    };
+
+    void (async () => {
+      const pair = MATERIAL_WIPE_READY_PAIRS[0];
+      try {
+        const [enabled, disabled] = await Promise.all([
+          fetchMaterialSymbolIcon(pair.enabled, 'outlined'),
+          fetchMaterialSymbolIcon(pair.disabled, 'outlined', { syntheticOffSlash: true }),
+        ]);
+        const initial = [
+          {
+            ...makeStop(enabled, 1.0),
+            transitionType: 'wipe' as const,
+            wipeDirection: { x: 0.707, y: -0.707 },
+            easing: 'ease-in-out' as const,
+          },
+          makeStop(disabled, 4.0),
+        ];
+        applyInitialShapes(initial);
+      } catch {
+        const heart = PRESET_ICONS.find((i) => i.id === 'heart');
+        const star = PRESET_ICONS.find((i) => i.id === 'star');
+        if (!heart || !star) return;
+        applyInitialShapes([makeStop(heart, 1.0), makeStop(star, 4.0)]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // --- Shape sequence operations ---
@@ -1557,8 +1587,14 @@ export default function AppLayout() {
     if (sortedShapes.length === 0) return { from: fallback, to: fallback, progress: 0 };
     const first = sortedShapes[0];
     const last = sortedShapes[sortedShapes.length - 1];
-    if (sortedShapes.length === 1 || currentTime <= first.time) return { from: first, to: first, progress: 0 };
-    if (currentTime >= last.time) return { from: last, to: last, progress: 1 };
+    if (sortedShapes.length === 1) return { from: first, to: first, progress: 0 };
+
+    // Keep the same two icon meshes mounted outside the transition window.
+    // Returning first→first before the window and last→last after it forces
+    // SvgCanvas to rebuild geometry twice per loop, which shows up as playback
+    // stutter. Holding the surrounding pair and clamping progress avoids that.
+    if (currentTime <= first.time) return { from: first, to: sortedShapes[1], progress: 0 };
+    if (currentTime >= last.time) return { from: sortedShapes[sortedShapes.length - 2], to: last, progress: 1 };
     let i = 0;
     while (i < sortedShapes.length - 1 && !(currentTime >= sortedShapes[i].time && currentTime <= sortedShapes[i + 1].time)) i++;
     const from = sortedShapes[i];
@@ -2188,7 +2224,8 @@ export default function AppLayout() {
               }
             }
           }
-          return quantizeTimeToFrame(next);
+          const quantized = quantizeTimeToFrame(next);
+          return quantized === prev ? prev : quantized;
         });
 
         playheadRef.current = requestAnimationFrame(tick);
