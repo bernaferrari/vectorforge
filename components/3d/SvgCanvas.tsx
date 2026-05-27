@@ -287,11 +287,26 @@ const updateGroupMaterialState = (
       const baseOpacity = finiteNumber(material.userData?.baseOpacity, 1);
       const baseTransparent = Boolean(material.userData?.baseTransparent);
       const nextOpacity = Math.max(0, Math.min(1, baseOpacity * opacity));
-      material.opacity = nextOpacity;
-      material.transparent = baseTransparent || transparent || nextOpacity < 1;
-      material.clippingPlanes = clippingPlanes;
-      material.clipShadows = Boolean(clippingPlanes?.length);
-      material.needsUpdate = true;
+      const nextTransparent = baseTransparent || transparent || nextOpacity < 1;
+      const currentPlanes = material.clippingPlanes;
+      const nextPlaneCount = clippingPlanes?.length ?? 0;
+      const currentPlaneCount = currentPlanes?.length ?? 0;
+      const samePlanes =
+        currentPlaneCount === nextPlaneCount &&
+        (nextPlaneCount === 0 || clippingPlanes?.every((plane, index) => currentPlanes?.[index] === plane));
+
+      if (Math.abs(material.opacity - nextOpacity) > 0.0005) {
+        material.opacity = nextOpacity;
+      }
+      if (material.transparent !== nextTransparent) {
+        material.transparent = nextTransparent;
+        material.needsUpdate = true;
+      }
+      if (!samePlanes) {
+        material.clippingPlanes = clippingPlanes;
+        material.clipShadows = nextPlaneCount > 0;
+        material.needsUpdate = true;
+      }
     });
   });
 };

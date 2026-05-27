@@ -1366,6 +1366,13 @@ export default function AppLayout() {
 
   const playheadRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
+  const playbackTimeRef = useRef<number>(0);
+  const currentTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+    if (!isPlaying) playbackTimeRef.current = currentTime;
+  }, [currentTime, isPlaying]);
 
   // Keyframe timeline tracks (the morph itself lives on the separate Shape track)
   const [tracks, setTracks] = useState<TimelineTrack[]>([
@@ -2203,6 +2210,7 @@ export default function AppLayout() {
   // Real-time playhead progress loop
   useEffect(() => {
     if (isPlaying) {
+      playbackTimeRef.current = clampNumber(currentTimeRef.current, 0, duration);
       lastTimeRef.current = performance.now();
       const tick = () => {
         const now = performance.now();
@@ -2210,7 +2218,7 @@ export default function AppLayout() {
         lastTimeRef.current = now;
 
         setCurrentTime((prev) => {
-          let next = prev + delta;
+          let next = playbackTimeRef.current + delta;
           if (next >= duration) {
             if (loop) {
               next = next % duration;
@@ -2224,6 +2232,7 @@ export default function AppLayout() {
               }
             }
           }
+          playbackTimeRef.current = next;
           const quantized = quantizeTimeToFrame(next);
           return quantized === prev ? prev : quantized;
         });
@@ -2237,6 +2246,7 @@ export default function AppLayout() {
         cancelAnimationFrame(playheadRef.current);
         playheadRef.current = null;
       }
+      playbackTimeRef.current = currentTimeRef.current;
     }
 
     return () => {
@@ -2315,6 +2325,7 @@ export default function AppLayout() {
   const nextBreakpoint = timelineBreakpoints.find((time) => time > currentTime + 0.04);
   const atTimelineStart = currentTime <= 0.04;
   const atTimelineEnd = currentTime >= duration - 0.04;
+  const playbackProgress = duration > 0 ? clampNumber(currentTime / duration, 0, 1) : 0;
 
   const goToPreviousBreakpoint = () => {
     if (previousBreakpoint !== undefined) goToTime(previousBreakpoint);
@@ -2750,14 +2761,39 @@ export default function AppLayout() {
               >
                 <ChevronLeft size={16} />
               </Button>
-              <Button
-                size="icon"
-                onClick={handlePlayToggle}
-                aria-label={isPlaying ? 'Pause' : 'Play'}
-                className="size-10 rounded-full bg-foreground text-background hover:bg-foreground/85"
-              >
-                {isPlaying ? <Pause size={16} className="fill-current" /> : <Play size={16} className="fill-current" />}
-              </Button>
+              <div className="relative grid size-11 place-items-center">
+                {zenMode && (
+                  <svg className="pointer-events-none absolute inset-0 -rotate-90" viewBox="0 0 44 44" aria-hidden="true">
+                    <circle
+                      cx="22"
+                      cy="22"
+                      r="20"
+                      fill="none"
+                      stroke="var(--border)"
+                      strokeOpacity="0.5"
+                      strokeWidth="1.5"
+                    />
+                    <circle
+                      cx="22"
+                      cy="22"
+                      r="20"
+                      fill="none"
+                      stroke="var(--foreground)"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeDasharray={`${(playbackProgress * 125.66).toFixed(2)} 125.66`}
+                    />
+                  </svg>
+                )}
+                <Button
+                  size="icon"
+                  onClick={handlePlayToggle}
+                  aria-label={isPlaying ? 'Pause' : 'Play'}
+                  className="size-10 rounded-full bg-foreground text-background hover:bg-foreground/85"
+                >
+                  {isPlaying ? <Pause size={16} className="fill-current" /> : <Play size={16} className="fill-current" />}
+                </Button>
+              </div>
               <Button
                 size="icon"
                 variant="ghost"

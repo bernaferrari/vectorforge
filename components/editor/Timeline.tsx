@@ -871,9 +871,10 @@ export const Timeline: React.FC<TimelineProps> = ({
           'favorite', 'bookmark', 'share', 'refresh', 'sync', 'layers', 'dashboard', 'terminal', 'code', 'auto_awesome',
           'brush', 'format_paint', 'lightbulb', 'extension', 'widgets', 'animation', 'view_in_ar', 'deployed_code', 'gesture', 'emoji_objects',
         ];
+    const uniqueSource = Array.from(new Set(source));
     const filtered = query
-      ? source.filter((name) => name.includes(query))
-      : source;
+      ? uniqueSource.filter((name) => name.includes(query))
+      : uniqueSource;
     return filtered.slice(0, 80);
   }, [materialSymbolNames, normalizedShapeQuery]);
   const filteredWipePairs = useMemo(() => {
