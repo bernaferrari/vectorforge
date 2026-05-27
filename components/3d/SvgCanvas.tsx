@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import React, { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
 import * as THREE from 'three';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
+import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 import { createThreeMaterial, MaterialPresetId } from './MaterialPresets';
+import { createDiagonalWipePlanes } from './DiagonalWipe';
 import { isPrimaryButtonReleased } from '@/lib/drag-events';
 
 export interface PathOverride {
@@ -48,19 +50,20 @@ export interface SvgCanvasProps {
   bevelSegments: number;
   geometryQuality: number;
   layerSpacing: number;
+  innerElementScale: { x: number; y: number; z: number };
   transitionType: 'none' | 'wipe';
   wipeDirection: { x: number; y: number }; // (0,0) means Crossfade / Dissolve
   transitionProgress: number; // 0 to 1
   rotationOffset: { x: number; y: number; z: number };
   objectScale: number;
   moveOffset: { x: number; y: number; z: number };
-  centerPull: number;
   isPlaying: boolean;
   ambientColor: string;
   ambientIntensity: number;
   keyLightColor: string;
   keyLightIntensity: number;
   keyLightPosition: { x: number; y: number; z: number };
+  keyLightSoftness: number;
   rimLightColor: string;
   rimLightIntensity: number;
   zoom: number;
@@ -70,7 +73,8 @@ export interface SvgCanvasProps {
   pathOverridesB?: PathOverride[];
   onZoomChange?: (zoom: number) => void;
   onViewRotationCommit?: (rotationDelta: { x: number; y: number; z: number }) => void;
-  onViewRotationSet?: (rotation: Partial<{ x: number; y: number; z: number }>) => void;
+  onViewRotationSet?: (rotation: Partial<{ x: number; y: number; z: number }>, options?: { commit?: boolean }) => void;
+  onModelReadyChange?: (ready: boolean) => void;
 }
 
 export interface SvgCanvasRef {
@@ -88,6 +92,10 @@ const DEFAULT_VIEWPORT_FRACTION = 0.5;
 const CAMERA_FOV = 40;
 const MAX_BEVEL_SEGMENTS = 24;
 const GIZMO_SNAP_DEGREES = 45;
+const SVG_PATH_LAYER_GAP_RATIO = 0.018;
+const SVG_PATH_LAYER_GAP_MIN = 0.035;
+const VECTORFORGE_SLASH_DEPTH_RATIO = 0.16;
+const WIPE_SEAM_OVERLAP_WORLD = 0.8 * MODEL_SCALE;
 
 const applySvgModelScale = (group: THREE.Group) => {
   group.scale.set(MODEL_SCALE, -MODEL_SCALE, MODEL_SCALE);
@@ -287,6 +295,9 @@ const updateGroupMaterialState = (
     });
   });
 };
+
+const clamp01Number = (value: unknown, fallback = 0) =>
+  Math.max(0, Math.min(1, finiteNumber(value, fallback)));
 
 const materialLightMultiplier = (preset: MaterialPresetId) => {
   if (preset === 'chrome') return 2.35;
@@ -535,6 +546,59 @@ const meshGradientColorFromPalette = (palette: THREE.Color[], u: number, v: numb
   return saturateIcon3DColor(bezierColor(topRow, midRow, bottomRow, y));
 };
 
+const gradientColorFromStops = (stops: Array<{ color: string; position: number }>, t: number) => {
+  if (stops.length === 0) return new THREE.Color('#ffffff');
+  if (stops.length === 1) return new THREE.Color(stops[0].color);
+
+  const position = Math.max(0, Math.min(1, t));
+  const previous = [...stops].reverse().find((stop) => stop.position <= position) ?? stops[0];
+  const next = stops.find((stop) => stop.position >= position) ?? stops[stops.length - 1];
+  const span = Math.max(0.0001, next.position - previous.position);
+  const localT = previous === next ? 0 : (position - previous.position) / span;
+  return new THREE.Color(previous.color).lerp(new THREE.Color(next.color), localT);
+};
+
+const iconSpaceGradientColor = (
+  type: 'linear' | 'radial' | 'conic' | 'mesh',
+  stops: Array<{ color: string; position: number }>,
+  u: number,
+  v: number
+) => {
+  if (type === 'mesh') {
+    return meshGradientColorFromPalette(stops.map((stop) => new THREE.Color(stop.color)), u, v);
+  }
+  if (type === 'radial') {
+    const cx = 0.5;
+    const cy = 0.5;
+    const farthest = Math.max(
+      Math.hypot(cx, cy),
+      Math.hypot(1 - cx, cy),
+      Math.hypot(cx, 1 - cy),
+      Math.hypot(1 - cx, 1 - cy)
+    );
+    return gradientColorFromStops(stops, Math.hypot(u - cx, v - cy) / farthest);
+  }
+  if (type === 'conic') {
+    const angle = Math.atan2(v - 0.5, u - 0.5) / (Math.PI * 2) + 0.5;
+    return gradientColorFromStops(stops, angle - Math.floor(angle));
+  }
+
+  // Default to a recognizable diagonal 2D fill across the icon bounds.
+  const angle = THREE.MathUtils.degToRad(35);
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  const projection = u * dx + (1 - v) * dy;
+  const corners = [
+    0,
+    dx,
+    dy,
+    dx + dy,
+  ];
+  const min = Math.min(...corners);
+  const max = Math.max(...corners);
+  return gradientColorFromStops(stops, (projection - min) / Math.max(0.0001, max - min));
+};
+
 const paletteFromStops = (stops: GradientStop[] | undefined, fallbackA: string, fallbackB: string) => {
   const source = stops?.length ? stops : [
     { color: fallbackA, position: 0 },
@@ -545,15 +609,35 @@ const paletteFromStops = (stops: GradientStop[] | undefined, fallbackA: string, 
     .map((stop) => new THREE.Color(stop.color.startsWith('#') ? stop.color : `#${stop.color}`));
 };
 
-const applyIcon3DVertexColors = (geometry: THREE.BufferGeometry, palette: THREE.Color[]) => {
+const gradientStopsFromFill = (stops: GradientStop[] | undefined, fallbackA: string, fallbackB: string) => {
+  const source = stops?.length ? stops : [
+    { color: fallbackA, position: 0 },
+    { color: fallbackB, position: 1 },
+  ];
+  return [...source]
+    .map((stop) => ({
+      color: stop.color.startsWith('#') ? stop.color : `#${stop.color}`,
+      position: Math.max(0, Math.min(1, finiteNumber(stop.position, 0))),
+    }))
+    .sort((a, b) => a.position - b.position);
+};
+
+const applyGradientVertexColors = (
+  geometry: THREE.BufferGeometry,
+  type: 'linear' | 'radial' | 'conic' | 'mesh',
+  stops: Array<{ color: string; position: number }>,
+  iconBounds: THREE.Box2
+) => {
   const position = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
   if (!position) return;
+  const width = Math.max(0.0001, iconBounds.max.x - iconBounds.min.x);
+  const height = Math.max(0.0001, iconBounds.max.y - iconBounds.min.y);
 
   const colors = new Float32Array(position.count * 3);
   for (let index = 0; index < position.count; index += 1) {
-    const u = Math.max(0, Math.min(1, position.getX(index) / 24));
-    const v = Math.max(0, Math.min(1, position.getY(index) / 24));
-    const color = meshGradientColorFromPalette(palette, u, v);
+    const u = Math.max(0, Math.min(1, (position.getX(index) - iconBounds.min.x) / width));
+    const v = Math.max(0, Math.min(1, (position.getY(index) - iconBounds.min.y) / height));
+    const color = iconSpaceGradientColor(type, stops, u, v);
     colors[index * 3] = color.r;
     colors[index * 3 + 1] = color.g;
     colors[index * 3 + 2] = color.b;
@@ -576,8 +660,72 @@ const minContourDimension = (shape: THREE.Shape) => {
   return contourBoxes.length ? Math.min(...contourBoxes) : 0;
 };
 
-const getOrCreateGradientTexture = (color1: string, color2: string, type: 'linear' | 'radial' | 'conic' | 'mesh' = 'linear'): THREE.CanvasTexture => {
-  const key = `${type}_${color1}_${color2}`;
+const scaleInnerGeometryElements = (group: THREE.Group, scale: { x: number; y: number; z: number }) => {
+  const normalizedScale = {
+    x: Math.max(0.35, Math.min(1.35, finiteNumber(scale.x, 1))),
+    y: Math.max(0.35, Math.min(1.35, finiteNumber(scale.y, 1))),
+    z: Math.max(0.2, Math.min(1.35, finiteNumber(scale.z, 1))),
+  };
+  if (
+    Math.abs(normalizedScale.x - 1) < 0.001 &&
+    Math.abs(normalizedScale.y - 1) < 0.001 &&
+    Math.abs(normalizedScale.z - 1) < 0.001
+  ) return;
+
+  const candidates: Array<{ mesh: THREE.Mesh; area: number; center: THREE.Vector3; box: THREE.Box3 }> = [];
+  group.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.geometry) return;
+    mesh.geometry.computeBoundingBox();
+    const box = mesh.geometry.boundingBox;
+    if (!box || box.isEmpty()) return;
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const area = Math.abs(size.x * size.y);
+    if (!Number.isFinite(area) || area <= 0) return;
+    candidates.push({ mesh, area, center: box.getCenter(new THREE.Vector3()), box: box.clone() });
+  });
+
+  if (candidates.length < 2) return;
+  const outer = candidates.reduce((largest, candidate) => candidate.area > largest.area ? candidate : largest, candidates[0]);
+  const largestArea = outer.area;
+  const innerAreaThreshold = largestArea * 0.72;
+  const outerSize = new THREE.Vector3();
+  outer.box.getSize(outerSize);
+  const marginX = Math.max(0.04, outerSize.x * 0.035);
+  const marginY = Math.max(0.04, outerSize.y * 0.035);
+  const matrix = new THREE.Matrix4();
+
+  candidates.forEach(({ mesh, area, center, box }) => {
+    if (mesh === outer.mesh) return;
+    if (area >= innerAreaThreshold) return;
+    const isInsideOuterSilhouette =
+      box.min.x >= outer.box.min.x + marginX &&
+      box.max.x <= outer.box.max.x - marginX &&
+      box.min.y >= outer.box.min.y + marginY &&
+      box.max.y <= outer.box.max.y - marginY;
+    if (!isInsideOuterSilhouette) return;
+
+    matrix.identity()
+      .makeTranslation(-center.x, -center.y, -center.z)
+      .premultiply(new THREE.Matrix4().makeScale(normalizedScale.x, normalizedScale.y, normalizedScale.z))
+      .premultiply(new THREE.Matrix4().makeTranslation(center.x, center.y, center.z));
+    mesh.geometry.applyMatrix4(matrix);
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundingBox();
+    mesh.geometry.computeBoundingSphere();
+  });
+};
+
+const getOrCreateGradientTexture = (
+  color1: string,
+  color2: string,
+  type: 'linear' | 'radial' | 'conic' | 'mesh' = 'linear',
+  stops?: GradientStop[]
+): THREE.CanvasTexture => {
+  const normalizedStops = gradientStopsFromFill(stops, color1, color2);
+  const stopsKey = normalizedStops.map((stop) => `${stop.color}:${stop.position.toFixed(3)}`).join('|');
+  const key = `${type}_${stopsKey}`;
   if (gradientCache.has(key)) {
     return gradientCache.get(key)!;
   }
@@ -606,8 +754,12 @@ const getOrCreateGradientTexture = (color1: string, color2: string, type: 'linea
       : type === 'conic' && typeof ctx.createConicGradient === 'function'
         ? ctx.createConicGradient(Math.PI / 4, 128, 128)
         : ctx.createLinearGradient(0, 0, 256, 256);
-      grad.addColorStop(0, color1);
-      grad.addColorStop(1, color2);
+      normalizedStops.forEach((stop) => {
+        grad.addColorStop(stop.position, stop.color);
+      });
+      if (type === 'conic' && normalizedStops[0]) {
+        grad.addColorStop(1, normalizedStops[0].color);
+      }
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, 256, 256);
     }
@@ -623,6 +775,7 @@ const getOrCreateGradientTexture = (color1: string, color2: string, type: 'linea
 export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [modelReady, setModelReady] = useState(false);
   const colorAStopsKey = (props.colorAStops ?? []).map((stop) => `${stop.color}:${Number(stop.position).toFixed(3)}`).join('|');
   const colorBStopsKey = (props.colorBStops ?? []).map((stop) => `${stop.color}:${Number(stop.position).toFixed(3)}`).join('|');
 
@@ -635,6 +788,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
   // Lighting refs
   const ambientLightRef = useRef<THREE.AmbientLight | null>(null);
   const keyLightRef = useRef<THREE.DirectionalLight | null>(null);
+  const softboxLightRef = useRef<THREE.RectAreaLight | null>(null);
   const rimLightRef = useRef<THREE.DirectionalLight | null>(null);
 
   // Pivot and Mesh group refs
@@ -660,7 +814,6 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     rotationOffset: props.rotationOffset,
     objectScale: props.objectScale,
     moveOffset: props.moveOffset,
-    centerPull: props.centerPull,
     showCenterPoint: props.showCenterPoint,
     isPlaying: props.isPlaying,
     keyLightIntensity: props.keyLightIntensity
@@ -686,6 +839,11 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
   const markerXRef = useRef<SVGGElement>(null);
   const markerYRef = useRef<SVGGElement>(null);
   const markerZRef = useRef<SVGGElement>(null);
+  const viewNudgeFrameRef = useRef<number | null>(null);
+  const viewNudgeStateRef = useRef<Record<'x' | 'y', { value: number | null; target: number | null }>>({
+    x: { value: null, target: null },
+    y: { value: null, target: null },
+  });
 
   liveRenderPropsRef.current = {
     transitionType: props.transitionType,
@@ -694,7 +852,6 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     rotationOffset: props.rotationOffset,
     objectScale: props.objectScale,
     moveOffset: props.moveOffset,
-    centerPull: props.centerPull,
     showCenterPoint: props.showCenterPoint,
     isPlaying: props.isPlaying,
     keyLightIntensity: props.keyLightIntensity
@@ -702,6 +859,10 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
   onViewRotationCommitRef.current = props.onViewRotationCommit;
   onViewRotationSetRef.current = props.onViewRotationSet;
   viewInertiaEnabledRef.current = props.viewInertiaEnabled ?? true;
+
+  useEffect(() => {
+    props.onModelReadyChange?.(modelReady);
+  }, [modelReady, props.onModelReadyChange]);
 
   const applyViewRotationDelta = (delta: { x: number; y: number }) => {
     const rotationDelta = {
@@ -796,18 +957,6 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     }
   }));
 
-  // Update clipping plane direction normals
-  useEffect(() => {
-    if (clipPlaneARef.current && clipPlaneBRef.current) {
-      const vx = props.wipeDirection.x;
-      const vy = props.wipeDirection.y;
-      if (vx !== 0 || vy !== 0) {
-        clipPlaneARef.current.normal.set(-vx, -vy, 0).normalize();
-        clipPlaneBRef.current.normal.set(vx, vy, 0).normalize();
-      }
-    }
-  }, [props.wipeDirection]);
-
   // Synchronize sidebar zooms with internal targetZoomRef
   useEffect(() => {
     targetZoomRef.current = props.zoom;
@@ -835,6 +984,9 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     const baseBevelSegments = Math.max(0, Math.min(MAX_BEVEL_SEGMENTS, Math.round(finiteNumber(props.bevelSegments, 1))));
     const curveSegments = Math.max(8, Math.min(64, Math.round(1 / Math.max(0.015, finiteNumber(props.geometryQuality, 0.045)))));
     const layerSpacing = finiteNumber(props.layerSpacing, 0);
+    const pathLayerGap = paths.length > 1
+      ? Math.max(SVG_PATH_LAYER_GAP_MIN, baseDepth * SVG_PATH_LAYER_GAP_RATIO, layerSpacing * 0.06)
+      : 0;
 
     const extrudeSettings = {
       depth: baseDepth,
@@ -855,6 +1007,13 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     }
 
     const isCrossfade = props.transitionType === 'wipe' && props.wipeDirection.x === 0 && props.wipeDirection.y === 0;
+    // Material Symbols are authored in a stable 24x24 icon space. Keep color
+    // sampling in that same space so wipe pairs do not remap/reverse gradients
+    // when the incoming glyph has a different local bounding box.
+    const iconBounds = new THREE.Box2(
+      new THREE.Vector2(0, 0),
+      new THREE.Vector2(ICON_VIEWBOX_SIZE, ICON_VIEWBOX_SIZE)
+    );
 
     paths.forEach((path, pathIndex) => {
       // Apply path level overrides
@@ -863,23 +1022,18 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       
       const isVisible = override ? override.visible : true;
       if (!isVisible) return;
+      const isSlashOverlay = path.userData?.node?.getAttribute?.('data-vectorforge-slash') === 'true';
 
       const customColor = override?.color || (path.color ? `#${path.color.getHexString()}` : (isIconA ? props.colorA : props.colorB));
       const depthMultiplier = Math.max(0.02, finiteNumber(override ? override.depthMultiplier : 1.0, 1.0));
 
-      const useIcon3DMeshColors = props.enableGradient && props.gradientType === 'mesh';
-      const meshPalette = useIcon3DMeshColors
-        ? paletteFromStops(
-          isIconA ? props.colorAStops : props.colorBStops,
-          isIconA ? props.colorA : props.colorB,
-          isIconA ? (props.colorASecondary || props.colorA) : (props.colorBSecondary || props.colorB)
-        )
-        : [];
-      const textureMap = props.enableGradient && !useIcon3DMeshColors ? getOrCreateGradientTexture(
+      const gradientType = props.gradientType ?? 'linear';
+      const gradientStops = gradientStopsFromFill(
+        isIconA ? props.colorAStops : props.colorBStops,
         isIconA ? props.colorA : props.colorB,
-        isIconA ? (props.colorASecondary || props.colorA) : (props.colorBSecondary || props.colorB),
-        props.gradientType ?? 'linear'
-      ) : null;
+        isIconA ? (props.colorASecondary || props.colorA) : (props.colorBSecondary || props.colorB)
+      );
+      const useGradientVertexColors = Boolean(props.enableGradient);
 
       const pathMaterial = createThreeMaterial(props.materialPreset, {
         color: props.enableGradient ? '#ffffff' : customColor,
@@ -894,12 +1048,17 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
         wireframe: props.wireframe,
         opacity: isIconA ? (isCrossfade ? 1.0 - props.transitionProgress : 1.0)
                           : (isCrossfade ? props.transitionProgress : 1.0),
-        map: textureMap,
-        vertexColors: useIcon3DMeshColors
+        vertexColors: useGradientVertexColors
       }) as any;
 
       if (props.emissiveIntensity && props.emissiveIntensity > 0 && !props.enableGradient) {
         pathMaterial.emissive = new THREE.Color(customColor);
+      }
+
+      if (pathIndex > 0 || isSlashOverlay) {
+        pathMaterial.polygonOffset = true;
+        pathMaterial.polygonOffsetFactor = -pathIndex * 2;
+        pathMaterial.polygonOffsetUnits = -pathIndex * 2;
       }
 
       if (clippingPlanes.length > 0) {
@@ -926,7 +1085,9 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
         const contourMinDim = Math.max(0.1, minContourDimension(shape) || shapeMinDim);
         const hasHoles = shape.holes.length > 0;
 
-        const shapeDepth = Math.max(0.02, (baseDepth * depthMultiplier) + (pathIndex * layerSpacing * 0.1));
+        const shapeDepth = isSlashOverlay
+          ? Math.max(0.08, baseDepth * VECTORFORGE_SLASH_DEPTH_RATIO)
+          : Math.max(0.02, baseDepth * depthMultiplier);
         const bevelContourLimit = hasHoles ? contourMinDim * 0.025 : shapeMinDim * 0.05;
         const bevelDepthLimit = hasHoles ? shapeDepth * 0.12 : shapeDepth * 0.18;
         const safeBevelSize = props.bevelEnabled 
@@ -957,12 +1118,16 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
           return;
         }
 
-        if (useIcon3DMeshColors) {
-          applyIcon3DVertexColors(geometry, meshPalette.length > 0 ? meshPalette : paletteFromStops(fallbackGoogleMeshStops, props.colorA, props.colorB));
+        if (useGradientVertexColors) {
+          const stops = gradientStops.length > 0
+            ? gradientStops
+            : gradientStopsFromFill(fallbackGoogleMeshStops, props.colorA, props.colorB);
+          applyGradientVertexColors(geometry, gradientType, stops, iconBounds);
         }
 
         const mesh = new THREE.Mesh(geometry, pathMaterial);
-        mesh.position.z = pathIndex * layerSpacing * 0.1;
+        mesh.position.z = isSlashOverlay ? baseDepth + pathLayerGap : pathIndex * pathLayerGap;
+        mesh.renderOrder = isSlashOverlay ? 100 + pathIndex : pathIndex;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
 
@@ -970,16 +1135,18 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       });
     });
 
+    scaleInnerGeometryElements(group, props.innerElementScale);
+
     if (group.children.length > 0) {
-      const centroid = getGroupMassCenter(group, 'local');
-      if (centroid) {
-        centerOffset.copy(centroid);
-        group.children.forEach((child) => {
-          child.position.x -= centerOffset.x;
-          child.position.y -= centerOffset.y;
-          child.position.z -= centerOffset.z;
-        });
-      }
+      // Align paired icons by the SVG coordinate system, not by each icon's
+      // individual mass. Otherwise adding a slash changes the origin and the
+      // base glyph no longer overlaps the unslashed version during a wipe.
+      centerOffset.set(ICON_VIEWBOX_SIZE / 2, ICON_VIEWBOX_SIZE / 2, baseDepth / 2);
+      group.children.forEach((child) => {
+        child.position.x -= centerOffset.x;
+        child.position.y -= centerOffset.y;
+        child.position.z -= centerOffset.z;
+      });
     }
 
     applySvgModelScale(group);
@@ -1002,12 +1169,36 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     isInertiaActiveRef.current = false;
     rotationVelocityRef.current = { x: 0, y: 0 };
     const current = liveRenderPropsRef.current.rotationOffset;
-    const currentValue = current[axis];
+    const nudgeState = viewNudgeStateRef.current[axis];
+    const startValue = nudgeState.value ?? current[axis];
+    const targetBase = nudgeState.target ?? current[axis];
     const epsilon = 0.001;
     const targetValue = direction > 0
-      ? Math.floor((currentValue + epsilon) / GIZMO_SNAP_DEGREES) * GIZMO_SNAP_DEGREES + GIZMO_SNAP_DEGREES
-      : Math.ceil((currentValue - epsilon) / GIZMO_SNAP_DEGREES) * GIZMO_SNAP_DEGREES - GIZMO_SNAP_DEGREES;
-    onViewRotationSetRef.current?.({ [axis]: targetValue });
+      ? Math.floor((targetBase + epsilon) / GIZMO_SNAP_DEGREES) * GIZMO_SNAP_DEGREES + GIZMO_SNAP_DEGREES
+      : Math.ceil((targetBase - epsilon) / GIZMO_SNAP_DEGREES) * GIZMO_SNAP_DEGREES - GIZMO_SNAP_DEGREES;
+
+    if (viewNudgeFrameRef.current !== null) {
+      cancelAnimationFrame(viewNudgeFrameRef.current);
+      viewNudgeFrameRef.current = null;
+    }
+    nudgeState.target = targetValue;
+    const startTime = performance.now();
+    const duration = 220;
+    const tick = (now: number) => {
+      const t = Math.max(0, Math.min(1, (now - startTime) / duration));
+      const eased = 1 - Math.pow(1 - t, 3);
+      const next = startValue + (targetValue - startValue) * eased;
+      nudgeState.value = next;
+      onViewRotationSetRef.current?.({ [axis]: next }, { commit: t >= 1 });
+      if (t < 1) {
+        viewNudgeFrameRef.current = requestAnimationFrame(tick);
+      } else {
+        viewNudgeFrameRef.current = null;
+        nudgeState.value = null;
+        nudgeState.target = null;
+      }
+    };
+    viewNudgeFrameRef.current = requestAnimationFrame(tick);
   };
 
   // 2D SVG Orientation Compass Updater (updates line/circle/text endpoints)
@@ -1057,6 +1248,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
+    RectAreaLightUniformsLib.init();
 
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
@@ -1152,6 +1344,12 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     keyLight.shadow.mapSize.height = 1024;
     scene.add(keyLight);
     keyLightRef.current = keyLight;
+
+    const softboxLight = new THREE.RectAreaLight(props.keyLightColor, 0, 3.5, 1.6);
+    softboxLight.position.set(props.keyLightPosition.x, props.keyLightPosition.y, props.keyLightPosition.z);
+    softboxLight.lookAt(0, 0, 0);
+    scene.add(softboxLight);
+    softboxLightRef.current = softboxLight;
 
     const rimLight = new THREE.DirectionalLight(props.rimLightColor, props.rimLightIntensity);
     rimLight.position.set(-6, -3, 3);
@@ -1290,20 +1488,33 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       }
       renderer.dispose();
       studioEnvironment?.dispose();
+      if (viewNudgeFrameRef.current !== null) {
+        cancelAnimationFrame(viewNudgeFrameRef.current);
+        viewNudgeFrameRef.current = null;
+      }
     };
   }, [props.onZoomChange]);
 
   // Effect: Updates Lights
   useEffect(() => {
     const materialLight = props.keyLightIntensity * materialLightMultiplier(props.materialPreset);
+    const softness = clamp01Number(props.keyLightSoftness, 0);
     if (ambientLightRef.current) {
       ambientLightRef.current.color.set(props.ambientColor);
-      ambientLightRef.current.intensity = props.ambientIntensity + materialLight * 0.035;
+      ambientLightRef.current.intensity = props.ambientIntensity + materialLight * (0.035 + softness * 0.025);
     }
     if (keyLightRef.current) {
       keyLightRef.current.color.set(props.keyLightColor);
-      keyLightRef.current.intensity = materialLight;
+      keyLightRef.current.intensity = materialLight * (1 - softness * 0.48);
       keyLightRef.current.position.set(props.keyLightPosition.x, props.keyLightPosition.y, props.keyLightPosition.z);
+    }
+    if (softboxLightRef.current) {
+      softboxLightRef.current.color.set(props.keyLightColor);
+      softboxLightRef.current.intensity = materialLight * softness * 1.75;
+      softboxLightRef.current.width = 1.4 + softness * 5.2;
+      softboxLightRef.current.height = 0.8 + softness * 2.4;
+      softboxLightRef.current.position.set(props.keyLightPosition.x, props.keyLightPosition.y, props.keyLightPosition.z);
+      softboxLightRef.current.lookAt(0, 0, 0);
     }
     if (rimLightRef.current) {
       rimLightRef.current.color.set(props.rimLightColor);
@@ -1312,13 +1523,16 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     if (rendererRef.current) {
       rendererRef.current.toneMappingExposure = Math.max(0.45, Math.min(1.8, 0.75 + materialLight * 0.08));
     }
-  }, [props.ambientColor, props.ambientIntensity, props.keyLightColor, props.keyLightIntensity, props.keyLightPosition, props.rimLightColor, props.rimLightIntensity, props.materialPreset]);
+  }, [props.ambientColor, props.ambientIntensity, props.keyLightColor, props.keyLightIntensity, props.keyLightPosition, props.keyLightSoftness, props.rimLightColor, props.rimLightIntensity, props.materialPreset]);
 
   // Effect: Rebuilds SVG 3D models when properties change
   useEffect(() => {
     const scene = sceneRef.current;
     const pivot = pivotGroupRef.current;
     if (!scene || !pivot) return;
+
+    const hadModel = Boolean(iconAGroupRef.current || iconBGroupRef.current);
+    if (!hadModel) setModelReady(false);
 
     if (iconAGroupRef.current) pivot.remove(iconAGroupRef.current);
     if (iconBGroupRef.current) pivot.remove(iconBGroupRef.current);
@@ -1331,6 +1545,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
 
     iconAGroupRef.current = groupA;
     iconBGroupRef.current = groupB;
+    setModelReady(groupA.children.length > 0 || groupB.children.length > 0);
   }, [
     props.iconAContent,
     props.iconBContent,
@@ -1341,6 +1556,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     props.bevelSegments,
     props.geometryQuality,
     props.layerSpacing,
+    props.innerElementScale,
     props.materialPreset,
     props.colorA,
     props.colorB,
@@ -1426,27 +1642,34 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       const transitionIsActive = progress > 0.001 && progress < 0.999;
       const isWipeActive = transitionIsActive && liveProps.transitionType === 'wipe' && (liveProps.wipeDirection.x !== 0 || liveProps.wipeDirection.y !== 0);
       const isCrossfade = transitionIsActive && liveProps.transitionType === 'wipe' && liveProps.wipeDirection.x === 0 && liveProps.wipeDirection.y === 0;
-      const pullAmount = Math.max(0, finiteNumber(liveProps.centerPull, 0)) * Math.sin(progress * Math.PI);
-      const pullLength = Math.hypot(liveProps.wipeDirection.x, liveProps.wipeDirection.y) || 1;
-      const pullX = (liveProps.wipeDirection.x || 0) / pullLength * pullAmount;
-      const pullY = (liveProps.wipeDirection.y || 1) / pullLength * pullAmount;
 
       if (isWipeActive && clipPlaneARef.current && clipPlaneBRef.current) {
-        const range = 5.0; 
-        const pos = (progress * range) - (range / 2);
-        
-        clipPlaneARef.current.constant = -pos; 
-        clipPlaneBRef.current.constant = pos;  
+        const wipePlanes = createDiagonalWipePlanes({
+          width: ICON_VIEWBOX_SIZE * MODEL_SCALE,
+          height: ICON_VIEWBOX_SIZE * MODEL_SCALE,
+          progress,
+          direction: liveProps.wipeDirection,
+          seamOverlap: WIPE_SEAM_OVERLAP_WORLD,
+        });
+
+        if (pivotGroupRef.current) {
+          pivotGroupRef.current.updateMatrixWorld(true);
+          clipPlaneARef.current.copy(wipePlanes.basePlane).applyMatrix4(pivotGroupRef.current.matrixWorld);
+          clipPlaneBRef.current.copy(wipePlanes.wipedPlane).applyMatrix4(pivotGroupRef.current.matrixWorld);
+        } else {
+          clipPlaneARef.current.copy(wipePlanes.basePlane);
+          clipPlaneBRef.current.copy(wipePlanes.wipedPlane);
+        }
 
         if (iconAGroupRef.current) {
           iconAGroupRef.current.visible = true;
-          iconAGroupRef.current.position.set(-pullX, -pullY, 0);
+          iconAGroupRef.current.position.set(0, 0, 0);
           applySvgModelScale(iconAGroupRef.current);
           updateGroupMaterialState(iconAGroupRef.current, { opacity: 1, clippingPlanes: [clipPlaneARef.current] });
         }
         if (iconBGroupRef.current) {
           iconBGroupRef.current.visible = true;
-          iconBGroupRef.current.position.set(pullX, pullY, 0);
+          iconBGroupRef.current.position.set(0, 0, 0);
           applySvgModelScale(iconBGroupRef.current);
           updateGroupMaterialState(iconBGroupRef.current, { opacity: 1, clippingPlanes: [clipPlaneBRef.current] });
         }
@@ -1454,13 +1677,13 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       else if (isCrossfade) {
         if (iconAGroupRef.current) {
           iconAGroupRef.current.visible = true;
-          iconAGroupRef.current.position.set(-pullX, -pullY, 0);
+          iconAGroupRef.current.position.set(0, 0, 0);
           applySvgModelScale(iconAGroupRef.current);
           updateGroupMaterialState(iconAGroupRef.current, { opacity: 1 - progress, transparent: true });
         }
         if (iconBGroupRef.current) {
           iconBGroupRef.current.visible = true;
-          iconBGroupRef.current.position.set(pullX, pullY, 0);
+          iconBGroupRef.current.position.set(0, 0, 0);
           applySvgModelScale(iconBGroupRef.current);
           updateGroupMaterialState(iconBGroupRef.current, { opacity: progress, transparent: true });
         }
@@ -1562,35 +1785,20 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
   return (
     <div ref={containerRef} className="relative w-full h-full min-h-[400px] overflow-hidden rounded-xl border border-border/10 bg-[oklch(0.13_0.012_280)] shadow-2xl">
       <canvas ref={canvasRef} className="w-full h-full block cursor-grab active:cursor-grabbing" />
+      {!modelReady && (
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-background/5 backdrop-blur-[1px]">
+          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/45 px-3 py-2 text-[11px] font-medium text-white/75 shadow-2xl">
+            <span className="size-2 rounded-full bg-white/70 animate-pulse" />
+            Preparing 3D icon
+          </div>
+        </div>
+      )}
       
       {/* Interactive 3D Orientation Gizmo — minimal, Figma-like (no chrome, centered with the play bar) */}
       <svg
         viewBox="0 0 80 80"
         className="group/gizmo absolute bottom-0.5 right-5 w-[84px] h-[84px] pointer-events-auto select-none z-20"
       >
-        <g className="pointer-events-none opacity-0 transition-opacity duration-150 group-hover/gizmo:pointer-events-auto group-hover/gizmo:opacity-100 group-focus-within/gizmo:pointer-events-auto group-focus-within/gizmo:opacity-100">
-          <g className="cursor-pointer text-emerald-300/55 transition-colors hover:text-emerald-200" onClick={() => nudgeViewRotation('x', 1)}>
-            <title>Tilt up 45 degrees</title>
-            <rect x="30" y="0" width="20" height="20" rx="10" className="fill-transparent" />
-            <path d="M40 5.8 35.8 11h8.4Z" className="fill-current opacity-90" />
-          </g>
-          <g className="cursor-pointer text-emerald-300/55 transition-colors hover:text-emerald-200" onClick={() => nudgeViewRotation('x', -1)}>
-            <title>Tilt down 45 degrees</title>
-            <rect x="30" y="60" width="20" height="20" rx="10" className="fill-transparent" />
-            <path d="M40 74.2 35.8 69h8.4Z" className="fill-current opacity-90" />
-          </g>
-          <g className="cursor-pointer text-rose-300/55 transition-colors hover:text-rose-200" onClick={() => nudgeViewRotation('y', 1)}>
-            <title>Rotate left 45 degrees</title>
-            <rect x="0" y="30" width="20" height="20" rx="10" className="fill-transparent" />
-            <path d="M5.8 40 11 35.8v8.4Z" className="fill-current opacity-90" />
-          </g>
-          <g className="cursor-pointer text-rose-300/55 transition-colors hover:text-rose-200" onClick={() => nudgeViewRotation('y', -1)}>
-            <title>Rotate right 45 degrees</title>
-            <rect x="60" y="30" width="20" height="20" rx="10" className="fill-transparent" />
-            <path d="M74.2 40 69 35.8v8.4Z" className="fill-current opacity-90" />
-          </g>
-        </g>
-
         {/* Basis Axis Lines (thin, muted) */}
         <line ref={lineXRef} x1="40" y1="40" x2="40" y2="40" className="stroke-rose-400/70 stroke-[1.5]" strokeLinecap="round" />
         <line ref={lineYRef} x1="40" y1="40" x2="40" y2="40" className="stroke-emerald-400/70 stroke-[1.5]" strokeLinecap="round" />
@@ -1617,6 +1825,29 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
 
         {/* Center Origin Anchor */}
         <circle cx="40" cy="40" r="1.5" className="fill-white/50" />
+
+        <g className="pointer-events-none opacity-0 transition-opacity duration-150 group-hover/gizmo:pointer-events-auto group-hover/gizmo:opacity-100 group-focus-within/gizmo:pointer-events-auto group-focus-within/gizmo:opacity-100">
+          <g className="cursor-pointer text-emerald-300/65 transition-colors hover:text-emerald-200" onClick={() => nudgeViewRotation('x', 1)}>
+            <title>Tilt up 45 degrees</title>
+            <rect x="28" y="0" width="24" height="22" rx="11" className="fill-transparent" />
+            <path d="M40 5.7 C42.9 7.8 44.6 10.8 44.8 14.4 C43.4 13.2 41.8 12.5 40 12.5 C38.2 12.5 36.6 13.2 35.2 14.4 C35.4 10.8 37.1 7.8 40 5.7Z" className="fill-current opacity-90" />
+          </g>
+          <g className="cursor-pointer text-emerald-300/65 transition-colors hover:text-emerald-200" onClick={() => nudgeViewRotation('x', -1)}>
+            <title>Tilt down 45 degrees</title>
+            <rect x="28" y="58" width="24" height="22" rx="11" className="fill-transparent" />
+            <path d="M40 74.3 C37.1 72.2 35.4 69.2 35.2 65.6 C36.6 66.8 38.2 67.5 40 67.5 C41.8 67.5 43.4 66.8 44.8 65.6 C44.6 69.2 42.9 72.2 40 74.3Z" className="fill-current opacity-90" />
+          </g>
+          <g className="cursor-pointer text-rose-300/65 transition-colors hover:text-rose-200" onClick={() => nudgeViewRotation('y', 1)}>
+            <title>Rotate left 45 degrees</title>
+            <rect x="0" y="28" width="22" height="24" rx="11" className="fill-transparent" />
+            <path d="M5.7 40 C7.8 37.1 10.8 35.4 14.4 35.2 C13.2 36.6 12.5 38.2 12.5 40 C12.5 41.8 13.2 43.4 14.4 44.8 C10.8 44.6 7.8 42.9 5.7 40Z" className="fill-current opacity-90" />
+          </g>
+          <g className="cursor-pointer text-rose-300/65 transition-colors hover:text-rose-200" onClick={() => nudgeViewRotation('y', -1)}>
+            <title>Rotate right 45 degrees</title>
+            <rect x="58" y="28" width="22" height="24" rx="11" className="fill-transparent" />
+            <path d="M74.3 40 C72.2 42.9 69.2 44.6 65.6 44.8 C66.8 43.4 67.5 41.8 67.5 40 C67.5 38.2 66.8 36.6 65.6 35.2 C69.2 35.4 72.2 37.1 74.3 40Z" className="fill-current opacity-90" />
+          </g>
+        </g>
       </svg>
 
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[oklch(0.11_0.012_280)]/80 via-transparent to-[oklch(0.18_0.012_280)]/20 mix-blend-overlay" />

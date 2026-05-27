@@ -53,6 +53,7 @@ export function createThreeMaterial(
   const opacity = props.opacity !== undefined ? props.opacity : 1.0;
   const wireframe = !!props.wireframe;
   const map = props.map || undefined;
+  const textureProps = map ? { map } : {};
   const vertexColors = !!props.vertexColors;
   const usesSurfaceColor = vertexColors || !!map;
   const reflectance = props.reflectance !== undefined ? props.reflectance : 0.5;
@@ -85,7 +86,7 @@ export function createThreeMaterial(
         transparent: true,
         opacity,
         depthWrite: true,
-        map,
+        ...textureProps,
         vertexColors,
       })), usesSurfaceColor ? (props.emissiveIntensity !== undefined ? props.emissiveIntensity : 0.035) : 0);
       return withBaseOpacity(frostMaterial);
@@ -100,24 +101,25 @@ export function createThreeMaterial(
         wireframe,
         transparent: opacity < 1.0,
         opacity,
-        map,
+        ...textureProps,
         vertexColors,
       })), props.emissiveIntensity !== undefined ? props.emissiveIntensity : 0.12);
 
     case 'glass':
       return withBaseOpacity(withReflectance(new THREE.MeshPhysicalMaterial({
         color,
-        roughness: props.roughness !== undefined ? props.roughness : 0.04,
+        roughness: props.roughness !== undefined ? props.roughness : 0.12,
         metalness: props.metalness !== undefined ? props.metalness : 0.0,
-        transmission: props.transmission !== undefined ? props.transmission : 0.72,
-        thickness: props.thickness !== undefined ? props.thickness : 1.7,
+        transmission: props.transmission !== undefined ? props.transmission : 0.38,
+        thickness: props.thickness !== undefined ? props.thickness : 0.85,
         ior: 1.58,
-        transparent: true,
-        opacity: Math.min(opacity, 0.74),
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
         clearcoat: props.clearcoat !== undefined ? props.clearcoat : 1.0,
-        clearcoatRoughness: props.clearcoatRoughness !== undefined ? props.clearcoatRoughness : 0.04,
+        clearcoatRoughness: props.clearcoatRoughness !== undefined ? props.clearcoatRoughness : 0.08,
         wireframe,
-        map,
+        ...textureProps,
         vertexColors,
       })));
 
@@ -137,7 +139,7 @@ export function createThreeMaterial(
         wireframe,
         transparent: opacity < 1.0,
         opacity,
-        map,
+        ...textureProps,
         vertexColors,
       })), usesSurfaceColor ? Math.max(props.emissiveIntensity ?? 0, 0.08) : 0);
 
@@ -157,7 +159,7 @@ export function createThreeMaterial(
         wireframe,
         transparent: opacity < 1.0,
         opacity,
-        map,
+        ...textureProps,
         vertexColors,
       })), usesSurfaceColor ? (props.emissiveIntensity !== undefined ? props.emissiveIntensity : 0.035) : 0);
 
@@ -173,7 +175,7 @@ export function createThreeMaterial(
         wireframe,
         transparent: opacity < 1.0,
         opacity,
-        map,
+        ...textureProps,
         vertexColors,
       })), props.emissiveIntensity !== undefined ? props.emissiveIntensity : 0.04);
 
@@ -192,11 +194,11 @@ export function createThreeMaterial(
         wireframe,
         transparent: opacity < 1.0 || (props.transmission !== undefined && props.transmission > 0),
         opacity,
-        map,
+        ...textureProps,
         vertexColors,
       }));
 
     default:
-      return withReflectance(new THREE.MeshStandardMaterial({ color, wireframe, map, vertexColors }));
+      return withReflectance(new THREE.MeshStandardMaterial({ color, wireframe, ...textureProps, vertexColors }));
   }
 }

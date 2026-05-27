@@ -11,7 +11,7 @@ import {
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { ColorPicker } from '@/components/ui/color-picker';
+import { ColorPicker, CompactColorInput } from '@/components/ui/color-picker';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { PRESET_ICONS, PresetIcon } from './IconLibrary';
 import { SvgCanvas, SvgCanvasRef } from '../3d/SvgCanvas';
@@ -175,6 +175,10 @@ const finiteNumber = (value: number | undefined | null, fallback = 0) =>
 const clampNumber = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
+const TIMELINE_FRAME_RATE = 60;
+const quantizeTimeToFrame = (time: number) =>
+  Number((Math.round(time * TIMELINE_FRAME_RATE) / TIMELINE_FRAME_RATE).toFixed(3));
+
 const isEditableShortcutTarget = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   Boolean(target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'));
@@ -208,6 +212,49 @@ type MaterialKeyframe = {
   value: MaterialSettings;
   easing: EasingType;
 };
+type TimeKeyframe = { time: number };
+type EditorSnapshot = {
+  activeRecipeId: string | null;
+  shapes: ShapeStop[];
+  selectedShapeId: string | null;
+  selectedMotionTrackId: MotionTrackId;
+  duration: number;
+  materialPreset: MaterialPresetId;
+  roughness: number;
+  metalness: number;
+  reflectance: number;
+  clearcoat: number;
+  clearcoatRoughness: number;
+  transmission: number;
+  thickness: number;
+  emissiveIntensity: number;
+  materialKeyframes: MaterialKeyframe[];
+  extrusionDepth: number;
+  bevelEnabled: boolean;
+  bevelThickness: number;
+  bevelSize: number;
+  bevelSegments: number;
+  geometryQuality: number;
+  layerSpacing: number;
+  innerElementScale: LightPosition;
+  objectScale: number;
+  moveOffset: LightPosition;
+  moveKeyframes: Vector3Keyframe[];
+  enableGradient: boolean;
+  fillMode: FillMode;
+  fillColor: string;
+  fillColorSecondary: string;
+  fillGradientType: FillGradientType;
+  fillStops?: FillStop[];
+  fillKeyframes: FillKeyframe[];
+  rotationOffset: LightPosition;
+  keyLightColor: string;
+  keyLightIntensity: number;
+  keyLightPosition: LightPosition;
+  keyLightSoftness: number;
+  keyLightPositionKeyframes: LightPositionKeyframe[];
+  tracks: TimelineTrack[];
+};
 
 const FILL_MODES: Array<{ id: FillMode; label: string }> = [
   { id: 'solid', label: 'Solid' },
@@ -221,7 +268,10 @@ const SCALE_MAX = 3;
 const GEOMETRY_QUALITY_DEFAULT = 0.045;
 const LIGHT_MAX = 25;
 const MAX_BEVEL_SEGMENTS = 24;
+const DEFAULT_ROTATION_START = 0;
+const DEFAULT_ROTATION_END = 360;
 const MOVE_COLOR = '#38bdf8';
+const MAX_UNDO_STEPS = 80;
 
 const MOTION_TRACK_NAMES: Record<MotionTrackId, string> = {
   extrusion: 'Extrude',
@@ -275,6 +325,19 @@ const normalizeFillStops = (stops: Array<{ id?: string; color: string; position:
       position: clampNumber(stop.position, 0, 1),
     }))
     .sort((a, b) => a.position - b.position);
+};
+
+const stopsForGradientType = (
+  current: { color: string; colorSecondary: string; gradientType?: FillGradientType; stops?: FillStop[] },
+  nextType: FillGradientType,
+  solid = false
+) => {
+  const stops = normalizeFillStops(current.stops?.length
+    ? current.stops
+    : makeFillStops(current.color, current.colorSecondary, solid));
+
+  if (solid) return makeFillStops(current.color, current.color, true);
+  return stops;
 };
 
 const interpolateLightPositionKeyframes = (
@@ -434,17 +497,23 @@ const LIGHT_RANGE = 9;
 function LightDirectionPicker({
   position,
   color,
+  softness,
   onDirectionChange,
   onColorChange,
+  onSoftnessChange,
   isKeyed,
   onToggleKeyframe,
+  keyframeControls,
 }: {
   position: { x: number; y: number; z: number };
   color: string;
+  softness: number;
   onDirectionChange: (x: number, y: number) => void;
   onColorChange: (color: string) => void;
+  onSoftnessChange: (value: number) => void;
   isKeyed: boolean;
   onToggleKeyframe: () => void;
+  keyframeControls?: React.ReactNode;
 }) {
   const padRef = useRef<HTMLDivElement>(null);
   const nx = clampNumber(position.x / LIGHT_RANGE, -1, 1);
@@ -471,7 +540,7 @@ function LightDirectionPicker({
     });
   };
 
-  const triggerSphere = `radial-gradient(circle at ${hx}% ${hy}%, #ffffff, ${color} 30%, #3f3f46 72%, #18181b)`;
+  const triggerSphere = `radial-gradient(circle at ${hx}% ${hy}%, #f8fafc 0%, ${color} 32%, #3f3f46 72%, #18181b 100%)`;
 
   return (
     <Popover>
@@ -479,7 +548,12 @@ function LightDirectionPicker({
         title="Light direction & color"
         className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-muted/45 pl-1 pr-1.5 transition-colors hover:border-ring/50 hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       >
-        <span className="size-4 rounded-full border border-border shadow-inner" style={{ background: triggerSphere }} />
+        <span className="relative size-5 shrink-0 overflow-hidden rounded-full border border-border bg-background/50 dark:bg-background/30">
+          <span
+            className="absolute inset-[2px] rounded-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.38),inset_0_-1px_1px_rgba(0,0,0,0.2)]"
+            style={{ background: triggerSphere }}
+          />
+        </span>
         <ChevronDown className="size-3 text-muted-foreground" />
       </PopoverTrigger>
       <PopoverContent
@@ -489,37 +563,56 @@ function LightDirectionPicker({
       >
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Light Source</span>
-          <button
-            type="button"
-            aria-label={`${isKeyed ? 'Remove' : 'Add'} light keyframe`}
-            title={`${isKeyed ? 'Remove' : 'Add'} light keyframe`}
-            onClick={onToggleKeyframe}
-            className={`flex size-5 items-center justify-center rounded border transition-colors ${
-              isKeyed ? 'border-ring/50 bg-accent' : 'border-border bg-muted/45 hover:bg-muted/60'
-            }`}
-          >
-            <span className="size-2 rotate-45 border border-ring/50" style={{ backgroundColor: isKeyed ? '#ffd9a0' : 'transparent' }} />
-          </button>
+          {keyframeControls ?? (
+            <button
+              type="button"
+              aria-label={`${isKeyed ? 'Remove' : 'Add'} light keyframe`}
+              title={`${isKeyed ? 'Remove' : 'Add'} light keyframe`}
+              onClick={onToggleKeyframe}
+              className={`flex size-5 items-center justify-center rounded border transition-colors ${
+                isKeyed ? 'border-ring/50 bg-accent' : 'border-border bg-muted/45 hover:bg-muted/60'
+              }`}
+            >
+              <span className="size-2 rotate-45 border border-ring/50" style={{ backgroundColor: isKeyed ? '#ffd9a0' : 'transparent' }} />
+            </button>
+          )}
         </div>
 
-        <div
-          ref={padRef}
-          onPointerDown={handlePadDown}
-          className="relative mt-2.5 aspect-square w-full cursor-grab touch-none overflow-hidden rounded-full border border-border shadow-inner active:cursor-grabbing"
-          style={{ background: `radial-gradient(circle at ${hx}% ${hy}%, #ffffff, ${color} 24%, #27272a 68%, #0b0b0d)` }}
-        >
-          <span
-            className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_8px_2px_rgba(255,255,255,0.7)] ring-1 ring-black/40"
-            style={{ left: `${hx}%`, top: `${hy}%` }}
-          />
+        <div className="mt-2.5 aspect-square w-full rounded-full bg-border p-px shadow-inner">
+          <div
+            ref={padRef}
+            onPointerDown={handlePadDown}
+            className="relative size-full cursor-grab touch-none overflow-hidden rounded-full active:cursor-grabbing"
+            style={{ background: `radial-gradient(circle at ${hx}% ${hy}%, #f8fafc 0%, ${color} 24%, #27272a 68%, #0b0b0d 100%)` }}
+          >
+            <span
+              className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_8px_2px_rgba(255,255,255,0.7)] ring-1 ring-black/40"
+              style={{ left: `${hx}%`, top: `${hy}%` }}
+            />
+          </div>
         </div>
         <p className="mt-2 text-center text-[10px] text-muted-foreground">Drag to move the light</p>
 
         <div className="mt-2.5">
-          <ColorPicker
+          <CompactColorInput
             value={color}
             onChange={onColorChange}
-            className="h-8 rounded-lg border-border bg-muted/45 px-2 py-1.5"
+            ariaLabel="Light color"
+            side="top"
+            align="end"
+            className="w-full"
+          />
+        </div>
+        <div className="mt-2.5 flex items-center gap-2">
+          <span className="w-14 shrink-0 text-[10px] font-medium text-muted-foreground">Softbox</span>
+          <span className="flex-1" />
+          <NumberField
+            value={softness}
+            min={0}
+            max={1}
+            step={0.05}
+            precision={2}
+            onChange={onSoftnessChange}
           />
         </div>
       </PopoverContent>
@@ -529,7 +622,15 @@ function LightDirectionPicker({
 
 export default function AppLayout() {
   const { resolvedTheme, setTheme } = useTheme();
-  const isLightTheme = resolvedTheme === 'light';
+  const [themeMounted, setThemeMounted] = useState(false);
+  const isLightTheme = themeMounted && resolvedTheme === 'light';
+  const themeToggleLabel = themeMounted
+    ? isLightTheme ? 'Switch to dark theme' : 'Switch to light theme'
+    : 'Toggle theme';
+
+  useEffect(() => {
+    setThemeMounted(true);
+  }, []);
 
   // --- 1. Shape sequence (the morph is a timeline of shapes) ---
   const makeStop = (icon: PresetIcon, time: number): ShapeStop => ({
@@ -584,11 +685,11 @@ export default function AppLayout() {
             ...track,
             name: trackName,
             min: 0,
-            max: 360,
-            defaultValue: 0,
+            max: DEFAULT_ROTATION_END,
+            defaultValue: DEFAULT_ROTATION_START,
             keyframes: [
-              { id: `${track.id}-start`, time: 0, value: 0, easing: 'linear' as const },
-              { id: `${track.id}-end`, time: timelineDuration, value: 360, easing: 'linear' as const },
+              { id: `${track.id}-start`, time: 0, value: DEFAULT_ROTATION_START, easing: 'ease-in-out' as const },
+              { id: `${track.id}-end`, time: timelineDuration, value: DEFAULT_ROTATION_END, easing: 'ease-in-out' as const },
             ],
           };
         }
@@ -617,6 +718,14 @@ export default function AppLayout() {
     setMaterialPreset(recipe.materialPreset);
     setEnableGradient(recipe.enableGradient);
     setFillMode(recipe.enableGradient ? 'gradient' : 'solid');
+    setFillColor(recipe.colorA);
+    setFillColorSecondary(recipe.colorASecondary ?? recipe.colorB ?? recipe.colorA);
+    setFillGradientType(recipe.fillGradientType ?? 'linear');
+    setFillStops(recipe.id === 'google-metal'
+      ? googleMeshFillStops()
+      : makeFillStops(recipe.colorA, recipe.colorASecondary ?? recipe.colorB ?? recipe.colorA, !recipe.enableGradient)
+    );
+    setFillKeyframes([]);
     setShapes((prev) => recolorShapes(shapeList ?? prev, recipe));
 
     setRoughness(recipe.roughness);
@@ -635,6 +744,7 @@ export default function AppLayout() {
     setBevelSegments(recipe.bevelSegments);
     setGeometryQuality(recipe.geometryQuality ?? GEOMETRY_QUALITY_DEFAULT);
     setLayerSpacing(recipe.layerSpacing);
+    setInnerElementScale({ x: 1, y: 1, z: 1 });
 
     setRotationOffset({ x: 0, y: 0, z: 0 });
     setObjectScale(SCALE_DEFAULT);
@@ -644,9 +754,9 @@ export default function AppLayout() {
       z: recipe.translateZ ?? 0,
     });
     setMoveKeyframes([]);
-    setCenterPull(recipe.centerPull ?? 0);
     setKeyLightIntensity(recipe.keyLightIntensity);
     setKeyLightPosition({ x: 5, y: 5, z: 4 });
+    setKeyLightSoftness(0.35);
     setKeyLightPositionKeyframes([]);
 
     setTracks(normalizeRecipeTracks(recipe, duration));
@@ -673,18 +783,60 @@ export default function AppLayout() {
     setShapes((prev) => prev.map((s) => s.id === shapeId ? { ...s, iconId: icon.id, iconName: icon.name, svgContent: icon.svgContent } : s));
   };
 
-  const updateSelectedShapeColor = (value: string, secondary = false) => {
-    if (!selectedShapeId) return;
-    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+  const setShapeWipePair = (shapeId: string, enabled: PresetIcon, disabled: PresetIcon) => {
     markCustom();
-    setShapes((prev) => prev.map((s) => {
-      if (s.id !== selectedShapeId) return s;
-      const keyframes = s.fillKeyframes ?? [];
-      const activeFill = interpolateFillKeyframes(
-        currentTime,
-        { color: s.color, colorSecondary: s.colorSecondary, gradientType: s.fillGradientType, stops: s.fillStops },
-        s.fillKeyframes
-      );
+    setShapes((prev) => {
+      const sorted = [...prev].sort((a, b) => a.time - b.time);
+      const index = sorted.findIndex((shape) => shape.id === shapeId);
+      if (index < 0) return prev;
+
+      const current = sorted[index];
+      const next = sorted[index + 1];
+      const nextTime = next
+        ? next.time
+        : current.time < duration - 0.1
+          ? clampNumber(quantizeTimeToFrame(Math.min(duration, current.time + Math.max(0.85, duration * 0.25))), current.time + 0.1, duration)
+          : duration;
+      const nextId = next?.id ?? `shape-${Math.random().toString(36).slice(2, 9)}`;
+      const disabledStop: ShapeStop = {
+        ...(next ?? current),
+        id: nextId,
+        time: nextTime,
+        iconId: disabled.id,
+        iconName: disabled.name,
+        svgContent: disabled.svgContent,
+        color: disabled.defaultTint,
+      };
+      const withCurrent = sorted.map((shape) => shape.id === current.id
+        ? {
+            ...shape,
+            iconId: enabled.id,
+            iconName: enabled.name,
+            svgContent: enabled.svgContent,
+            color: enabled.defaultTint,
+            transitionType: 'wipe' as const,
+            wipeDirection: { x: 0.707, y: -0.707 },
+            easing: 'ease-in-out' as const,
+          }
+        : shape.id === nextId
+          ? disabledStop
+          : shape);
+
+      return (next ? withCurrent : [...withCurrent, disabledStop]).sort((a, b) => a.time - b.time);
+    });
+    setSelectedShapeId(shapeId);
+  };
+
+  const updateSelectedShapeColor = (value: string, secondary = false) => {
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
+    markCustom();
+    setFillKeyframes((keyframes) => {
+      const activeFill = interpolateFillKeyframes(currentTime, {
+        color: fillColor,
+        colorSecondary: fillColorSecondary,
+        gradientType: fillGradientType,
+        stops: fillStops,
+      }, keyframes);
       const nextColor = secondary ? activeFill.color : value;
       const nextColorSecondary = secondary ? value : activeFill.colorSecondary;
       const nextPositions: [number, number] = [
@@ -694,113 +846,104 @@ export default function AppLayout() {
       const nextStops = makeFillStops(nextColor, nextColorSecondary, fillMode === 'solid', nextPositions);
 
       if (keyframes.length === 0) {
-        return {
-          ...s,
-          color: nextColor,
-          colorSecondary: nextStops[1].color,
-          fillStops: fillMode === 'gradient' ? nextStops : undefined,
-        };
+        setFillColor(nextColor);
+        setFillColorSecondary(nextStops[1].color);
+        setFillStops(fillMode === 'gradient' ? nextStops : undefined);
+        return keyframes;
       }
 
       const existing = keyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
-      const nextKeyframes = existing
+      setFillColor(nextColor);
+      setFillColorSecondary(nextStops[1].color);
+      return existing
         ? keyframes.map((keyframe) => keyframe.id === existing.id
           ? { ...keyframe, stops: nextStops }
           : keyframe)
         : [
             ...keyframes,
             {
-              id: `${s.id}-fill-${Date.now().toString(36)}`,
+              id: `fill-${Date.now().toString(36)}`,
               time: playheadTime,
               stops: nextStops,
-              gradientType: s.fillGradientType ?? 'linear',
+              gradientType: fillGradientType,
               easing: [...keyframes].sort((a, b) => a.time - b.time).filter((keyframe) => keyframe.time <= playheadTime).pop()?.easing ?? 'ease-in-out' as const,
             },
           ].sort((a, b) => a.time - b.time);
-
-      return {
-        ...s,
-        color: nextColor,
-        colorSecondary: nextStops[1].color,
-        fillKeyframes: nextKeyframes,
-      };
-    }));
+    });
   };
 
   const updateSelectedShapeGradientType = (gradientType: FillGradientType) => {
-    if (!selectedShapeId) return;
-    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
     markCustom();
-    setShapes((prev) => prev.map((shape) => {
-      if (shape.id !== selectedShapeId) return shape;
-      const keyframes = shape.fillKeyframes ?? [];
-      const activeFill = interpolateFillKeyframes(
-        currentTime,
-        { color: shape.color, colorSecondary: shape.colorSecondary, gradientType: shape.fillGradientType, stops: shape.fillStops },
-        shape.fillKeyframes
-      );
+    setFillKeyframes((keyframes) => {
+      const activeFill = interpolateFillKeyframes(currentTime, {
+        color: fillColor,
+        colorSecondary: fillColorSecondary,
+        gradientType: fillGradientType,
+        stops: fillStops,
+      }, keyframes);
+      const nextStops = stopsForGradientType(activeFill, gradientType, fillMode === 'solid');
+      const nextColor = nextStops[0]?.color ?? activeFill.color;
+      const nextColorSecondary = nextStops[1]?.color ?? nextColor;
 
       if (keyframes.length === 0) {
-        return { ...shape, fillGradientType: gradientType };
+        setFillColor(nextColor);
+        setFillColorSecondary(nextColorSecondary);
+        setFillGradientType(gradientType);
+        setFillStops(nextStops);
+        return keyframes;
       }
 
       const existing = keyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
-      const nextKeyframes = existing
-        ? keyframes.map((keyframe) => keyframe.id === existing.id ? { ...keyframe, gradientType } : keyframe)
+      setFillColor(nextColor);
+      setFillColorSecondary(nextColorSecondary);
+      setFillGradientType(gradientType);
+      setFillStops(nextStops);
+      return existing
+        ? keyframes.map((keyframe) => keyframe.id === existing.id ? { ...keyframe, gradientType, stops: nextStops } : keyframe)
         : [
             ...keyframes,
             {
-              id: `${shape.id}-fill-${Date.now().toString(36)}`,
+              id: `fill-${Date.now().toString(36)}`,
               time: playheadTime,
-              stops: makeFillStops(activeFill.color, activeFill.colorSecondary, fillMode === 'solid'),
+              stops: nextStops,
               gradientType,
               easing: [...keyframes].sort((a, b) => a.time - b.time).filter((keyframe) => keyframe.time <= playheadTime).pop()?.easing ?? 'ease-in-out' as const,
             },
           ].sort((a, b) => a.time - b.time);
-
-      return { ...shape, fillGradientType: gradientType, fillKeyframes: nextKeyframes };
-    }));
+    });
   };
 
   const updateSelectedShapeFillStops = (stops: Array<{ id?: string; color: string; position: number }>) => {
-    if (!selectedShapeId) return;
-    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
     const nextStops = normalizeFillStops(stops);
     if (nextStops.length === 0) return;
     markCustom();
-    setShapes((prev) => prev.map((shape) => {
-      if (shape.id !== selectedShapeId) return shape;
-      const keyframes = shape.fillKeyframes ?? [];
+    setFillKeyframes((keyframes) => {
       if (keyframes.length === 0) {
-        return {
-          ...shape,
-          color: nextStops[0]?.color ?? shape.color,
-          colorSecondary: nextStops[1]?.color ?? nextStops[0]?.color ?? shape.colorSecondary,
-          fillStops: nextStops,
-        };
+        setFillColor(nextStops[0]?.color ?? fillColor);
+        setFillColorSecondary(nextStops[1]?.color ?? nextStops[0]?.color ?? fillColorSecondary);
+        setFillStops(nextStops);
+        return keyframes;
       }
 
       const existing = keyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
-      const nextKeyframes = existing
+      setFillColor(nextStops[0]?.color ?? fillColor);
+      setFillColorSecondary(nextStops[1]?.color ?? nextStops[0]?.color ?? fillColorSecondary);
+      setFillStops(nextStops);
+      return existing
         ? keyframes.map((keyframe) => keyframe.id === existing.id ? { ...keyframe, stops: nextStops } : keyframe)
         : [
             ...keyframes,
             {
-              id: `${shape.id}-fill-${Date.now().toString(36)}`,
+              id: `fill-${Date.now().toString(36)}`,
               time: playheadTime,
               stops: nextStops,
-              gradientType: shape.fillGradientType ?? 'linear',
+              gradientType: fillGradientType,
               easing: [...keyframes].sort((a, b) => a.time - b.time).filter((keyframe) => keyframe.time <= playheadTime).pop()?.easing ?? 'ease-in-out' as const,
             },
           ].sort((a, b) => a.time - b.time);
-
-      return {
-        ...shape,
-        color: nextStops[0]?.color ?? shape.color,
-        colorSecondary: nextStops[1]?.color ?? nextStops[0]?.color ?? shape.colorSecondary,
-        fillKeyframes: nextKeyframes,
-      };
-    }));
+    });
   };
 
   const updateSelectedShapeFillStopPosition = (stopIndex: number, position: number) => {
@@ -814,7 +957,7 @@ export default function AppLayout() {
     markCustom();
     setShapes((prev) => {
       const icon = PRESET_ICONS[prev.length % PRESET_ICONS.length];
-      const t = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+      const t = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
       const stop = makeStop(icon, t);
       setSelectedShapeId(stop.id);
       setOpenShapePicker(stop.id);
@@ -824,9 +967,14 @@ export default function AppLayout() {
 
   const removeShape = (shapeId: string) => {
     setShapes((prev) => {
-      if (prev.length <= 1) return prev;
+      const removedIndex = prev.findIndex((shape) => shape.id === shapeId);
+      if (prev.length <= 1 || removedIndex < 0) return prev;
       const next = prev.filter((s) => s.id !== shapeId);
-      if (selectedShapeId === shapeId) setSelectedShapeId(next[0]?.id ?? null);
+      markCustom();
+      setOpenShapePicker(null);
+      if (selectedShapeId === shapeId) {
+        setSelectedShapeId(next[Math.min(removedIndex, next.length - 1)]?.id ?? null);
+      }
       return next;
     });
   };
@@ -854,14 +1002,20 @@ export default function AppLayout() {
   const [bevelSegments, setBevelSegments] = useState<number>(3);
   const [geometryQuality, setGeometryQuality] = useState<number>(GEOMETRY_QUALITY_DEFAULT);
   const [layerSpacing, setLayerSpacing] = useState<number>(0.8);
+  const [innerElementScale, setInnerElementScale] = useState({ x: 1, y: 1, z: 1 });
   const [objectScale, setObjectScale] = useState<number>(SCALE_DEFAULT);
   const [moveOffset, setMoveOffset] = useState<LightPosition>({ x: 0, y: 0, z: 0 });
   const [moveKeyframes, setMoveKeyframes] = useState<Vector3Keyframe[]>([]);
-  const [centerPull, setCenterPull] = useState<number>(0);
 
   const [enableGradient, setEnableGradient] = useState<boolean>(true);
   const [fillMode, setFillMode] = useState<FillMode>('gradient');
+  const [fillColor, setFillColor] = useState<string>('#4285F4');
+  const [fillColorSecondary, setFillColorSecondary] = useState<string>('#00C796');
+  const [fillGradientType, setFillGradientType] = useState<FillGradientType>('mesh');
+  const [fillStops, setFillStops] = useState<FillStop[] | undefined>(googleMeshFillStops());
+  const [fillKeyframes, setFillKeyframes] = useState<FillKeyframe[]>([]);
   const [rotationOffset, setRotationOffset] = useState<LightPosition>({ x: 0, y: 0, z: 0 });
+  const [previewRotationY, setPreviewRotationY] = useState<number | null>(null);
 
   // Lighting & perspective
   const [ambientColor] = useState<string>('#ffffff');
@@ -869,6 +1023,7 @@ export default function AppLayout() {
   const [keyLightColor, setKeyLightColor] = useState<string>('#ffffff');
   const [keyLightIntensity, setKeyLightIntensity] = useState<number>(1.2);
   const [keyLightPosition, setKeyLightPosition] = useState<LightPosition>({ x: 5, y: 5, z: 4 });
+  const [keyLightSoftness, setKeyLightSoftness] = useState<number>(0.35);
   const [keyLightPositionKeyframes, setKeyLightPositionKeyframes] = useState<LightPositionKeyframe[]>([]);
   const [rimLightColor] = useState<string>('#a48bff');
   const [rimLightIntensity] = useState<number>(0.8);
@@ -899,13 +1054,13 @@ export default function AppLayout() {
       setThickness(0.4);
       setEmissiveIntensity(0.0744);
     } else if (materialPreset === 'glass') {
-      setRoughness(0.04);
+      setRoughness(0.12);
       setMetalness(0.0);
       setReflectance(0.72);
       setClearcoat(1.0);
-      setClearcoatRoughness(0.04);
-      setTransmission(0.72);
-      setThickness(1.7);
+      setClearcoatRoughness(0.08);
+      setTransmission(0.38);
+      setThickness(0.85);
       setEmissiveIntensity(0.0);
     } else if (materialPreset === 'chrome') {
       setRoughness(0.075);
@@ -942,6 +1097,10 @@ export default function AppLayout() {
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [loop, setLoop] = useState<boolean>(true);
+  const [isPreviewModelReady, setIsPreviewModelReady] = useState(false);
+  const exportVideoResolveRef = useRef<(() => void) | null>(null);
+  const exportVideoRejectRef = useRef<((error: Error) => void) | null>(null);
+  const exportVideoTimeoutRef = useRef<number | null>(null);
   const [selectedMotionTrackId, setSelectedMotionTrackId] = useState<MotionTrackId>('rotation');
   const inspectorRefs = {
     fill: useRef<HTMLDivElement>(null),
@@ -1001,7 +1160,7 @@ export default function AppLayout() {
         return { ...track, defaultValue: clampedValue };
       }
 
-      const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+      const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
       const exactKeyframe = track.keyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
 
       // Edit the keyframe already at the playhead.
@@ -1052,20 +1211,21 @@ export default function AppLayout() {
   const handleViewRotationCommit = (delta: { x: number; y: number; z: number }) => {
     setSelectedMotionTrackId('rotation');
     setActiveRecipeId(null);
-    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    setPreviewRotationY(null);
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
+    const rotation = tracks.find((track) => track.id === 'rotation');
+    const currentY = rotation && rotation.keyframes.length > 0
+      ? interpolateKeyframes(playheadTime, rotation)
+      : rotationOffset.y;
+    const nextY = normalizeDegrees(currentY + delta.y);
+
+    setRotationOffset((prev) => ({
+      x: normalizeDegrees(prev.x + delta.x),
+      y: nextY,
+      z: normalizeDegrees(prev.z + delta.z)
+    }));
+
     setTracks((prevTracks) => {
-      const rotation = prevTracks.find((track) => track.id === 'rotation');
-      const currentY = rotation && rotation.keyframes.length > 0
-        ? interpolateKeyframes(playheadTime, rotation)
-        : rotationOffset.y;
-      const nextY = normalizeDegrees(currentY + delta.y);
-
-      setRotationOffset((prev) => ({
-        x: normalizeDegrees(prev.x + delta.x),
-        y: nextY,
-        z: normalizeDegrees(prev.z + delta.z)
-      }));
-
       return prevTracks.map((track) => {
         if (track.id !== 'rotation') return track;
         const clampedValue = clampNumber(nextY, track.min, track.max);
@@ -1107,10 +1267,10 @@ export default function AppLayout() {
     });
   };
 
-  const handleViewRotationSet = (target: Partial<{ x: number; y: number; z: number }>) => {
+  const handleViewRotationSet = (target: Partial<{ x: number; y: number; z: number }>, options: { commit?: boolean } = {}) => {
     setSelectedMotionTrackId('rotation');
     setActiveRecipeId(null);
-    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
     const normalizedTarget = {
       x: target.x === undefined ? undefined : normalizeDegrees(target.x),
       y: target.y === undefined ? undefined : normalizeDegrees(target.y),
@@ -1124,6 +1284,12 @@ export default function AppLayout() {
     }));
 
     const targetY = normalizedTarget.y;
+    if (targetY !== undefined && options.commit === false) {
+      setPreviewRotationY(targetY);
+      return;
+    }
+
+    setPreviewRotationY(null);
     if (targetY === undefined) return;
     setTracks((prevTracks) => prevTracks.map((track) => {
       if (track.id !== 'rotation') return track;
@@ -1187,11 +1353,11 @@ export default function AppLayout() {
       name: 'Rotation',
       color: '#ffd23f',
       min: 0,
-      max: 360,
-      defaultValue: 0,
+      max: DEFAULT_ROTATION_END,
+      defaultValue: DEFAULT_ROTATION_START,
       keyframes: [
-        { id: 'kf-rot1', time: 0, value: 0, easing: 'linear' },
-        { id: 'kf-rot2', time: 5.0, value: 360, easing: 'linear' }
+        { id: 'kf-rot1', time: 0, value: DEFAULT_ROTATION_START, easing: 'ease-in-out' },
+        { id: 'kf-rot2', time: 5.0, value: DEFAULT_ROTATION_END, easing: 'ease-in-out' }
       ]
     },
     {
@@ -1218,6 +1384,167 @@ export default function AppLayout() {
   const rotationTrack = tracks.find((track) => track.id === 'rotation') ?? tracks[1];
   const scaleTrack = tracks.find((track) => track.id === 'scale') ?? tracks[2];
   const lightingTrack = tracks.find((track) => track.id === 'lighting') ?? tracks[3];
+  const undoStackRef = useRef<EditorSnapshot[]>([]);
+  const lastUndoSnapshotKeyRef = useRef('');
+  const isRestoringUndoRef = useRef(false);
+
+  const createEditorSnapshot = (): EditorSnapshot => ({
+    activeRecipeId,
+    shapes,
+    selectedShapeId,
+    selectedMotionTrackId,
+    duration,
+    materialPreset,
+    roughness,
+    metalness,
+    reflectance,
+    clearcoat,
+    clearcoatRoughness,
+    transmission,
+    thickness,
+    emissiveIntensity,
+    materialKeyframes,
+    extrusionDepth,
+    bevelEnabled,
+    bevelThickness,
+    bevelSize,
+    bevelSegments,
+    geometryQuality,
+    layerSpacing,
+    innerElementScale,
+    objectScale,
+    moveOffset,
+    moveKeyframes,
+    enableGradient,
+    fillMode,
+    fillColor,
+    fillColorSecondary,
+    fillGradientType,
+    fillStops,
+    fillKeyframes,
+    rotationOffset,
+    keyLightColor,
+    keyLightIntensity,
+    keyLightPosition,
+    keyLightSoftness,
+    keyLightPositionKeyframes,
+    tracks,
+  });
+
+  const restoreEditorSnapshot = (snapshot: EditorSnapshot) => {
+    isRestoringUndoRef.current = true;
+    lastUndoSnapshotKeyRef.current = JSON.stringify(snapshot);
+    setActiveRecipeId(snapshot.activeRecipeId);
+    setShapes(snapshot.shapes);
+    setSelectedShapeId(snapshot.selectedShapeId);
+    setOpenShapePicker(null);
+    setSelectedMotionTrackId(snapshot.selectedMotionTrackId);
+    setDuration(snapshot.duration);
+    setCurrentTime((time) => clampNumber(time, 0, snapshot.duration));
+    setMaterialPreset(snapshot.materialPreset);
+    setRoughness(snapshot.roughness);
+    setMetalness(snapshot.metalness);
+    setReflectance(snapshot.reflectance);
+    setClearcoat(snapshot.clearcoat);
+    setClearcoatRoughness(snapshot.clearcoatRoughness);
+    setTransmission(snapshot.transmission);
+    setThickness(snapshot.thickness);
+    setEmissiveIntensity(snapshot.emissiveIntensity);
+    setMaterialKeyframes(snapshot.materialKeyframes);
+    setExtrusionDepth(snapshot.extrusionDepth);
+    setBevelEnabled(snapshot.bevelEnabled);
+    setBevelThickness(snapshot.bevelThickness);
+    setBevelSize(snapshot.bevelSize);
+    setBevelSegments(snapshot.bevelSegments);
+    setGeometryQuality(snapshot.geometryQuality);
+    setLayerSpacing(snapshot.layerSpacing);
+    setInnerElementScale(snapshot.innerElementScale);
+    setObjectScale(snapshot.objectScale);
+    setMoveOffset(snapshot.moveOffset);
+    setMoveKeyframes(snapshot.moveKeyframes);
+    setEnableGradient(snapshot.enableGradient);
+    setFillMode(snapshot.fillMode);
+    setFillColor(snapshot.fillColor);
+    setFillColorSecondary(snapshot.fillColorSecondary);
+    setFillGradientType(snapshot.fillGradientType);
+    setFillStops(snapshot.fillStops);
+    setFillKeyframes(snapshot.fillKeyframes);
+    setRotationOffset(snapshot.rotationOffset);
+    setPreviewRotationY(null);
+    setKeyLightColor(snapshot.keyLightColor);
+    setKeyLightIntensity(snapshot.keyLightIntensity);
+    setKeyLightPosition(snapshot.keyLightPosition);
+    setKeyLightSoftness(snapshot.keyLightSoftness);
+    setKeyLightPositionKeyframes(snapshot.keyLightPositionKeyframes);
+    setTracks(snapshot.tracks);
+    setIsPlaying(false);
+  };
+
+  const undoLastEditorChange = () => {
+    const stack = undoStackRef.current;
+    if (stack.length <= 1) return;
+    stack.pop();
+    const previous = stack[stack.length - 1];
+    if (previous) restoreEditorSnapshot(previous);
+  };
+
+  useEffect(() => {
+    if (shapes.length === 0) return;
+
+    const snapshot = createEditorSnapshot();
+    const snapshotKey = JSON.stringify(snapshot);
+
+    if (isRestoringUndoRef.current) {
+      isRestoringUndoRef.current = false;
+      lastUndoSnapshotKeyRef.current = snapshotKey;
+      return;
+    }
+
+    if (snapshotKey === lastUndoSnapshotKeyRef.current) return;
+    undoStackRef.current = [...undoStackRef.current, snapshot].slice(-MAX_UNDO_STEPS);
+    lastUndoSnapshotKeyRef.current = snapshotKey;
+  }, [
+    activeRecipeId,
+    shapes,
+    selectedShapeId,
+    selectedMotionTrackId,
+    duration,
+    materialPreset,
+    roughness,
+    metalness,
+    reflectance,
+    clearcoat,
+    clearcoatRoughness,
+    transmission,
+    thickness,
+    emissiveIntensity,
+    materialKeyframes,
+    extrusionDepth,
+    bevelEnabled,
+    bevelThickness,
+    bevelSize,
+    bevelSegments,
+    geometryQuality,
+    layerSpacing,
+    innerElementScale,
+    objectScale,
+    moveOffset,
+    moveKeyframes,
+    enableGradient,
+    fillMode,
+    fillColor,
+    fillColorSecondary,
+    fillGradientType,
+    fillStops,
+    fillKeyframes,
+    rotationOffset,
+    keyLightColor,
+    keyLightIntensity,
+    keyLightPosition,
+    keyLightSoftness,
+    keyLightPositionKeyframes,
+    tracks,
+  ]);
 
   // --- Derived morph state: which two shapes surround the playhead, and the blend between them ---
   const sortedShapes = [...shapes].sort((a, b) => a.time - b.time);
@@ -1258,48 +1585,53 @@ export default function AppLayout() {
   const shapeName = (stop: ShapeStop | null) =>
     stop ? (stop.iconName ?? PRESET_ICONS.find((i) => i.id === stop.iconId)?.name ?? 'Custom') : 'Shape';
 
-  const selectedShapeFillValue = selectedShape
-    ? interpolateFillKeyframes(
-        currentTime,
-        { color: selectedShape.color, colorSecondary: selectedShape.colorSecondary, gradientType: selectedShape.fillGradientType, stops: selectedShape.fillStops },
-        selectedShape.fillKeyframes
-      )
-    : { color: '#ffffff', colorSecondary: '#ffffff', gradientType: 'linear' as const, stops: makeFillStops('#ffffff', '#ffffff') };
+  const selectedShapeFillValue = interpolateFillKeyframes(
+    currentTime,
+    { color: fillColor, colorSecondary: fillColorSecondary, gradientType: fillGradientType, stops: fillStops },
+    fillKeyframes
+  );
   const selectedShapeFill = selectedShapeFillValue.color;
   const selectedShapeFillSecondary = selectedShapeFillValue.colorSecondary;
-  const selectedShapeGradientType = selectedShapeFillValue.gradientType ?? selectedShape?.fillGradientType ?? 'linear';
+  const selectedShapeGradientType = selectedShapeFillValue.gradientType ?? fillGradientType;
   const selectedShapeFillStops = selectedShapeFillValue.stops ?? makeFillStops(selectedShapeFill, selectedShapeFillSecondary, fillMode === 'solid');
 
   // Engine-facing values derived from the surrounding shapes (SvgCanvas keeps its 2-shape crossfade).
   const iconAContent = morph.from.svgContent;
   const iconBContent = morph.to.svgContent;
-  const fillA = interpolateFillKeyframes(
-    currentTime,
-    { color: morph.from.color, colorSecondary: morph.from.colorSecondary, gradientType: morph.from.fillGradientType, stops: morph.from.fillStops },
-    morph.from.fillKeyframes
-  );
-  const fillB = interpolateFillKeyframes(
-    currentTime,
-    { color: morph.to.color, colorSecondary: morph.to.colorSecondary, gradientType: morph.to.fillGradientType, stops: morph.to.fillStops },
-    morph.to.fillKeyframes
-  );
+  const fillA = selectedShapeFillValue;
+  const fillB = selectedShapeFillValue;
   const colorA = fillA.color;
   const colorASecondary = fillA.colorSecondary;
   const colorB = fillB.color;
   const colorBSecondary = fillB.colorSecondary;
-  const activeGradientType = fillA.gradientType ?? morph.from.fillGradientType ?? 'linear';
+  const activeGradientType = fillA.gradientType ?? fillGradientType;
+  const renderAsSolid = fillMode === 'solid';
+  const renderEnableGradient = renderAsSolid ? true : enableGradient;
+  const renderGradientType = renderAsSolid ? 'linear' : activeGradientType;
+  const renderColorASecondary = renderAsSolid ? colorA : colorASecondary;
+  const renderColorAStops = renderAsSolid ? makeFillStops(colorA, colorA, true) : fillA.stops;
   const activeTransitionProgress = morph.progress;
   // The active transition's blend style comes from the shape we're morphing FROM.
   const transitionType = morph.from.transitionType;
   const wipeDirection = morph.from.wipeDirection;
+  const shareOutgoingFillDuringWipe = transitionType === 'wipe' && morph.from.id !== morph.to.id;
+  const renderColorB = shareOutgoingFillDuringWipe ? colorA : colorB;
+  const renderColorBSecondary = shareOutgoingFillDuringWipe
+    ? renderColorASecondary
+    : renderAsSolid ? colorB : colorBSecondary;
+  const renderColorBStops = shareOutgoingFillDuringWipe
+    ? renderColorAStops
+    : renderAsSolid ? makeFillStops(colorB, colorB, true) : fillB.stops;
 
   const activeExtrusionDepth = extrusionTrack.keyframes.length > 0
     ? interpolateKeyframes(currentTime, extrusionTrack)
     : extrusionDepth;
 
-  const activeRotationY = rotationTrack.keyframes.length > 0
-    ? interpolateKeyframes(currentTime, rotationTrack)
-    : rotationOffset.y;
+  const activeRotationY = previewRotationY ?? (
+    rotationTrack.keyframes.length > 0
+      ? interpolateKeyframes(currentTime, rotationTrack)
+      : rotationOffset.y
+  );
 
   const activeObjectScale = scaleTrack.keyframes.length > 0
     ? interpolateKeyframes(currentTime, scaleTrack)
@@ -1326,12 +1658,91 @@ export default function AppLayout() {
   const hasLayerGapControls = false;
 
   const keyframeAtPlayhead = (track: TimelineTrack) => {
-    const playheadTime = Number(currentTime.toFixed(2));
+    const playheadTime = quantizeTimeToFrame(currentTime);
     return track.keyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
   };
 
+  const getAdjacentKeyframeTimes = (keyframes: TimeKeyframe[]) => {
+    const sortedTimes = Array.from(new Set(
+      keyframes
+        .map((keyframe) => Number(clampNumber(keyframe.time, 0, duration).toFixed(2)))
+        .filter(Number.isFinite)
+    )).sort((a, b) => a - b);
+
+    return {
+      previous: [...sortedTimes].reverse().find((time) => time < currentTime - 0.04),
+      next: sortedTimes.find((time) => time > currentTime + 0.04),
+    };
+  };
+
+  const jumpToPropertyKeyframe = (time: number | undefined) => {
+    if (time === undefined) return;
+    setIsPlaying(false);
+    setCurrentTime(clampNumber(Number(time.toFixed(3)), 0, duration));
+  };
+
+  const keyframeNavButtonClass =
+    'flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40';
+
+  const getPropertyKeyframeNavigator = (keyframes: TimeKeyframe[]) => {
+    if (keyframes.length === 0) return null;
+    const { previous, next } = getAdjacentKeyframeTimes(keyframes);
+
+    return { previous, next };
+  };
+
+  const renderPreviousPropertyKeyframeButton = (time: number | undefined, label: string) => time === undefined ? null : (
+    <button
+      type="button"
+      aria-label={`Previous ${label} keyframe`}
+      title={`Previous ${label} keyframe`}
+      onClick={(event) => {
+        event.stopPropagation();
+        jumpToPropertyKeyframe(time);
+      }}
+      className={keyframeNavButtonClass}
+    >
+      <ChevronLeft className="size-3.5" />
+    </button>
+  );
+
+  const renderNextPropertyKeyframeButton = (time: number | undefined, label: string) => time === undefined ? null : (
+    <button
+      type="button"
+      aria-label={`Next ${label} keyframe`}
+      title={`Next ${label} keyframe`}
+      onClick={(event) => {
+        event.stopPropagation();
+        jumpToPropertyKeyframe(time);
+      }}
+      className={keyframeNavButtonClass}
+    >
+      <ChevronRight className="size-3.5" />
+    </button>
+  );
+
+  const renderPropertyKeyframeControlGroup = (
+    keyframes: TimeKeyframe[],
+    label: string,
+    keyframeButton: React.ReactNode
+  ) => {
+    const navigator = getPropertyKeyframeNavigator(keyframes);
+
+    if (!navigator) {
+      return <div className="flex shrink-0 items-center">{keyframeButton}</div>;
+    }
+
+    return (
+      <div className="flex shrink-0 items-center gap-0.5">
+        {renderPreviousPropertyKeyframeButton(navigator.previous, label)}
+        {keyframeButton}
+        {renderNextPropertyKeyframeButton(navigator.next, label)}
+      </div>
+    );
+  };
+
   const toggleKeyframeAtPlayhead = (track: TimelineTrack, value: number) => {
-    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
     setSelectedMotionTrackId(track.id as MotionTrackId);
     setActiveRecipeId(null);
     setTracks((prevTracks) => prevTracks.map((item) => {
@@ -1362,12 +1773,12 @@ export default function AppLayout() {
   };
 
   const lightPositionKeyframeAtPlayhead = () => {
-    const playheadTime = Number(currentTime.toFixed(2));
+    const playheadTime = quantizeTimeToFrame(currentTime);
     return keyLightPositionKeyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
   };
 
   const toggleLightPositionKeyframeAtPlayhead = () => {
-    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
     setActiveRecipeId(null);
     setKeyLightPositionKeyframes((prev) => {
       const existing = prev.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
@@ -1391,12 +1802,12 @@ export default function AppLayout() {
   };
 
   const moveKeyframeAtPlayhead = () => {
-    const playheadTime = Number(currentTime.toFixed(2));
+    const playheadTime = quantizeTimeToFrame(currentTime);
     return moveKeyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
   };
 
   const toggleMoveKeyframeAtPlayhead = () => {
-    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
     setSelectedMotionTrackId('move');
     setActiveRecipeId(null);
     setMoveKeyframes((prev) => {
@@ -1422,7 +1833,7 @@ export default function AppLayout() {
 
   const updateMoveAxis = (axis: keyof LightPosition, value: number) => {
     const clamped = clampNumber(value, -100, 100);
-    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
     const nextMove = { ...activeMoveOffset, [axis]: clamped };
     setSelectedMotionTrackId('move');
     setActiveRecipeId(null);
@@ -1451,7 +1862,7 @@ export default function AppLayout() {
 
   const updateLightPositionAxis = (axis: keyof LightPosition, value: number) => {
     const clamped = clampNumber(value, -12, 12);
-    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
     const nextPosition = { ...activeKeyLightPosition, [axis]: clamped };
     setActiveRecipeId(null);
     setKeyLightPosition(nextPosition);
@@ -1481,7 +1892,7 @@ export default function AppLayout() {
   const updateLightPositionXY = (x: number, y: number) => {
     const clampedX = clampNumber(x, -12, 12);
     const clampedY = clampNumber(y, -12, 12);
-    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
     const nextPosition = { ...activeKeyLightPosition, x: clampedX, y: clampedY };
     setActiveRecipeId(null);
     setKeyLightPosition(nextPosition);
@@ -1520,7 +1931,7 @@ export default function AppLayout() {
 
   const updateMaterialSetting = (key: MaterialSettingKey, value: number, min: number, max: number) => {
     const clamped = clampNumber(value, min, max);
-    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
     setActiveRecipeId(null);
     setMaterialBaseSetting(key, clamped);
     setMaterialKeyframes((prev) => {
@@ -1547,12 +1958,12 @@ export default function AppLayout() {
   };
 
   const materialKeyframeAtPlayhead = () => {
-    const playheadTime = Number(currentTime.toFixed(2));
+    const playheadTime = quantizeTimeToFrame(currentTime);
     return materialKeyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
   };
 
   const toggleMaterialKeyframeAtPlayhead = () => {
-    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
     setActiveRecipeId(null);
     setMaterialKeyframes((prev) => {
       const existing = prev.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
@@ -1577,7 +1988,7 @@ export default function AppLayout() {
 
   const renderMaterialKeyframeControl = () => {
     const isKeyedHere = Boolean(materialKeyframeAtPlayhead());
-    return (
+    const keyframeButton = (
       <button
         type="button"
         aria-label={`${isKeyedHere ? 'Remove' : 'Add'} material keyframe at current time`}
@@ -1598,11 +2009,13 @@ export default function AppLayout() {
         />
       </button>
     );
+
+    return renderPropertyKeyframeControlGroup(materialKeyframes, 'material', keyframeButton);
   };
 
   const renderLightPositionKeyframeControl = () => {
     const isKeyedHere = Boolean(lightPositionKeyframeAtPlayhead());
-    return (
+    const keyframeButton = (
       <button
         type="button"
         aria-label={`${isKeyedHere ? 'Remove' : 'Add'} light position keyframe at current time`}
@@ -1623,11 +2036,13 @@ export default function AppLayout() {
         />
       </button>
     );
+
+    return renderPropertyKeyframeControlGroup(keyLightPositionKeyframes, 'light position', keyframeButton);
   };
 
   const renderMoveKeyframeControl = () => {
     const isKeyedHere = Boolean(moveKeyframeAtPlayhead());
-    return (
+    const keyframeButton = (
       <button
         type="button"
         aria-label={`${isKeyedHere ? 'Remove' : 'Add'} move keyframe at current time`}
@@ -1648,6 +2063,8 @@ export default function AppLayout() {
         />
       </button>
     );
+
+    return renderPropertyKeyframeControlGroup(moveKeyframes, 'move', keyframeButton);
   };
 
   const motionPropertyRowClass = (trackId: MotionTrackId) =>
@@ -1657,7 +2074,7 @@ export default function AppLayout() {
 
   const renderKeyframeControl = (track: TimelineTrack, value: number) => {
     const isKeyedHere = Boolean(keyframeAtPlayhead(track));
-    return (
+    const keyframeButton = (
       <button
         type="button"
         aria-label={`${isKeyedHere ? 'Remove' : 'Add'} ${track.name} keyframe at current time`}
@@ -1678,29 +2095,23 @@ export default function AppLayout() {
         />
       </button>
     );
+
+    return renderPropertyKeyframeControlGroup(track.keyframes, track.name.toLowerCase(), keyframeButton);
   };
 
   const colorKeyframeAtPlayhead = () => {
-    if (!selectedShape) return undefined;
-    const playheadTime = Number(currentTime.toFixed(2));
-    return selectedShape.fillKeyframes?.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
+    const playheadTime = quantizeTimeToFrame(currentTime);
+    return fillKeyframes.find((keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04);
   };
 
   const toggleSelectedShapeColorKeyframe = () => {
-    if (!selectedShape) return;
-    const playheadTime = clampNumber(Number(currentTime.toFixed(2)), 0, duration);
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
     const currentKeyframe = colorKeyframeAtPlayhead();
     markCustom();
 
-    setShapes((prev) => prev.map((shape) => {
-      if (shape.id !== selectedShape.id) return shape;
-      const keyframes = shape.fillKeyframes ?? [];
-
+    setFillKeyframes((keyframes) => {
       if (currentKeyframe) {
-        return {
-          ...shape,
-          fillKeyframes: keyframes.filter((keyframe) => keyframe.id !== currentKeyframe.id),
-        };
+        return keyframes.filter((keyframe) => keyframe.id !== currentKeyframe.id);
       }
 
       const previousKeyframe = [...keyframes]
@@ -1708,26 +2119,23 @@ export default function AppLayout() {
         .filter((keyframe) => keyframe.time <= playheadTime)
         .pop();
 
-      return {
-        ...shape,
-        fillKeyframes: [
-          ...keyframes,
-          {
-            id: `${shape.id}-fill-${Date.now().toString(36)}`,
-            time: playheadTime,
-            stops: selectedShapeFillStops,
-            gradientType: selectedShapeGradientType,
-            easing: previousKeyframe?.easing ?? 'ease-in-out',
-          },
-        ].sort((a, b) => a.time - b.time),
-      };
-    }));
+      return [
+        ...keyframes,
+        {
+          id: `fill-${Date.now().toString(36)}`,
+          time: playheadTime,
+          stops: selectedShapeFillStops,
+          gradientType: selectedShapeGradientType,
+          easing: previousKeyframe?.easing ?? 'ease-in-out',
+        },
+      ].sort((a, b) => a.time - b.time);
+    });
   };
 
   const renderColorKeyframeControl = () => {
     const isKeyedHere = Boolean(colorKeyframeAtPlayhead());
 
-    return (
+    const keyframeButton = (
       <button
         type="button"
         aria-label={`${isKeyedHere ? 'Remove' : 'Add'} Fill keyframe at current time`}
@@ -1752,6 +2160,8 @@ export default function AppLayout() {
         />
       </button>
     );
+
+    return renderPropertyKeyframeControlGroup(fillKeyframes, 'fill', keyframeButton);
   };
 
   // Real-time playhead progress loop
@@ -1771,9 +2181,14 @@ export default function AppLayout() {
             } else {
               next = duration;
               setIsPlaying(false);
+              if (exportVideoResolveRef.current) {
+                window.requestAnimationFrame(() => {
+                  canvas3DRef.current?.stopRecording(finishVideoExport);
+                });
+              }
             }
           }
-          return Number(next.toFixed(3));
+          return quantizeTimeToFrame(next);
         });
 
         playheadRef.current = requestAnimationFrame(tick);
@@ -1803,8 +2218,21 @@ export default function AppLayout() {
   useEffect(() => {
     const handleEditorShortcut = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat) return;
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (isEditableShortcutTarget(event.target)) return;
+
+      const isUndoShortcut =
+        (event.metaKey || event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === 'z';
+
+      if (isUndoShortcut) {
+        event.preventDefault();
+        undoLastEditorChange();
+        return;
+      }
+
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
 
       if (event.code === 'Space') {
         event.preventDefault();
@@ -1814,7 +2242,7 @@ export default function AppLayout() {
 
     window.addEventListener('keydown', handleEditorShortcut);
     return () => window.removeEventListener('keydown', handleEditorShortcut);
-  }, [handlePlayToggle]);
+  }, [handlePlayToggle, undoLastEditorChange]);
 
   const handleReset = () => {
     setIsPlaying(false);
@@ -1833,17 +2261,17 @@ export default function AppLayout() {
     0,
     duration,
     ...shapeTransitionBreakpoints,
-    ...shapes.flatMap((shape) => (shape.fillKeyframes ?? []).map((keyframe) => keyframe.time)),
+    ...fillKeyframes.map((keyframe) => keyframe.time),
     ...tracks.flatMap((track) => track.keyframes.map((keyframe) => keyframe.time)),
     ...moveKeyframes.map((keyframe) => keyframe.time),
     ...keyLightPositionKeyframes.map((keyframe) => keyframe.time),
     ...materialKeyframes.map((keyframe) => keyframe.time),
-  ].map((time) => Number(clampNumber(time, 0, duration).toFixed(2)))))
+  ].map((time) => Number(clampNumber(time, 0, duration).toFixed(3)))))
     .sort((a, b) => a - b);
 
   const goToTime = (time: number) => {
     setIsPlaying(false);
-    setCurrentTime(clampNumber(Number(time.toFixed(3)), 0, duration));
+    setCurrentTime(quantizeTimeToFrame(clampNumber(time, 0, duration)));
   };
 
   const previousBreakpoint = [...timelineBreakpoints].reverse().find((time) => time < currentTime - 0.04);
@@ -1873,14 +2301,14 @@ export default function AppLayout() {
   };
 
   const timelinePropertyRows: TimelinePropertyRow[] = [
-    ...(selectedShape?.fillKeyframes?.length ? [{
+    ...(fillKeyframes.length ? [{
       id: 'fill',
       name: 'Fill',
       color: '#ff5b9a',
-      keyframes: selectedShape.fillKeyframes.map((keyframe) => ({
+      keyframes: fillKeyframes.map((keyframe) => ({
         id: keyframe.id,
         time: keyframe.time,
-        label: `${keyframe.stops?.[0]?.color ?? selectedShape.color}`,
+        label: `${keyframe.stops?.[0]?.color ?? fillColor}`,
       })),
     }] : []),
     ...(keyLightPositionKeyframes.length ? [{
@@ -1921,8 +2349,8 @@ export default function AppLayout() {
   };
 
   const clearTimelinePropertyRow = (rowId: string) => {
-    if (rowId === 'fill' && selectedShapeId) {
-      setShapes((prev) => prev.map((shape) => shape.id === selectedShapeId ? { ...shape, fillKeyframes: [] } : shape));
+    if (rowId === 'fill') {
+      setFillKeyframes([]);
       markCustom();
     }
     if (rowId === 'light-position') {
@@ -1940,12 +2368,8 @@ export default function AppLayout() {
   };
 
   const removeTimelinePropertyKeyframe = (rowId: string, keyframeId: string) => {
-    if (rowId === 'fill' && selectedShapeId) {
-      setShapes((prev) => prev.map((shape) =>
-        shape.id === selectedShapeId
-          ? { ...shape, fillKeyframes: (shape.fillKeyframes ?? []).filter((keyframe) => keyframe.id !== keyframeId) }
-          : shape
-      ));
+    if (rowId === 'fill') {
+      setFillKeyframes((prev) => prev.filter((keyframe) => keyframe.id !== keyframeId));
       markCustom();
     }
     if (rowId === 'light-position') {
@@ -1967,6 +2391,64 @@ export default function AppLayout() {
   // --- 4. Exporter modal ---
   const [isExportOpen, setIsExportOpen] = useState(false);
   const canvas3DRef = useRef<SvgCanvasRef>(null);
+
+  const finishVideoExport = (blob: Blob) => {
+    if (exportVideoTimeoutRef.current !== null) {
+      window.clearTimeout(exportVideoTimeoutRef.current);
+      exportVideoTimeoutRef.current = null;
+    }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'vectorforge-timeline.webm';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    exportVideoResolveRef.current?.();
+    exportVideoResolveRef.current = null;
+    exportVideoRejectRef.current = null;
+  };
+
+  const exportTimelineVideo = () => new Promise<void>((resolve, reject) => {
+    if (!canvas3DRef.current) {
+      reject(new Error('Canvas is not ready.'));
+      return;
+    }
+    if (exportVideoResolveRef.current) {
+      reject(new Error('Video export is already running.'));
+      return;
+    }
+
+    exportVideoResolveRef.current = resolve;
+    exportVideoRejectRef.current = reject;
+    setLoop(false);
+    setIsPlaying(false);
+    setCurrentTime(0);
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        try {
+          canvas3DRef.current?.startRecording();
+          setCurrentTime(0);
+          setIsPlaying(true);
+          exportVideoTimeoutRef.current = window.setTimeout(() => {
+            try {
+              canvas3DRef.current?.stopRecording(finishVideoExport);
+            } catch (error) {
+              exportVideoRejectRef.current?.(error instanceof Error ? error : new Error('Video export failed.'));
+              exportVideoResolveRef.current = null;
+              exportVideoRejectRef.current = null;
+            }
+          }, Math.ceil(duration * 1000) + 250);
+        } catch (error) {
+          exportVideoResolveRef.current = null;
+          exportVideoRejectRef.current = null;
+          reject(error instanceof Error ? error : new Error('Video export failed.'));
+        }
+      });
+    });
+  });
 
   // --- 5. File input loader for custom SVGs ---
   // Upload a custom SVG into a specific shape stop.
@@ -2046,9 +2528,12 @@ export default function AppLayout() {
           <Button
             size="icon"
             variant="ghost"
-            aria-label={isLightTheme ? 'Switch to dark theme' : 'Switch to light theme'}
-            title={isLightTheme ? 'Switch to dark theme' : 'Switch to light theme'}
-            onClick={() => setTheme(isLightTheme ? 'dark' : 'light')}
+            aria-label={themeToggleLabel}
+            title={themeToggleLabel}
+            onClick={() => {
+              if (!themeMounted) return;
+              setTheme(isLightTheme ? 'dark' : 'light');
+            }}
             className="size-8 rounded-lg border border-border bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             {isLightTheme ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}
@@ -2093,13 +2578,13 @@ export default function AppLayout() {
               iconBContent={iconBContent}
               materialPreset={materialPreset}
               colorA={colorA}
-              colorB={colorB}
-              colorASecondary={colorASecondary}
-              colorBSecondary={colorBSecondary}
-              colorAStops={fillA.stops}
-              colorBStops={fillB.stops}
-              enableGradient={enableGradient}
-              gradientType={activeGradientType}
+              colorB={renderColorB}
+              colorASecondary={renderColorASecondary}
+              colorBSecondary={renderColorBSecondary}
+              colorAStops={renderColorAStops}
+              colorBStops={renderColorBStops}
+              enableGradient={renderEnableGradient}
+              gradientType={renderGradientType}
               roughness={activeMaterialSettings.roughness}
               metalness={activeMaterialSettings.metalness}
               reflectance={activeMaterialSettings.reflectance}
@@ -2116,19 +2601,20 @@ export default function AppLayout() {
               bevelSegments={bevelSegments}
               geometryQuality={geometryQuality}
               layerSpacing={layerSpacing}
+              innerElementScale={innerElementScale}
               transitionType={transitionType}
               wipeDirection={wipeDirection}
               transitionProgress={activeTransitionProgress}
               rotationOffset={{ x: rotationOffset.x, y: activeRotationY, z: rotationOffset.z }}
               objectScale={activeObjectScale}
               moveOffset={activeMoveOffset}
-              centerPull={centerPull}
               isPlaying={isPlaying}
               ambientColor={ambientColor}
               ambientIntensity={ambientIntensity}
               keyLightColor={keyLightColor}
               keyLightIntensity={activeKeyLightIntensity}
               keyLightPosition={activeKeyLightPosition}
+              keyLightSoftness={keyLightSoftness}
               rimLightColor={rimLightColor}
               rimLightIntensity={rimLightIntensity}
               zoom={zoom}
@@ -2137,6 +2623,7 @@ export default function AppLayout() {
               onZoomChange={setZoom}
               onViewRotationCommit={handleViewRotationCommit}
               onViewRotationSet={handleViewRotationSet}
+              onModelReadyChange={setIsPreviewModelReady}
             />
 
             {/* Drag & drop an SVG to replace the selected shape */}
@@ -2315,7 +2802,7 @@ export default function AppLayout() {
               <div className="flex items-center justify-between px-0.5">
                 <span className="text-[10px] font-medium text-muted-foreground">Finish</span>
               </div>
-              <div className="grid grid-cols-6 gap-1.5">
+              <div className="grid grid-cols-6 gap-2">
                 {FINISH_PRESETS.map((preset) => {
                   const isActive = materialPreset === preset;
                   return (
@@ -2329,11 +2816,16 @@ export default function AppLayout() {
                         setActiveRecipeId(null);
                         setMaterialKeyframes([]);
                       }}
-                      className={`group/finish relative flex h-8 min-w-0 items-center justify-center rounded-md border shadow-[inset_0_0_0_1px_rgba(255,255,255,0.025)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
+                      className={`group/finish relative flex h-9 min-w-0 items-center justify-center overflow-visible rounded-lg border p-1 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
                         isActive ? 'border-ring/50 bg-accent' : 'border-border bg-muted/45 hover:border-ring/50 hover:bg-muted/60'
                       }`}
                     >
-                      <span className="size-4 shrink-0 rounded-full border border-white/[0.16] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.22)]" style={{ background: MATERIAL_PREVIEW[preset] }} />
+                      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-background/40 ring-1 ring-foreground/10 dark:bg-background/30 dark:ring-white/15">
+                        <span
+                          className="size-[18px] rounded-full shadow-[inset_0_1px_2px_rgba(255,255,255,0.42),inset_0_-1px_2px_rgba(0,0,0,0.22),0_1px_2px_rgba(0,0,0,0.14)]"
+                          style={{ background: MATERIAL_PREVIEW[preset] }}
+                        />
+                      </span>
                       <span className="pointer-events-none absolute -top-7 left-1/2 z-30 -translate-x-1/2 rounded-md border border-border bg-popover px-2 py-1 text-[10px] font-medium text-popover-foreground opacity-0 shadow-xl transition-opacity group-hover/finish:opacity-100 group-focus-visible/finish:opacity-100">
                         {MATERIAL_METADATA[preset].name}
                       </span>
@@ -2415,6 +2907,31 @@ export default function AppLayout() {
                 })()}
               </div>
             )}
+
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[11px] text-muted-foreground w-24 shrink-0">Inner Scale</span>
+              <span className="flex-1" />
+              <div className="flex items-center gap-1">
+                {(['x', 'y', 'z'] as const).map((axis) => (
+                  <NumberField
+                    key={axis}
+                    value={innerElementScale[axis]}
+                    min={axis === 'z' ? 0.2 : 0.35}
+                    max={1.35}
+                    step={0.01}
+                    scrubStep={0.03}
+                    precision={2}
+                    prefix={axis.toUpperCase()}
+                    className="w-[54px] px-1"
+                    inputClassName="text-right"
+                    onChange={(value) => {
+                      setInnerElementScale((current) => ({ ...current, [axis]: value }));
+                      setActiveRecipeId(null);
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
 
             {/* Rounded edges — same row rhythm as Extrude: label · value · trailing control */}
             <div className="flex items-center gap-3 -mx-1 px-1 py-1">
@@ -2552,32 +3069,19 @@ export default function AppLayout() {
               {renderMoveKeyframeControl()}
             </div>
 
-            <div className="flex items-center justify-between gap-3 -mx-1 px-1 py-1">
-              <span className="w-24 shrink-0 text-[11px] text-muted-foreground">Center Pull</span>
-              <span className="flex-1" />
-              <NumberField
-                value={centerPull}
-                min={0}
-                max={2}
-                step={0.02}
-                precision={2}
-                onChange={(value) => {
-                  setCenterPull(value);
-                  setActiveRecipeId(null);
-                }}
-              />
-            </div>
-
             {/* Light — brightness inline; direction, temperature & color live in the orb popover */}
             <div ref={inspectorRefs.lighting} className={motionPropertyRowClass('lighting')} onClick={() => setSelectedMotionTrackId('lighting')}>
               <div onClick={(e) => e.stopPropagation()}>
                 <LightDirectionPicker
                   position={activeKeyLightPosition}
                   color={keyLightColor}
+                  softness={keyLightSoftness}
                   onDirectionChange={updateLightPositionXY}
                   onColorChange={(color) => { setKeyLightColor(color); setActiveRecipeId(null); }}
+                  onSoftnessChange={(value) => { setKeyLightSoftness(value); setActiveRecipeId(null); }}
                   isKeyed={Boolean(lightPositionKeyframeAtPlayhead())}
                   onToggleKeyframe={toggleLightPositionKeyframeAtPlayhead}
+                  keyframeControls={renderLightPositionKeyframeControl()}
                 />
               </div>
               <span className="w-10 shrink-0 text-[11px] text-foreground">Light</span>
@@ -2608,6 +3112,8 @@ export default function AppLayout() {
           currentTime={currentTime}
           onTimeChange={setCurrentTime}
           onScrubStart={handleScrubStart}
+          isPlaying={isPlaying}
+          isPreviewLoading={!isPreviewModelReady}
           loop={loop}
           onLoopChange={setLoop}
           tracks={tracks}
@@ -2628,6 +3134,7 @@ export default function AppLayout() {
           onShapeEasingChange={(id, easing) => { markCustom(); setShapes((prev) => prev.map((s) => s.id === id ? { ...s, easing } : s)); }}
           shapeOptions={PRESET_ICONS}
           onShapeIconChange={setShapeIcon}
+          onShapeWipePairChange={setShapeWipePair}
           onUploadShape={triggerShapeUpload}
           onShapeBlendChange={setShapeBlend}
           openShapePicker={openShapePicker}
@@ -2651,8 +3158,7 @@ export default function AppLayout() {
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
         onExportGltf={() => canvas3DRef.current?.exportGltf()}
-        onStartRecording={() => canvas3DRef.current?.startRecording()}
-        onStopRecording={(cb) => canvas3DRef.current?.stopRecording(cb)}
+        onExportVideo={exportTimelineVideo}
         materialPreset={materialPreset}
         colorA={colorA}
         colorB={colorB}

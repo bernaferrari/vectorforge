@@ -6,13 +6,13 @@ import { Button } from '@/components/ui/button';
 import confetti from 'canvas-confetti';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useTheme } from 'next-themes';
 
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onExportGltf: () => void;
-  onStartRecording: () => void;
-  onStopRecording: (callback: (blob: Blob) => void) => void;
+  onExportVideo: () => Promise<void>;
   // parameters to populate dynamic code generators
   materialPreset: string;
   colorA: string;
@@ -39,12 +39,52 @@ interface ExportModalProps {
   svgPathB: string;
 }
 
+const CodeBlock = ({ code, lang, className }: { code: string; lang: string; className?: string }) => {
+  const { resolvedTheme } = useTheme();
+  const [html, setHtml] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setHtml(null);
+    void import('shiki')
+      .then(({ codeToHtml }) => codeToHtml(code, {
+        lang,
+        theme: resolvedTheme === 'light' ? 'github-light' : 'github-dark',
+      }))
+      .then((nextHtml) => {
+        if (!cancelled) setHtml(nextHtml);
+      })
+      .catch(() => {
+        if (!cancelled) setHtml(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [code, lang, resolvedTheme]);
+
+  const surfaceClass = `block max-h-[56vh] w-full max-w-full overflow-auto rounded-lg border border-border bg-muted/35 font-mono text-[11px] leading-relaxed text-muted-foreground ${className ?? ''}`;
+
+  if (!html) {
+    return (
+      <pre className={`${surfaceClass} p-4`}>
+        <code>{code}</code>
+      </pre>
+    );
+  }
+
+  return (
+    <div
+      className={`${surfaceClass} [&_pre]:m-0 [&_pre]:min-w-max [&_pre]:!bg-transparent [&_pre]:p-4 [&_pre]:font-mono [&_pre]:text-[11px] [&_pre]:leading-relaxed`}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+};
+
 export const ExportModal: React.FC<ExportModalProps> = ({
   isOpen,
   onClose,
   onExportGltf,
-  onStartRecording,
-  onStopRecording,
+  onExportVideo,
   materialPreset,
   colorA,
   colorB,
@@ -196,19 +236,15 @@ function ExtrudedIcon({ progress = 0 }: ExtrudedIconProps) {
 `;
   };
 
+  const generateAndroidGradleCode = () => `dependencies {
+    implementation("com.google.android.filament:filament-android:<filament-version>")
+    implementation("com.google.android.filament:gltfio-android:<filament-version>")
+    implementation("com.google.android.filament:filament-utils-android:<filament-version>")
+}`
+
   // Generate an Android Filament loader for the exported glTF asset.
   const generateAndroidFilamentCode = () => {
-    return `/*
-Gradle dependencies:
-implementation("com.google.android.filament:filament-android:<filament-version>")
-implementation("com.google.android.filament:gltfio-android:<filament-version>")
-implementation("com.google.android.filament:filament-utils-android:<filament-version>")
-
-Export GLB from this editor, then place it at:
-app/src/main/assets/exports/icon.glb
-*/
-
-package com.example.icon3d
+    return `package com.example.icon3d
 
 import android.content.Context
 import android.view.Choreographer
@@ -372,26 +408,19 @@ class FilamentIconView(context: Context) : SurfaceView(context), Choreographer.F
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  const handleVideoRecordingToggle = () => {
-    if (!isRecording) {
+  const handleVideoExport = async () => {
+    if (isRecording) return;
+    try {
       setIsRecording(true);
-      onStartRecording();
-    } else {
-      setIsRecording(false);
-      onStopRecording((blob) => {
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = '3d-icon-transition-render.webm';
-        link.click();
-        
-        confetti({
-          particleCount: 150,
-          spread: 80,
-          origin: { y: 0.6 },
-          colors: ['#4ee2a3', '#7c5cff', '#ffffff']
-        });
+      await onExportVideo();
+      confetti({
+        particleCount: 150,
+        spread: 80,
+        origin: { y: 0.6 },
+        colors: ['#4ee2a3', '#7c5cff', '#ffffff']
       });
+    } finally {
+      setIsRecording(false);
     }
   };
 
@@ -436,15 +465,16 @@ class FilamentIconView(context: Context) : SurfaceView(context), Choreographer.F
                   </div>
                   <div className="min-w-0 flex-1">
                     <h3 className="text-sm font-medium text-foreground">Video</h3>
-                    <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">Record the canvas as a WebM video from the live preview.</p>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">Render the full timeline from 0s to the end as a WebM video.</p>
                   </div>
                   <Button
-                    variant={isRecording ? 'destructive' : 'secondary'}
-                    onClick={handleVideoRecordingToggle} 
+                    variant="secondary"
+                    disabled={isRecording}
+                    onClick={handleVideoExport}
                     className="shrink-0 gap-1.5"
                   >
                     <Video className="size-3.5" />
-                    {isRecording ? 'Stop' : 'WebM'}
+                    {isRecording ? 'Rendering' : 'WebM'}
                   </Button>
                 </div>
               </div>
@@ -462,9 +492,7 @@ class FilamentIconView(context: Context) : SurfaceView(context), Choreographer.F
                   {isCopied ? 'Copied!' : 'Copy Code'}
                 </Button>
               </div>
-              <pre className="block max-h-[56vh] w-full max-w-full overflow-auto rounded-lg border border-border bg-muted/35 p-4 font-mono text-[11px] leading-relaxed text-muted-foreground">
-                <code>{generateR3fCode()}</code>
-              </pre>
+              <CodeBlock code={generateR3fCode()} lang="tsx" />
             </TabsContent>
 
             <TabsContent value="android" className="relative min-w-0 p-4 outline-none">
@@ -473,15 +501,25 @@ class FilamentIconView(context: Context) : SurfaceView(context), Choreographer.F
                   size="sm" 
                   variant="ghost" 
                   className="border border-border bg-background/90 text-foreground shadow-sm hover:bg-muted"
-                  onClick={() => handleCopyCode(generateAndroidFilamentCode())}
+                  onClick={() => handleCopyCode(`${generateAndroidGradleCode()}\n\n${generateAndroidFilamentCode()}`)}
                 >
                   {isCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
                   {isCopied ? 'Copied!' : 'Copy Code'}
                 </Button>
               </div>
-              <pre className="block max-h-[56vh] w-full max-w-full overflow-auto rounded-lg border border-border bg-muted/35 p-4 font-mono text-[11px] leading-relaxed text-muted-foreground">
-                <code>{generateAndroidFilamentCode()}</code>
-              </pre>
+              <div className="mb-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+                Place the exported GLB at <span className="font-mono text-foreground">app/src/main/assets/exports/icon.glb</span>.
+              </div>
+              <div className="flex max-h-[52vh] min-w-0 flex-col gap-3 overflow-auto">
+                <div className="min-w-0">
+                  <div className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Gradle</div>
+                  <CodeBlock code={generateAndroidGradleCode()} lang="kotlin" className="max-h-none" />
+                </div>
+                <div className="min-w-0">
+                  <div className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Kotlin</div>
+                  <CodeBlock code={generateAndroidFilamentCode()} lang="kotlin" className="max-h-none" />
+                </div>
+              </div>
             </TabsContent>
           </div>
         </Tabs>

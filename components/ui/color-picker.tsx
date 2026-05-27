@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Move, Shuffle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { bindWindowPointerDrag, bindWindowTouchMouseDrag } from "@/lib/drag-events"
 
@@ -165,12 +166,25 @@ interface ColorPickerProps {
   onSecondaryAlphaChange?: (alpha: number) => void
 }
 
+interface CompactColorInputProps {
+  value: string
+  onChange: (hex: string) => void
+  className?: string
+  ariaLabel?: string
+  side?: "top" | "right" | "bottom" | "left"
+  align?: "start" | "center" | "end"
+}
+
 const GRADIENT_TYPES: Array<{ id: "linear" | "radial" | "conic" | "mesh"; label: string }> = [
   { id: "linear", label: "Linear" },
   { id: "radial", label: "Radial" },
   { id: "conic", label: "Conic" },
   { id: "mesh", label: "Mesh" },
 ]
+const SHOW_EXPERIMENTAL_GRADIENT_TYPES = false
+const VISIBLE_GRADIENT_TYPES = SHOW_EXPERIMENTAL_GRADIENT_TYPES
+  ? GRADIENT_TYPES
+  : GRADIENT_TYPES.filter((type) => type.id === "mesh")
 
 const GOOGLE_MESH_STOPS = [
   { color: "#FF9900", position: 0 },
@@ -629,18 +643,253 @@ function SolidColorEditor({
   )
 }
 
+export function CompactColorInput({
+  value,
+  onChange,
+  className,
+  ariaLabel = "Color",
+  side = "top",
+  align = "end",
+}: CompactColorInputProps) {
+  const hex = value.startsWith("#") ? value : `#${value}`
+  const [format, setFormat] = React.useState<ColorFormat>("HEX")
+  const [inputText, setInputText] = React.useState(hex)
+  const canvasRef = React.useRef<HTMLDivElement>(null)
+  const hueRef = React.useRef<HTMLDivElement>(null)
+  const alphaRef = React.useRef<HTMLDivElement>(null)
+  const alpha = 1
+
+  const { h, s, v } = React.useMemo(() => {
+    try {
+      return hexToHsv(hex)
+    } catch {
+      return { h: 0, s: 0, v: 100 }
+    }
+  }, [hex])
+
+  React.useEffect(() => {
+    setInputText(hex)
+  }, [hex])
+
+  const handleCanvasDrag = React.useCallback((clientX: number, clientY: number) => {
+    if (!canvasRef.current) return
+    const rect = canvasRef.current.getBoundingClientRect()
+    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+    const y = Math.max(0, Math.min(1, 1 - (clientY - rect.top) / rect.height))
+    onChange(hsvToHex(h, Math.round(x * 100), Math.round(y * 100)))
+  }, [h, onChange])
+
+  const handleCanvasStart = (event: React.MouseEvent | React.TouchEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const clientX = "touches" in event ? event.touches[0].clientX : event.clientX
+    const clientY = "touches" in event ? event.touches[0].clientY : event.clientY
+    handleCanvasDrag(clientX, clientY)
+    bindWindowTouchMouseDrag({
+      onMove: (moveEvent) => {
+        const moveX = "touches" in moveEvent ? moveEvent.touches[0].clientX : moveEvent.clientX
+        const moveY = "touches" in moveEvent ? moveEvent.touches[0].clientY : moveEvent.clientY
+        handleCanvasDrag(moveX, moveY)
+      },
+    })
+  }
+
+  const handleHueDrag = React.useCallback((clientX: number) => {
+    if (!hueRef.current) return
+    const rect = hueRef.current.getBoundingClientRect()
+    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+    onChange(hsvToHex(Math.round(x * 360), s, v))
+  }, [onChange, s, v])
+
+  const handleHueStart = (event: React.MouseEvent | React.TouchEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const clientX = "touches" in event ? event.touches[0].clientX : event.clientX
+    handleHueDrag(clientX)
+    bindWindowTouchMouseDrag({
+      onMove: (moveEvent) => {
+        const moveX = "touches" in moveEvent ? moveEvent.touches[0].clientX : moveEvent.clientX
+        handleHueDrag(moveX)
+      },
+    })
+  }
+
+  const handleTextChange = (nextValue: string) => {
+    setInputText(nextValue)
+    const nextColor = parseHexColorInput(nextValue)
+    if (nextColor) onChange(nextColor)
+  }
+
+  const commitInput = () => {
+    const nextColor = parseHexColorInput(inputText)
+    if (nextColor) {
+      onChange(nextColor)
+      setInputText(nextColor)
+    } else {
+      setInputText(hex)
+    }
+  }
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      commitInput()
+      event.currentTarget.blur()
+    }
+    if (event.key === "Escape") {
+      setInputText(hex)
+      event.currentTarget.blur()
+    }
+  }
+
+  const handleAlphaChange = () => {}
+  const handleAlphaStart = (event: React.MouseEvent | React.TouchEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+
+  return (
+    <span
+      className={cn(
+        "flex h-8 min-w-0 items-center gap-2 rounded-lg bg-muted/45 px-2 font-mono uppercase text-foreground transition-colors focus-within:ring-2 focus-within:ring-ring/35",
+        className
+      )}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <Popover>
+        <PopoverTrigger
+          aria-label={ariaLabel}
+          className="size-4.5 shrink-0 rounded-[4px] border border-border focus:outline-none focus:ring-2 focus:ring-ring/35"
+          style={{ backgroundColor: hex }}
+          onClick={(event) => event.stopPropagation()}
+        />
+        <PopoverContent
+          align={align}
+          side={side}
+          sideOffset={8}
+          className="w-[210px] rounded-xl border border-border bg-popover p-3 pb-2 text-popover-foreground shadow-2xl backdrop-blur-xl"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <SolidColorEditor
+            h={h}
+            s={s}
+            v={v}
+            hex={hex}
+            alpha={alpha}
+            inputText={inputText}
+            format={format}
+            setFormat={setFormat}
+            setInputText={setInputText}
+            canvasRef={canvasRef}
+            hueRef={hueRef}
+            alphaRef={alphaRef}
+            handleCanvasStart={handleCanvasStart}
+            handleHueStart={handleHueStart}
+            handleAlphaStart={handleAlphaStart}
+            handleAlphaChange={handleAlphaChange}
+            handleTextChange={handleTextChange}
+            handleKeyDown={handleKeyDown}
+            handleBlur={commitInput}
+            framed={false}
+            compact
+          />
+        </PopoverContent>
+      </Popover>
+      <span className="text-muted-foreground">#</span>
+      <input
+        type="text"
+        spellCheck={false}
+        aria-label={`${ariaLabel} hex value`}
+        value={inputText.replace(/^#/, "")}
+        onChange={(event) => handleTextChange(event.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={commitInput}
+        className="h-full min-w-0 flex-1 bg-transparent p-0 font-mono text-[12px] uppercase text-foreground outline-none"
+      />
+    </span>
+  )
+}
+
 export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, gradient, onGradientToggle, gradientType = "linear", onGradientTypeChange, stops, onStopsChange, onStopPositionChange, onStopRemove, secondaryValue, onSecondaryChange, secondaryAlpha, onSecondaryAlphaChange }: ColorPickerProps) {
   const supportsGradient = !!onGradientToggle
   const isGradient = !!gradient
+  const [isOpen, setIsOpen] = React.useState(false)
   const [activeStop, setActiveStop] = React.useState(0)
   const [openStopEditor, setOpenStopEditor] = React.useState<number | null>(null)
   const [format, setFormat] = React.useState<ColorFormat>("HEX")
   const [internalAlpha, setInternalAlpha] = React.useState(1)
   const [internalSecondaryAlpha, setInternalSecondaryAlpha] = React.useState(1)
+  const rootTriggerRef = React.useRef<HTMLButtonElement | null>(null)
+  const rootContentRef = React.useRef<HTMLDivElement | null>(null)
+  const stopContentRef = React.useRef<HTMLDivElement | null>(null)
+  const rootOutsidePointerRef = React.useRef<{ x: number; y: number } | null>(null)
+  const stopOutsidePointerRef = React.useRef<{ x: number; y: number } | null>(null)
   React.useEffect(() => {
     if (!isGradient) setActiveStop(0)
     setOpenStopEditor(null)
   }, [isGradient])
+
+  React.useEffect(() => {
+    if (isGradient && !SHOW_EXPERIMENTAL_GRADIENT_TYPES && gradientType !== "mesh") {
+      onGradientTypeChange?.("mesh")
+    }
+  }, [gradientType, isGradient, onGradientTypeChange])
+
+  React.useEffect(() => {
+    if (!isOpen && openStopEditor !== null) setOpenStopEditor(null)
+  }, [isOpen, openStopEditor])
+
+  React.useEffect(() => {
+    if (!isOpen && openStopEditor === null) return
+
+    const isInside = (element: HTMLElement | null, target: EventTarget | null) =>
+      Boolean(element && target instanceof Node && element.contains(target))
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (
+        openStopEditor !== null &&
+        !isInside(stopContentRef.current, event.target)
+      ) {
+        stopOutsidePointerRef.current = { x: event.clientX, y: event.clientY }
+      }
+
+      if (
+        isOpen &&
+        !isInside(rootContentRef.current, event.target) &&
+        !isInside(rootTriggerRef.current, event.target)
+      ) {
+        rootOutsidePointerRef.current = { x: event.clientX, y: event.clientY }
+      }
+    }
+
+    const handlePointerUp = (event: PointerEvent) => {
+      const closeIfClick = (
+        ref: React.MutableRefObject<{ x: number; y: number } | null>,
+        close: () => void
+      ) => {
+        const start = ref.current
+        if (!start) return
+        ref.current = null
+        if (Math.hypot(event.clientX - start.x, event.clientY - start.y) <= 4) close()
+      }
+
+      closeIfClick(stopOutsidePointerRef, () => setOpenStopEditor(null))
+      closeIfClick(rootOutsidePointerRef, () => {
+        setOpenStopEditor(null)
+        setIsOpen(false)
+      })
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown, true)
+    window.addEventListener("pointerup", handlePointerUp, true)
+    window.addEventListener("pointercancel", handlePointerUp, true)
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true)
+      window.removeEventListener("pointerup", handlePointerUp, true)
+      window.removeEventListener("pointercancel", handlePointerUp, true)
+    }
+  }, [isOpen, openStopEditor])
 
   const primaryHex = value.startsWith("#") ? value : `#${value}`
   const secondaryHex = (secondaryValue ?? value).startsWith("#") ? (secondaryValue ?? value) : `#${secondaryValue ?? value}`
@@ -685,6 +934,48 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
     setActiveStop(0)
     setOpenStopEditor(null)
   }, [onGradientToggle, onGradientTypeChange, updateStops])
+
+  const shuffleMeshStops = React.useCallback(() => {
+    const palette = normalizedStops.length >= 9
+      ? normalizedStops
+      : GRADIENT_PRESETS[Math.floor(Math.random() * GRADIENT_PRESETS.length)].stops
+    const offset = Math.floor(Math.random() * palette.length)
+    const hueShift = Math.floor(24 + Math.random() * 96)
+    const shouldShiftHue = Math.random() > 0.35
+    const nextStops = normalizedStops.map((stop, index) => {
+      const source = palette[(index + offset) % palette.length] ?? stop
+      const hsv = hexToHsv(source.color)
+      return {
+        ...stop,
+        color: shouldShiftHue ? hsvToHex((hsv.h + hueShift) % 360, hsv.s, hsv.v) : source.color,
+      }
+    })
+    onGradientToggle?.(true)
+    onGradientTypeChange?.("mesh")
+    updateStops(nextStops)
+    setOpenStopEditor(null)
+  }, [normalizedStops, onGradientToggle, onGradientTypeChange, updateStops])
+
+  const shuffleMeshPoints = React.useCallback(() => {
+    if (normalizedStops.length < 2) return
+    const positions = normalizedStops.map((stop) => stop.position).sort((a, b) => a - b)
+    const permutations = [
+      [2, 5, 8, 1, 4, 7, 0, 3, 6],
+      [6, 3, 0, 7, 4, 1, 8, 5, 2],
+      [8, 7, 6, 5, 4, 3, 2, 1, 0],
+      [1, 2, 5, 0, 4, 8, 3, 6, 7],
+      [3, 0, 1, 6, 4, 2, 7, 8, 5],
+    ]
+    const permutation = permutations[Math.floor(Math.random() * permutations.length)]
+    const nextStops = normalizedStops.map((stop, index) => ({
+      ...stop,
+      position: positions[permutation[index % permutation.length] % positions.length] ?? stop.position,
+    }))
+    onGradientToggle?.(true)
+    onGradientTypeChange?.("mesh")
+    updateStops(nextStops)
+    setOpenStopEditor(null)
+  }, [normalizedStops, onGradientToggle, onGradientTypeChange, updateStops])
 
   const updateActiveStopColor = React.useCallback((nextColor: string) => {
     if (onStopsChange) {
@@ -856,10 +1147,23 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
     e.stopPropagation()
     const stopId = normalizedStops[stop]?.id
     if (!stopId) return
+    const startX = e.clientX
+    let moved = false
     setActiveStop(stop)
-    handleStopDrag(stopId, e.clientX)
     bindWindowPointerDrag({
-      onMove: (event) => handleStopDrag(stopId, event.clientX),
+      onMove: (event) => {
+        if (!moved && Math.abs(event.clientX - startX) < 3) return
+        moved = true
+        handleStopDrag(stopId, event.clientX)
+      },
+      onEnd: () => {
+        if (!moved) {
+          window.setTimeout(() => {
+            setActiveStop(stop)
+            setOpenStopEditor(stop)
+          }, 0)
+        }
+      },
     })
   }
 
@@ -959,8 +1263,22 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
   }
 
   return (
-    <Popover>
+    <Popover
+      open={isOpen}
+      onOpenChange={(open, eventDetails) => {
+        if (!open && eventDetails.reason === "outside-press") {
+          const event = eventDetails.event
+          if ("clientX" in event && "clientY" in event) {
+            rootOutsidePointerRef.current = { x: event.clientX, y: event.clientY }
+            eventDetails.cancel()
+            return
+          }
+        }
+        setIsOpen(open)
+      }}
+    >
       <PopoverTrigger
+        ref={rootTriggerRef}
         className={cn(
           "flex items-center gap-2 rounded-lg border border-border bg-muted/45 px-2.5 py-2 text-left transition-colors hover:border-ring/50 hover:bg-muted/70 focus:outline-none focus:ring-2 focus:ring-ring/35 active:scale-[0.99]",
           className
@@ -976,6 +1294,7 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
       </PopoverTrigger>
 
       <PopoverContent
+        ref={rootContentRef}
         className={cn(
           "z-50 select-none overflow-hidden rounded-xl border border-border bg-popover p-0 text-popover-foreground shadow-2xl backdrop-blur-xl",
           "w-[260px]"
@@ -999,7 +1318,7 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
               >
                 Solid
               </button>
-              {GRADIENT_TYPES.map((type) => (
+              {VISIBLE_GRADIENT_TYPES.map((type) => (
                 <button
                   key={type.id}
                   type="button"
@@ -1022,7 +1341,7 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
             <div className="space-y-3">
               <div
                 ref={gradientRailRef}
-                className="relative mx-5 mt-6 h-9 rounded-md border border-border bg-muted/35"
+                className="relative mx-5 mt-7 h-9 rounded-md border border-border bg-muted/35"
                 onPointerDown={(event) => {
                   if (event.button !== 0) return
                   event.preventDefault()
@@ -1052,8 +1371,8 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
                 ))}
               </div>
 
-              <div className="space-y-2">
-                <div className="grid h-6 grid-cols-[1fr_28px] items-center px-2">
+              <div className="space-y-1">
+                <div className="grid h-6 grid-cols-[1fr_28px] items-center gap-1 px-2">
                   <span className="text-[13px] font-semibold text-foreground">Stops</span>
                   <button
                     type="button"
@@ -1082,7 +1401,7 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
                         setActiveStop(stop)
                       }}
                       className={cn(
-                        "grid h-9 w-full grid-cols-[48px_minmax(0,1fr)_28px] items-center gap-x-2 px-2 text-left text-[13px]",
+                        "grid h-8 w-full grid-cols-[48px_minmax(0,1fr)_28px] items-center gap-x-1.5 px-2 text-left text-[13px]",
                         active ? "bg-accent text-accent-foreground" : "hover:bg-muted/60"
                       )}
                     >
@@ -1119,17 +1438,28 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
                       <span className="flex h-7 min-w-0 items-center gap-2 rounded-md bg-muted/60 px-2 font-mono uppercase text-foreground focus-within:ring-2 focus-within:ring-ring/35" onClick={(event) => event.stopPropagation()}>
                         <Popover
                           open={openStopEditor === stop}
-                          onOpenChange={(open) => {
+                          onOpenChange={(open, eventDetails) => {
+                            if (!open && eventDetails.reason === "outside-press") {
+                              const event = eventDetails.event
+                              if ("clientX" in event && "clientY" in event) {
+                                stopOutsidePointerRef.current = { x: event.clientX, y: event.clientY }
+                                eventDetails.cancel()
+                                return
+                              }
+                            }
                             setOpenStopEditor(open ? stop : null)
                             if (open) setActiveStop(stop)
                           }}
                         >
                           <PopoverTrigger className="size-4.5 shrink-0 rounded-[4px] border border-border focus:outline-none focus:ring-2 focus:ring-ring/35" style={{ backgroundColor: stopColor }} />
                           <PopoverContent
+                            ref={stopContentRef}
                             align="start"
                             side="left"
                             sideOffset={12}
                             className="w-[210px] rounded-xl border border-border bg-popover p-3 pb-2 text-popover-foreground shadow-2xl backdrop-blur-xl"
+                            onClick={(event) => event.stopPropagation()}
+                            onPointerDown={(event) => event.stopPropagation()}
                           >
                             <SolidColorEditor
                               h={h}
@@ -1206,7 +1536,37 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
               </div>
 
               <div className="space-y-1.5 px-2">
-                <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Presets</div>
+                <div className="flex h-6 items-center justify-between">
+                  <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Presets</div>
+                  {gradientType === "mesh" && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        title="Shuffle mesh point positions"
+                        aria-label="Shuffle mesh point positions"
+                        className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/35"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          shuffleMeshPoints()
+                        }}
+                      >
+                        <Move className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Shuffle mesh colors"
+                        aria-label="Shuffle mesh colors"
+                        className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/35"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          shuffleMeshStops()
+                        }}
+                      >
+                        <Shuffle className="size-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <div className="grid grid-cols-4 gap-1.5">
                   {GRADIENT_PRESETS.map((preset) => (
                     <button

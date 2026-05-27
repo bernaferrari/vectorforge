@@ -36,7 +36,6 @@ export interface MotionRecipe {
   translateX?: number;
   translateY?: number;
   translateZ?: number;
-  centerPull?: number;
   
   transitionType: 'none' | 'wipe';
   wipeDirection: { x: number; y: number };
@@ -77,7 +76,6 @@ export const MOTION_RECIPES: MotionRecipe[] = [
     geometryQuality: 0.045,
     layerSpacing: 0.16,
     translateY: -2,
-    centerPull: 0.38,
     transitionType: 'wipe',
     wipeDirection: { x: 0.707, y: -0.707 },
     keyLightIntensity: 1.08,
@@ -148,10 +146,10 @@ export const MOTION_RECIPES: MotionRecipe[] = [
     colorASecondary: '#8a2be2',
     colorB: '#00f5ff',
     colorBSecondary: '#00ff7f',
-    roughness: 0.1,
+    roughness: 0.12,
     metalness: 0.0,
     clearcoat: 1.0,
-    transmission: 0.9,
+    transmission: 0.38,
     emissiveIntensity: 0.0,
     extrusionDepth: 10,
     bevelEnabled: true,

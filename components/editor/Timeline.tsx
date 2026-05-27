@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Trash2, Diamond, Plus, Minus, Magnet, RotateCw, Blend, ArrowRight, SquareSplitHorizontal } from 'lucide-react';
+import { Trash2, Diamond, Plus, Minus, Magnet, RotateCw, Blend, ArrowRight, SquareSplitHorizontal, Loader2 } from 'lucide-react';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -14,6 +14,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { bindWindowMouseDrag, bindWindowPointerDrag } from '@/lib/drag-events';
 import {
@@ -24,6 +25,7 @@ import {
   type MaterialSymbolFontSettings,
   type MaterialSymbolStyle,
 } from './IconLibrary';
+import { MATERIAL_WIPE_READY_PAIRS, type MaterialWipeIconPair } from './MaterialWipePairs';
 
 export type EasingType = 'linear' | 'ease-in-out' | 'spring' | 'bounce';
 
@@ -115,6 +117,8 @@ interface TimelineProps {
   currentTime: number;
   onTimeChange: (time: number) => void;
   onScrubStart?: () => void;
+  isPlaying?: boolean;
+  isPreviewLoading?: boolean;
   loop: boolean;
   onLoopChange: (loop: boolean) => void;
   tracks: TimelineTrack[];
@@ -136,6 +140,7 @@ interface TimelineProps {
   onShapeEasingChange: (id: string, easing: EasingType) => void;
   shapeOptions: ShapeOption[];
   onShapeIconChange: (id: string, option: ShapeOption) => void;
+  onShapeWipePairChange: (id: string, enabled: ShapeOption, disabled: ShapeOption) => void;
   onUploadShape: (id: string) => void;
   onShapeBlendChange: (id: string, patch: Partial<Pick<ShapeStop, 'transitionType' | 'wipeDirection'>>) => void;
   openShapePicker: string | null;
@@ -186,6 +191,39 @@ const EasingPicker: React.FC<{ value: EasingType; onChange: (e: EasingType) => v
     </PopoverContent>
   </Popover>
 );
+
+const WipePairPreview: React.FC<{
+  pair: MaterialWipeIconPair;
+  className: string;
+  style: React.CSSProperties;
+  mode: 'slash' | 'real';
+}> = ({ pair, className, style, mode }) => {
+  const disabledUsesSlash = mode === 'slash' && pair.disabled.endsWith('_off');
+  const disabledSymbol = disabledUsesSlash ? pair.disabled.slice(0, -4) : pair.disabled;
+
+  return (
+    <span className="relative grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted/45 ring-1 ring-border transition-[background-color,box-shadow] duration-200 ease-out group-hover/pair:bg-muted/65 group-hover/pair:ring-ring/45">
+      <span className="absolute inset-0 bg-ring/10 opacity-0 transition-opacity duration-200 ease-out group-hover/pair:opacity-100" />
+      <span className={`${className} absolute left-1/2 top-1/2 grid size-6 -translate-x-1/2 -translate-y-1/2 place-items-center text-center text-[24px] leading-[24px] text-foreground`} style={style}>
+        {pair.enabled}
+      </span>
+      <span
+        className="absolute inset-0 grid place-items-center [clip-path:polygon(-24%_-24%,-24%_-24%,-24%_-24%,-24%_-24%,-24%_-24%,-24%_-24%)] transition-[clip-path] duration-300 ease-out group-hover/pair:[clip-path:polygon(-24%_-24%,124%_-24%,124%_124%,124%_124%,-24%_124%,-24%_-24%)]"
+        style={style}
+      >
+        <span className={`${className} absolute left-1/2 top-1/2 grid size-6 -translate-x-1/2 -translate-y-1/2 place-items-center text-center text-[24px] leading-[24px] text-foreground`} style={style}>
+          {disabledSymbol}
+        </span>
+        {disabledUsesSlash && (
+          <span
+            aria-hidden="true"
+            className="absolute left-1/2 top-1/2 h-[25px] w-[3px] -translate-x-1/2 -translate-y-1/2 rotate-[-45deg] rounded-full bg-foreground shadow-[0_0_0_1px_hsl(var(--background))]"
+          />
+        )}
+      </span>
+    </span>
+  );
+};
 
 const EASING_OPTIONS: Array<{ value: EasingType; label: string }> = [
   { value: 'linear', label: 'Linear' },
@@ -547,8 +585,11 @@ export const interpolateFillKeyframes = (
 const RAIL_WIDTH = 140;
 const SNAP_THRESHOLD_SECONDS = 0.08;
 const TIMELINE_ZOOM_MIN = 1;
-const TIMELINE_ZOOM_MAX = 8;
+const TIMELINE_ZOOM_MAX = 3;
 const TIMELINE_ZOOM_STEP = 0.25;
+const TIMELINE_FRAME_RATE = 60;
+const TIMELINE_EDGE_SCROLL_ZONE = 44;
+const TIMELINE_EDGE_SCROLL_MAX = 14;
 const isEditableTarget = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   Boolean(target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'));
@@ -558,6 +599,21 @@ const EDGE_INSET = 12;
 const xForFrac = (frac: number, offsetPx = 0) =>
   `calc(${EDGE_INSET}px + (100% - ${EDGE_INSET * 2}px) * ${frac}${offsetPx ? ` + ${offsetPx}px` : ''})`;
 const widthForSpan = (span: number) => `calc((100% - ${EDGE_INSET * 2}px) * ${span})`;
+
+const formatTimelineTick = (time: number) => {
+  return time.toFixed(2);
+};
+
+const quantizeTimeToFrame = (time: number) =>
+  Number((Math.round(time * TIMELINE_FRAME_RATE) / TIMELINE_FRAME_RATE).toFixed(3));
+
+type TimelineGeometry = {
+  laneLeft: number;
+  laneWidth: number;
+  usableWidth: number;
+  viewportLeft: number;
+  viewportRight: number;
+};
 
 const TimelineDiamond = ({
   color,
@@ -607,6 +663,8 @@ export const Timeline: React.FC<TimelineProps> = ({
   currentTime,
   onTimeChange,
   onScrubStart,
+  isPlaying = false,
+  isPreviewLoading = false,
   loop,
   onLoopChange,
   tracks,
@@ -627,6 +685,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   onShapeEasingChange,
   shapeOptions,
   onShapeIconChange,
+  onShapeWipePairChange,
   onUploadShape,
   onShapeBlendChange,
   openShapePicker,
@@ -653,10 +712,18 @@ export const Timeline: React.FC<TimelineProps> = ({
   const [materialSymbolNames, setMaterialSymbolNames] = useState<string[]>([]);
   const [materialCatalogLoading, setMaterialCatalogLoading] = useState(false);
   const [materialSymbolStatus, setMaterialSymbolStatus] = useState<{ state: 'idle' | 'loading' | 'error'; message?: string }>({ state: 'idle' });
+  const [useRealWipePairSymbol, setUseRealWipePairSymbol] = useState(false);
   const shapeDraggedRef = useRef(false);
   const morphResizedRef = useRef(false);
   const keyframeDraggedRef = useRef(false);
   const skipGoToCommitRef = useRef(false);
+  const scrubEdgeClientXRef = useRef<number | null>(null);
+  const scrubEdgeRafRef = useRef<number | null>(null);
+  const scrubGeometryRef = useRef<TimelineGeometry | null>(null);
+  const scrubSnapTimesRef = useRef<number[] | null>(null);
+  const scrubLastTimeRef = useRef<number | null>(null);
+  const scrubPendingTimeRef = useRef<number | null>(null);
+  const scrubEmitRafRef = useRef<number | null>(null);
   const laneRef = useRef<HTMLDivElement>(null);
   const leftRailBodyRef = useRef<HTMLDivElement>(null);
   const timelineScrollRef = useRef<HTMLDivElement>(null);
@@ -782,6 +849,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   const selectedShape = shapes.find((s) => s.id === selectedShapeId) ?? null;
   const shapeLabel = (stop: ShapeStop) => stop.iconName ?? shapeOptions.find((o) => o.id === stop.iconId)?.name ?? 'Custom';
   const visiblePropertyRows = propertyRows.filter((row) => row.keyframes.length > 0);
+  const frameSnapActive = timelineZoom >= TIMELINE_ZOOM_MAX - 0.001;
   const normalizedShapeQuery = normalizeMaterialSymbolName(shapeSearchQuery);
   const visibleShapeOptions = useMemo(() => {
     const query = shapeSearchQuery.trim().toLowerCase();
@@ -809,6 +877,16 @@ export const Timeline: React.FC<TimelineProps> = ({
       : source;
     return filtered.slice(0, 80);
   }, [materialSymbolNames, normalizedShapeQuery]);
+  const filteredWipePairs = useMemo(() => {
+    const query = normalizedShapeQuery;
+    const source = MATERIAL_WIPE_READY_PAIRS;
+    const filtered = query
+      ? source.filter((pair) =>
+          normalizeMaterialSymbolName(`${pair.label} ${pair.enabled} ${pair.disabled}`).includes(query)
+        )
+      : source;
+    return filtered.slice(0, 24);
+  }, [normalizedShapeQuery]);
 
   const updateMaterialSymbolSetting = <K extends keyof MaterialSymbolFontSettings>(
     key: K,
@@ -854,6 +932,29 @@ export const Timeline: React.FC<TimelineProps> = ({
     })();
   };
 
+  const chooseWipePair = (shapeId: string, pair: MaterialWipeIconPair) => {
+    setMaterialSymbolStatus({ state: 'loading' });
+    void (async () => {
+      try {
+        const [enabled, disabled] = await Promise.all([
+          fetchMaterialSymbolIcon(pair.enabled, materialSymbolStyle),
+          fetchMaterialSymbolIcon(pair.disabled, materialSymbolStyle, {
+            syntheticOffSlash: !useRealWipePairSymbol,
+          }),
+        ]);
+        onShapeWipePairChange(shapeId, enabled, disabled);
+        setShapeSearchQuery('');
+        setMaterialSymbolStatus({ state: 'idle' });
+        onOpenShapePicker(null);
+      } catch (error) {
+        setMaterialSymbolStatus({
+          state: 'error',
+          message: error instanceof Error ? error.message : 'Could not import that wipe pair.',
+        });
+      }
+    })();
+  };
+
   // For each gap (between consecutive stops) the morph window is the sub-range
   // [mStart, mEnd] where the actual blend happens; the stops hold on either side.
   const morphWindows = sortedShapes.slice(0, -1).map((stop, i) => {
@@ -878,7 +979,7 @@ export const Timeline: React.FC<TimelineProps> = ({
     return { left, right, isOnly: false };
   });
 
-  const breakpointTimes = ({
+  const breakpointTimes = React.useCallback(({
     excludeShapeId,
     excludeKeyframe,
     excludeTrackId,
@@ -905,7 +1006,9 @@ export const Timeline: React.FC<TimelineProps> = ({
     return Array.from(new Set([...shapeTransitionTimes, ...numericKeyframeTimes, ...colorKeyframeTimes, ...propertyRowTimes, 0, duration]))
       .filter((time) => Number.isFinite(time))
       .sort((a, b) => a - b);
-  };
+  }, [duration, morphWindows, shapes, tracks, visiblePropertyRows]);
+
+  const baseBreakpointTimes = useMemo(() => breakpointTimes(), [breakpointTimes]);
 
   const snapTime = (
     rawTime: number,
@@ -917,30 +1020,153 @@ export const Timeline: React.FC<TimelineProps> = ({
     } = {}
   ) => {
     const clamped = Math.max(0, Math.min(duration, rawTime));
+    const quantizeIfNeeded = (time: number) =>
+      frameSnapActive && !options.bypass ? Math.max(0, Math.min(duration, quantizeTimeToFrame(time))) : time;
+
     if (!snapEnabled || options.bypass) return clamped;
 
-    const nearest = breakpointTimes(options).reduce<{ time: number; distance: number } | null>((closest, time) => {
+    const hasExcludedSnapTarget = Boolean(options.excludeShapeId || options.excludeKeyframe || options.excludeTrackId);
+    const candidateTimes = hasExcludedSnapTarget
+      ? breakpointTimes(options)
+      : scrubSnapTimesRef.current ?? baseBreakpointTimes;
+
+    const nearest = candidateTimes.reduce<{ time: number; distance: number } | null>((closest, time) => {
       const distance = Math.abs(time - clamped);
       if (distance > SNAP_THRESHOLD_SECONDS) return closest;
       if (!closest || distance < closest.distance) return { time, distance };
       return closest;
     }, null);
 
-    return nearest ? nearest.time : clamped;
+    return quantizeIfNeeded(nearest ? nearest.time : clamped);
   };
 
-  const rawTimeFromClientX = (clientX: number) => {
-    if (!laneRef.current) return currentTime;
-    const rect = laneRef.current.getBoundingClientRect();
-    const usable = Math.max(1, rect.width - EDGE_INSET * 2);
-    const x = Math.max(0, Math.min(clientX - rect.left - EDGE_INSET, usable));
-    return Number(((x / usable) * duration).toFixed(3));
+  const getTimelineGeometry = (): TimelineGeometry | null => {
+    if (!laneRef.current) return null;
+    const laneRect = laneRef.current.getBoundingClientRect();
+    const scrollerRect = timelineScrollRef.current?.getBoundingClientRect();
+
+    return {
+      laneLeft: laneRect.left,
+      laneWidth: laneRect.width,
+      usableWidth: Math.max(1, laneRect.width - EDGE_INSET * 2),
+      viewportLeft: scrollerRect?.left ?? laneRect.left,
+      viewportRight: scrollerRect?.right ?? laneRect.right,
+    };
+  };
+
+  const clampClientXToTimelineViewport = (clientX: number, geometry?: TimelineGeometry | null) => {
+    const scroller = timelineScrollRef.current;
+    const viewportLeft = geometry?.viewportLeft;
+    const viewportRight = geometry?.viewportRight;
+    if (viewportLeft !== undefined && viewportRight !== undefined) {
+      return Math.max(viewportLeft + EDGE_INSET, Math.min(viewportRight - EDGE_INSET, clientX));
+    }
+    if (!scroller) return clientX;
+    const rect = scroller.getBoundingClientRect();
+    return Math.max(rect.left + EDGE_INSET, Math.min(rect.right - EDGE_INSET, clientX));
+  };
+
+  const rawTimeFromClientX = (clientX: number, options: { clampToViewport?: boolean; geometry?: TimelineGeometry | null } = {}) => {
+    const geometry = options.geometry ?? getTimelineGeometry();
+    if (!geometry) return currentTime;
+    const effectiveClientX = options.clampToViewport ? clampClientXToTimelineViewport(clientX, geometry) : clientX;
+    const x = Math.max(0, Math.min(effectiveClientX - geometry.laneLeft - EDGE_INSET, geometry.usableWidth));
+    return Number(((x / geometry.usableWidth) * duration).toFixed(3));
   };
 
   const timeFromClientX = (
     clientX: number,
-    options: Parameters<typeof snapTime>[1] = {}
-  ) => Number(snapTime(rawTimeFromClientX(clientX), options).toFixed(3));
+    options: Parameters<typeof snapTime>[1] & { clampToViewport?: boolean; geometry?: TimelineGeometry | null } = {}
+  ) => Number(snapTime(rawTimeFromClientX(clientX, { clampToViewport: options.clampToViewport, geometry: options.geometry }), options).toFixed(3));
+
+  const flushScrubTime = () => {
+    const time = scrubPendingTimeRef.current;
+    scrubPendingTimeRef.current = null;
+    scrubEmitRafRef.current = null;
+    if (time === null) return;
+    if (scrubLastTimeRef.current !== null && Math.abs(scrubLastTimeRef.current - time) < 0.0005) return;
+    scrubLastTimeRef.current = time;
+    onTimeChange(time);
+  };
+
+  const emitScrubTime = (time: number, options: { immediate?: boolean } = {}) => {
+    if (scrubLastTimeRef.current !== null && Math.abs(scrubLastTimeRef.current - time) < 0.0005) return;
+    if (scrubPendingTimeRef.current !== null && Math.abs(scrubPendingTimeRef.current - time) < 0.0005) return;
+
+    scrubPendingTimeRef.current = time;
+    if (options.immediate) {
+      if (scrubEmitRafRef.current !== null) {
+        cancelAnimationFrame(scrubEmitRafRef.current);
+      }
+      flushScrubTime();
+      return;
+    }
+
+    if (scrubEmitRafRef.current === null) {
+      scrubEmitRafRef.current = requestAnimationFrame(flushScrubTime);
+    }
+  };
+
+  const scrollTimelineNearEdge = (clientX: number) => {
+    const scroller = timelineScrollRef.current;
+    if (!scroller || timelineZoom <= 1) return false;
+
+    const rect = scroller.getBoundingClientRect();
+    const leftDistance = clientX - rect.left;
+    const rightDistance = rect.right - clientX;
+    let delta = 0;
+
+    if (leftDistance < TIMELINE_EDGE_SCROLL_ZONE) {
+      delta = -((TIMELINE_EDGE_SCROLL_ZONE - Math.max(0, leftDistance)) / TIMELINE_EDGE_SCROLL_ZONE) * TIMELINE_EDGE_SCROLL_MAX;
+    } else if (rightDistance < TIMELINE_EDGE_SCROLL_ZONE) {
+      delta = ((TIMELINE_EDGE_SCROLL_ZONE - Math.max(0, rightDistance)) / TIMELINE_EDGE_SCROLL_ZONE) * TIMELINE_EDGE_SCROLL_MAX;
+    }
+
+    if (delta !== 0) {
+      scroller.scrollLeft += delta;
+      return true;
+    }
+
+    return false;
+  };
+
+  const stopScrubEdgeScroll = () => {
+    if (scrubEmitRafRef.current !== null) {
+      cancelAnimationFrame(scrubEmitRafRef.current);
+      scrubEmitRafRef.current = null;
+    }
+    flushScrubTime();
+    scrubEdgeClientXRef.current = null;
+    scrubGeometryRef.current = null;
+    scrubSnapTimesRef.current = null;
+    scrubLastTimeRef.current = null;
+    scrubPendingTimeRef.current = null;
+    if (scrubEdgeRafRef.current !== null) {
+      cancelAnimationFrame(scrubEdgeRafRef.current);
+      scrubEdgeRafRef.current = null;
+    }
+  };
+
+  const startScrubEdgeScroll = (options: Parameters<typeof snapTime>[1]) => {
+    if (scrubEdgeRafRef.current !== null) {
+      cancelAnimationFrame(scrubEdgeRafRef.current);
+      scrubEdgeRafRef.current = null;
+    }
+    const tick = () => {
+      const clientX = scrubEdgeClientXRef.current;
+      if (clientX === null) {
+        scrubEdgeRafRef.current = null;
+        return;
+      }
+      const didScroll = scrollTimelineNearEdge(clientX);
+      if (didScroll) {
+        scrubGeometryRef.current = getTimelineGeometry();
+        emitScrubTime(timeFromClientX(clientX, { ...options, clampToViewport: true, geometry: scrubGeometryRef.current }));
+      }
+      scrubEdgeRafRef.current = requestAnimationFrame(tick);
+    };
+    scrubEdgeRafRef.current = requestAnimationFrame(tick);
+  };
 
   const openGoToEditor = (clientX: number, clientY: number, time: number) => {
     const width = 132;
@@ -994,14 +1220,25 @@ export const Timeline: React.FC<TimelineProps> = ({
   const handleScrubStart = (e: React.MouseEvent) => {
     setSelectedKeyframe(null);
     onScrubStart?.();
-    onTimeChange(timeFromClientX(e.clientX, { bypass: e.altKey }));
+    const initialOptions = { bypass: e.altKey };
+    scrubGeometryRef.current = getTimelineGeometry();
+    scrubSnapTimesRef.current = baseBreakpointTimes;
+    scrubLastTimeRef.current = null;
+    scrubEdgeClientXRef.current = e.clientX;
+    emitScrubTime(timeFromClientX(e.clientX, { ...initialOptions, geometry: scrubGeometryRef.current }), { immediate: true });
+    startScrubEdgeScroll(initialOptions);
     bindWindowMouseDrag({
-      onMove: (ev) => onTimeChange(timeFromClientX(ev.clientX, { bypass: ev.altKey })),
+      onMove: (ev) => {
+        const options = { bypass: ev.altKey };
+        scrubEdgeClientXRef.current = ev.clientX;
+        emitScrubTime(timeFromClientX(ev.clientX, { ...options, clampToViewport: true, geometry: scrubGeometryRef.current }));
+      },
+      onEnd: stopScrubEdgeScroll,
     });
   };
 
   const toggleKeyframeAtPlayhead = (trackId: string) => {
-    const t = Number(currentTime.toFixed(2));
+    const t = quantizeTimeToFrame(currentTime);
     let nextSelected: { trackId: string; kfId: string } | null = null;
     const updated = tracks.map((track) => {
       if (track.id !== trackId) return track;
@@ -1026,7 +1263,8 @@ export const Timeline: React.FC<TimelineProps> = ({
   };
 
   const addTrackKeyframeAtTime = (trackId: string, time: number) => {
-    const t = Number(Math.max(0, Math.min(duration, time)).toFixed(2));
+    const clamped = Math.max(0, Math.min(duration, time));
+    const t = Number((frameSnapActive ? quantizeTimeToFrame(clamped) : clamped).toFixed(3));
     let nextSelected: { trackId: string; kfId: string } | null = null;
     const updated = tracks.map((track) => {
       if (track.id !== trackId) return track;
@@ -1063,11 +1301,19 @@ export const Timeline: React.FC<TimelineProps> = ({
   };
 
   useEffect(() => {
-    if (!selectedKeyframe) return;
     const handleDeleteSelectedKeyframe = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (event.key !== 'Delete' && event.key !== 'Backspace') return;
       const target = event.target as HTMLElement | null;
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+
+      if (!selectedKeyframe) {
+        if (!selectedShapeId || shapes.length <= 1) return;
+        event.preventDefault();
+        onRemoveShape(selectedShapeId);
+        return;
+      }
+
       const track = tracks.find((item) => item.id === selectedKeyframe.trackId);
       if (!track?.keyframes.some((keyframe) => keyframe.id === selectedKeyframe.kfId)) return;
       event.preventDefault();
@@ -1075,7 +1321,7 @@ export const Timeline: React.FC<TimelineProps> = ({
     };
     window.addEventListener('keydown', handleDeleteSelectedKeyframe);
     return () => window.removeEventListener('keydown', handleDeleteSelectedKeyframe);
-  }, [selectedKeyframe, tracks]);
+  }, [onRemoveShape, selectedKeyframe, selectedShapeId, shapes.length, tracks]);
 
   const handleKeyframeDrag = (e: React.MouseEvent, trackId: string, kfId: string) => {
     e.stopPropagation();
@@ -1096,7 +1342,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       const newTime = Number(snapTime(rawTime, {
         bypass: ev.altKey,
         excludeKeyframe: { trackId, kfId },
-      }).toFixed(2));
+      }).toFixed(3));
       onTracksChange(
         tracks.map((track) =>
           track.id === trackId
@@ -1110,7 +1356,8 @@ export const Timeline: React.FC<TimelineProps> = ({
 
   const setTrackKeyframeTime = (trackId: string, kfId: string, time: number) => {
     selectTrack(trackId);
-    const nextTime = Number(Math.max(0, Math.min(duration, time)).toFixed(2));
+    const clamped = Math.max(0, Math.min(duration, time));
+    const nextTime = Number((frameSnapActive ? quantizeTimeToFrame(clamped) : clamped).toFixed(3));
     onTracksChange(
       tracks.map((track) =>
         track.id === trackId
@@ -1177,7 +1424,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                 ...t,
                 keyframes: t.keyframes.map((k) => {
                   const init = initial.find((i) => i.id === k.id);
-                  return init ? { ...k, time: Number((init.time + delta).toFixed(2)) } : k;
+                  const nextTime = init ? Math.max(0, Math.min(duration, init.time + delta)) : k.time;
+                  return init ? { ...k, time: Number((frameSnapActive ? quantizeTimeToFrame(nextTime) : nextTime).toFixed(3)) } : k;
                 }),
             }
         )
@@ -1253,7 +1501,7 @@ export const Timeline: React.FC<TimelineProps> = ({
         draggedRef.current = true;
       }
       const snapped = snapTime(rawTimeFromClientX(ev.clientX) - grabOffset, { bypass: ev.altKey, excludeShapeId: shapeId });
-      const newTime = Number(clampShapeTime(shapeId, snapped).toFixed(2));
+      const newTime = Number(clampShapeTime(shapeId, snapped).toFixed(3));
       onShapesChange(shapes.map((s) => (s.id === shapeId ? { ...s, time: newTime } : s)));
       },
       onEnd: (ev) => {
@@ -1317,7 +1565,35 @@ export const Timeline: React.FC<TimelineProps> = ({
     });
   };
 
-  const playheadX = xForFrac(currentTime / duration);
+  const visibleCurrentTime = frameSnapActive ? quantizeTimeToFrame(currentTime) : currentTime;
+  const playheadX = xForFrac(visibleCurrentTime / duration);
+  const majorTickStep = timelineZoom >= TIMELINE_ZOOM_MAX - 0.001 ? 0.25 : timelineZoom >= 2 ? 0.5 : 1;
+  const minorTickStep = frameSnapActive ? 1 / TIMELINE_FRAME_RATE : majorTickStep / 4;
+  const tickCount = Math.floor(duration / minorTickStep) + 1;
+  const timelineTicks = Array.from({ length: tickCount }, (_, index) => {
+    const rawTime = Number((index * minorTickStep).toFixed(3));
+    const time = index === tickCount - 1 ? Math.min(rawTime, duration) : rawTime;
+    const major = Math.abs(time / majorTickStep - Math.round(time / majorTickStep)) < 0.001;
+    return { time, major };
+  }).filter((tick) => tick.time <= duration + 0.001);
+  const secondGridTicks = Array.from({ length: Math.floor(duration) + 1 }, (_, index) => index)
+    .filter((time) => time > 0 && time < duration);
+
+  useEffect(() => {
+    if (!isPlaying || !timelineScrollRef.current || !laneRef.current || timelineZoom <= 1) return;
+    const scroller = timelineScrollRef.current;
+    const usable = Math.max(1, laneRef.current.offsetWidth - EDGE_INSET * 2);
+    const playheadLeft = EDGE_INSET + usable * Math.max(0, Math.min(1, visibleCurrentTime / duration));
+    const viewportLeft = scroller.scrollLeft;
+    const viewportRight = viewportLeft + scroller.clientWidth;
+    const margin = Math.min(160, scroller.clientWidth * 0.28);
+
+    if (playheadLeft > viewportRight - margin || playheadLeft < viewportLeft + margin) {
+      const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+      const target = Math.max(0, Math.min(maxScroll, playheadLeft - scroller.clientWidth * 0.5));
+      scroller.scrollLeft = target;
+    }
+  }, [duration, isPlaying, timelineZoom, visibleCurrentTime]);
 
   return (
     <ContextMenu onOpenChange={(open) => {
@@ -1329,7 +1605,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Left rail: track names */}
         <div className="flex shrink-0 flex-col overflow-visible border-r border-border bg-muted/35" style={{ width: RAIL_WIDTH }}>
-          <div className="z-50 flex h-7 shrink-0 items-center gap-2 border-b border-border bg-background py-0 pl-2 pr-1 font-mono text-[10px] tabular-nums shadow-[0_1px_0_rgba(255,255,255,0.04)]">
+          <div className="flex h-7 shrink-0 items-center gap-2 border-b border-border bg-background py-0 pl-2 pr-1 font-mono text-[10px] tabular-nums">
             <Popover
               open={durationEditor !== null}
               onOpenChange={(open) => {
@@ -1431,6 +1707,12 @@ export const Timeline: React.FC<TimelineProps> = ({
           {/* Shape lane label + add */}
           <div className={`group flex h-9 items-center gap-2 border-b border-border px-3 transition-colors ${selectedShapeId ? 'bg-muted/70' : 'hover:bg-muted/40'}`}>
             <span className={`flex-1 truncate text-[11px] font-semibold ${selectedShapeId ? 'text-foreground' : 'text-foreground'}`}>Shape</span>
+            {isPreviewLoading && (
+              <Loader2
+                aria-label="Preparing 3D icon"
+                className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+              />
+            )}
             <button
               type="button"
               aria-label="Add shape"
@@ -1479,7 +1761,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           {tracks.map((track) => {
             const isActive = activeTrackId === track.id;
             const animated = track.keyframes.length > 0;
-            const keyedAtPlayhead = track.keyframes.some((k) => Math.abs(k.time - Number(currentTime.toFixed(2))) < 0.05);
+            const keyedAtPlayhead = track.keyframes.some((k) => Math.abs(k.time - quantizeTimeToFrame(currentTime)) < 0.05);
             return (
               <div
                 key={track.id}
@@ -1558,7 +1840,7 @@ export const Timeline: React.FC<TimelineProps> = ({
         {/* Right: ruler + lanes */}
         <div
           ref={timelineScrollRef}
-          className="relative min-w-0 flex-1 overflow-auto"
+          className="relative min-w-0 flex-1 overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           onScroll={(event) => {
             if (leftRailBodyRef.current) {
               leftRailBodyRef.current.style.transform = `translateY(${-event.currentTarget.scrollTop}px)`;
@@ -1577,38 +1859,60 @@ export const Timeline: React.FC<TimelineProps> = ({
                 goToMenuItem(event, t),
               ]);
             }}
-            className="sticky top-0 z-50 h-7 cursor-col-resize border-b border-border bg-background shadow-[0_1px_0_rgba(255,255,255,0.04)]  "
+            className="sticky top-0 z-40 h-7 cursor-col-resize bg-background"
           >
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-border" aria-hidden="true" />
             <div
-              className="pointer-events-none absolute inset-y-0 left-0 bg-muted/35"
+              className="pointer-events-none absolute inset-y-0 left-0 bg-muted/70 dark:bg-muted/35"
               style={{ width: EDGE_INSET }}
               aria-hidden="true"
             />
             <div
-              className="pointer-events-none absolute inset-y-0 right-0 bg-muted/35"
+              className="pointer-events-none absolute inset-y-0 right-0 bg-muted/70 dark:bg-muted/35"
               style={{ width: EDGE_INSET }}
               aria-hidden="true"
             />
-            {Array.from({ length: Math.floor(duration) + 1 }).map((_, i) => (
-              <div key={i} className="pointer-events-none absolute top-0 bottom-0" style={{ left: xForFrac(i / duration) }}>
-                {i > 0 && <div className="absolute top-0 bottom-0 w-px bg-muted/50" />}
-                <span className="absolute top-1 pl-1 font-mono text-[9px] text-muted-foreground">{i}s</span>
-              </div>
-            ))}
-            <div className="pointer-events-none absolute top-0 bottom-0 z-20 w-px bg-foreground" style={{ left: playheadX }}>
-              <div className="absolute -top-px left-1/2 h-3.5 w-3 -translate-x-1/2 rounded-b-[5px] rounded-t-[2px] bg-foreground shadow-sm" />
+            {timelineTicks.map((tick) => {
+              const isFinalTick = Math.abs(tick.time - duration) < 0.001;
+              return (
+                <div key={`ruler-${tick.time}`} className="pointer-events-none absolute top-0 bottom-0" style={{ left: xForFrac(tick.time / duration) }}>
+                  {tick.time > 0 && (
+                    <div
+                      className={`absolute top-0 w-px ${
+                        tick.major ? 'bottom-0 bg-border' : 'h-2 bg-muted-foreground/25'
+                      }`}
+                    />
+                  )}
+                  {tick.major && !isFinalTick && (
+                    <span className="absolute top-[13px] pl-1 font-mono text-[9px] leading-none text-muted-foreground">
+                      {formatTimelineTick(tick.time)}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+            <div className="pointer-events-none absolute top-0 bottom-0 z-10 w-px -translate-x-1/2 bg-red-500 dark:bg-red-400" style={{ left: playheadX }}>
+              <div className="absolute top-1 left-1/2 z-20 h-4 w-4 -translate-x-1/2 rounded-[5px] border border-red-600/70 bg-red-500 shadow-[0_2px_6px_rgba(0,0,0,0.28)] dark:border-red-300/70 dark:bg-red-400" />
             </div>
           </div>
 
           {/* Lanes */}
           <div className="relative">
+            {secondGridTicks.map((time) => (
+              <div
+                key={`second-grid-${time}`}
+                className="pointer-events-none absolute inset-y-0 w-px bg-border/70 dark:bg-muted/45"
+                style={{ left: xForFrac(time / duration) }}
+                aria-hidden="true"
+              />
+            ))}
             <div
-              className="pointer-events-none absolute inset-y-0 left-0 bg-muted/25"
+              className="pointer-events-none absolute inset-y-0 left-0 z-[1] bg-muted/60 dark:bg-muted/25"
               style={{ width: EDGE_INSET }}
               aria-hidden="true"
             />
             <div
-              className="pointer-events-none absolute inset-y-0 right-0 bg-muted/25"
+              className="pointer-events-none absolute inset-y-0 right-0 z-[1] bg-muted/60 dark:bg-muted/25"
               style={{ width: EDGE_INSET }}
               aria-hidden="true"
             />
@@ -1656,7 +1960,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                           ...easingMenuItems(stop.easing, (easing) => onShapeEasingChange(stop.id, easing)),
                         ]);
                       }}
-                      className="group/morph absolute top-1/2 z-20 flex h-7 -translate-y-1/2 cursor-pointer items-center justify-center overflow-hidden border-y border-border transition-[filter] hover:brightness-125 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/40"
+                      className="group/morph absolute top-1/2 flex h-7 -translate-y-1/2 cursor-pointer items-center justify-center overflow-hidden border-y border-border transition-[filter] hover:brightness-125 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/40"
                       style={{
                         left: xForFrac(mStart / duration),
                         width: widthForSpan(Math.max(0, mEnd - mStart) / duration),
@@ -1666,7 +1970,16 @@ export const Timeline: React.FC<TimelineProps> = ({
                     >
                       <BlockIcon className="size-3 text-foreground/65 transition-colors group-hover/morph:text-foreground" strokeWidth={2.25} />
                     </PopoverTrigger>
-                    <PopoverContent align="center" side="top" sideOffset={10} className="w-60 border-border bg-popover p-3 text-foreground shadow-2xl">
+                    <PopoverContent
+                      align="center"
+                      side="top"
+                      sideOffset={10}
+                      className="w-60 border-border bg-popover p-3 text-foreground shadow-2xl"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => event.stopPropagation()}
+                      onContextMenu={(event) => event.stopPropagation()}
+                    >
                       {(() => {
                         const isFade = stop.wipeDirection.x === 0 && stop.wipeDirection.y === 0;
                         const mode: 'fade' | 'wipe' | 'none' =
@@ -1710,32 +2023,33 @@ export const Timeline: React.FC<TimelineProps> = ({
 
                             {mode === 'wipe' && (
                               <div className="mt-3 flex justify-center">
-                                <div className="relative size-[88px] rounded-full border border-border bg-muted/45">
+                                <div className="relative size-[104px] rounded-full">
+                                  <span className="pointer-events-none absolute left-1/2 top-1/2 size-[76px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-border bg-muted/30" />
                                   {wipeDirections
                                     .filter((dir) => !(dir.x === 0 && dir.y === 0))
                                     .map((dir) => {
                                       const active = stop.wipeDirection.x === dir.x && stop.wipeDirection.y === dir.y;
                                       const len = Math.hypot(dir.x, dir.y) || 1;
-                                      const left = 50 + (dir.x / len) * 30;
-                                      const top = 50 - (dir.y / len) * 30;
+                                      const left = `calc(50% + ${(dir.x / len) * 38}px)`;
+                                      const top = `calc(50% - ${(dir.y / len) * 38}px)`;
                                       return (
                                         <button
                                           key={dir.label}
                                           type="button"
                                           title={dir.tooltip}
                                           onClick={() => onShapeBlendChange(stop.id, { wipeDirection: { x: dir.x, y: dir.y } })}
-                                          className={`absolute flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-[11px] transition-colors ${
+                                          className={`absolute z-10 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-[11px] transition-colors ${
                                             active
                                               ? 'border-foreground bg-foreground text-background'
                                               : 'border-border bg-muted/50 text-muted-foreground hover:border-ring/50 hover:text-foreground'
                                           }`}
-                                          style={{ left: `${left}%`, top: `${top}%` }}
+                                          style={{ left, top }}
                                         >
                                           {dir.label}
                                         </button>
                                       );
                                     })}
-                                  <span className="absolute left-1/2 top-1/2 size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted-foreground/45" />
+                                  <span className="pointer-events-none absolute left-1/2 top-1/2 size-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted-foreground/50" />
                                 </div>
                               </div>
                             )}
@@ -1748,7 +2062,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                   <div
                     title="Drag to set when the morph starts"
                     onPointerDown={(e) => handleMorphEdgeDrag(e, stop.id, 'start', stop.time, next.time)}
-                    className="absolute top-1/2 z-40 flex h-7 w-2.5 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize touch-none items-center justify-center"
+                    className="absolute top-1/2 flex h-7 w-2.5 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize touch-none items-center justify-center"
                     style={{ left: xForFrac(mStart / duration) }}
                   >
                     <span className="h-5 w-[3px] rounded-full bg-foreground/45 transition-colors hover:bg-foreground" />
@@ -1756,7 +2070,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                   <div
                     title="Drag to set when the morph ends"
                     onPointerDown={(e) => handleMorphEdgeDrag(e, stop.id, 'end', stop.time, next.time)}
-                    className="absolute top-1/2 z-40 flex h-7 w-2.5 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize touch-none items-center justify-center"
+                    className="absolute top-1/2 flex h-7 w-2.5 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize touch-none items-center justify-center"
                     style={{ left: xForFrac(mEnd / duration) }}
                   >
                     <span className="h-5 w-[3px] rounded-full bg-foreground/45 transition-colors hover:bg-foreground" />
@@ -1814,7 +2128,6 @@ export const Timeline: React.FC<TimelineProps> = ({
                         backgroundColor: selected ? `${stop.color}33` : `${stop.color}1c`,
                         borderColor: selected ? '#ffffff' : `${stop.color}59`,
                         boxShadow: 'none',
-                        zIndex: selected ? 25 : 16,
                       }}
                     >
                       <span
@@ -1982,6 +2295,42 @@ export const Timeline: React.FC<TimelineProps> = ({
                         <p className="mb-2 px-0.5 text-[10px] text-red-300">{materialSymbolStatus.message}</p>
                       )}
 
+                      {filteredWipePairs.length > 0 && (
+                        <div className="mb-3 border-t border-border pt-2">
+                          <div className="mb-2 flex items-center justify-between px-0.5">
+                            <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Wipe pairs</span>
+                            <label className="flex cursor-pointer items-center gap-1.5 text-[10px] text-muted-foreground" title="Use the real Material Symbol off glyph instead of adding a slash over the base glyph">
+                              <span>{useRealWipePairSymbol ? 'true' : 'fake'}</span>
+                              <Switch
+                                size="sm"
+                                checked={useRealWipePairSymbol}
+                                onCheckedChange={setUseRealWipePairSymbol}
+                                onClick={(event) => event.stopPropagation()}
+                              />
+                            </label>
+                          </div>
+                          <div className="grid max-h-[132px] grid-cols-3 gap-1.5 overflow-y-auto pr-1">
+                            {filteredWipePairs.map((pair) => (
+                              <button
+                                key={`wipe-pair-${stop.id}-${pair.enabled}-${pair.disabled}`}
+                                type="button"
+                                title={`${pair.label}: ${pair.enabled} → ${useRealWipePairSymbol ? pair.disabled : `${pair.disabled} (slash overlay)`}`}
+                                onClick={() => chooseWipePair(stop.id, pair)}
+                                className="group/pair flex h-11 min-w-0 items-center gap-2 rounded-lg border border-border bg-muted/35 px-2 text-left transition-colors hover:border-ring/45 hover:bg-muted/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                              >
+                                <WipePairPreview
+                                  pair={pair}
+                                  className={materialSymbolClass}
+                                  style={materialSymbolFontStyle(materialSymbolSettings)}
+                                  mode={useRealWipePairSymbol ? 'real' : 'slash'}
+                                />
+                                <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">{pair.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {visibleShapeOptions.length > 0 && (
                         <details className="border-t border-border pt-2">
                           <summary className="flex cursor-pointer list-none items-center justify-between px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground marker:hidden">
@@ -2112,7 +2461,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                     const prev = [...track.keyframes].sort((a, b) => a.time - b.time).filter((k) => k.time <= t).pop();
                     const kf: Keyframe = {
                       id: Math.random().toString(36).slice(2, 10),
-                      time: Number(t.toFixed(2)),
+                      time: Number(t.toFixed(3)),
                       value,
                       easing: prev?.easing ?? 'ease-in-out',
                     };
@@ -2139,9 +2488,8 @@ export const Timeline: React.FC<TimelineProps> = ({
 
                   {/* Constant (un-animated) hint */}
                   {!animated && (
-                    <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 items-center">
-                      <div className="h-px w-full bg-muted/60" />
-                      <span className="absolute left-2 rounded bg-background/95 px-1 text-[10px] text-muted-foreground">
+                    <div className="pointer-events-none absolute inset-y-0 left-2 flex items-center">
+                      <span className="rounded bg-background/95 px-1 text-[10px] text-muted-foreground">
                         {formatValueLabel(track, track.defaultValue)} · constant
                       </span>
                     </div>
@@ -2246,11 +2594,9 @@ export const Timeline: React.FC<TimelineProps> = ({
                 </div>
               );
             })}
-
-            {/* Playhead across all lanes */}
-            <div className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-foreground/25" style={{ left: playheadX }} />
           </div>
-          <div className="w-24 shrink-0 border-l border-border bg-muted/25" aria-hidden="true" />
+          <div className="pointer-events-none absolute top-7 bottom-0 z-[35] w-px -translate-x-1/2 bg-red-500 dark:bg-red-400" style={{ left: playheadX }} />
+          <div className="w-24 shrink-0 border-l border-border bg-muted/60 dark:bg-muted/25" aria-hidden="true" />
           </div>
           <div className="pointer-events-auto fixed bottom-2 right-2 z-[70] flex h-auto w-max items-center gap-px rounded-full border border-border bg-background/85 p-0.5 shadow-md backdrop-blur-xl">
             <button
