@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Play, Pause, Sliders,
+  Play, Pause,
   Upload, Download,
   ArrowUpLeft, ArrowUp, ArrowUpRight, ArrowLeft, ArrowRight, ArrowDownLeft, ArrowDown, ArrowDownRight, Compass,
-  Box, Wand2, Cuboid, Orbit, PanelLeftClose, PanelLeftOpen, Blend, ChevronDown,
-  MoreHorizontal, Maximize2, ChevronLeft, ChevronRight, SkipBack, SkipForward, Moon, Sun
+  PanelLeftClose, PanelLeftOpen, ChevronDown,
+  MoreHorizontal, ChevronLeft, ChevronRight, SkipBack, SkipForward, Moon, Sun, Link2, Unlink2
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
@@ -196,6 +196,12 @@ type Vector3Keyframe = {
   easing: EasingType;
 };
 type LightPositionKeyframe = Vector3Keyframe;
+type ScalarKeyframe = {
+  id: string;
+  time: number;
+  value: number;
+  easing: EasingType;
+};
 type MaterialSettings = {
   roughness: number;
   metalness: number;
@@ -217,8 +223,6 @@ type TimeKeyframe = { time: number };
 type EditorSnapshot = {
   activeRecipeId: string | null;
   shapes: ShapeStop[];
-  selectedShapeId: string | null;
-  selectedMotionTrackId: MotionTrackId;
   duration: number;
   materialPreset: MaterialPresetId;
   roughness: number;
@@ -236,9 +240,12 @@ type EditorSnapshot = {
   bevelSize: number;
   bevelSegments: number;
   geometryQuality: number;
+  qualityKeyframes: ScalarKeyframe[];
   layerSpacing: number;
   innerElementScale: LightPosition;
+  innerScaleKeyframes: Vector3Keyframe[];
   objectScale: number;
+  objectScaleAxes: LightPosition;
   moveOffset: LightPosition;
   moveKeyframes: Vector3Keyframe[];
   enableGradient: boolean;
@@ -271,8 +278,16 @@ const LIGHT_MAX = 25;
 const MAX_BEVEL_SEGMENTS = 24;
 const DEFAULT_ROTATION_START = 0;
 const DEFAULT_ROTATION_END = 360;
+const ROTATION_MIN = -1440;
+const ROTATION_MAX = 1440;
 const MOVE_COLOR = '#38bdf8';
 const MAX_UNDO_STEPS = 80;
+
+const AXIS_COLORS: Record<string, string> = {
+  X: '#c4766f',
+  Y: '#7dac8e',
+  Z: '#7e9bbe',
+};
 
 const MOTION_TRACK_NAMES: Record<MotionTrackId, string> = {
   extrusion: 'Extrude',
@@ -364,6 +379,24 @@ const interpolateLightPositionKeyframes = (
   };
 };
 
+const interpolateScalarKeyframes = (
+  time: number,
+  fallback: number,
+  keyframes: ScalarKeyframe[]
+): number => {
+  if (keyframes.length === 0) return fallback;
+  const sorted = [...keyframes].sort((a, b) => a.time - b.time);
+  if (time <= sorted[0].time) return sorted[0].value;
+  if (time >= sorted[sorted.length - 1].time) return sorted[sorted.length - 1].value;
+
+  const next = sorted.find((kf) => kf.time >= time);
+  const previous = [...sorted].reverse().find((kf) => kf.time <= time);
+  if (!previous || !next || previous.id === next.id) return previous?.value ?? next?.value ?? fallback;
+
+  const eased = applyEasing(previous.easing, (time - previous.time) / (next.time - previous.time));
+  return previous.value + (next.value - previous.value) * eased;
+};
+
 const interpolateMaterialKeyframes = (
   time: number,
   fallback: MaterialSettings,
@@ -385,6 +418,9 @@ const interpolateMaterialKeyframes = (
   }, { ...fallback });
 };
 
+// Module-level drag flag — lets the undo effect skip snapshots during scrub
+let __inputDragActive = false;
+
 function NumberField({
   value,
   min,
@@ -392,6 +428,7 @@ function NumberField({
   step,
   scrubStep,
   prefix,
+  prefixColor,
   suffix = '',
   precision = 1,
   className = 'w-[62px]',
@@ -404,6 +441,7 @@ function NumberField({
   step: number;
   scrubStep?: number;
   prefix?: string;
+  prefixColor?: string;
   suffix?: string;
   precision?: number;
   className?: string;
@@ -435,6 +473,7 @@ function NumberField({
     const startValue = value;
     const effectiveScrubStep = scrubStep ?? (step < 0.05 ? step * 2 : step);
     let moved = false;
+    __inputDragActive = true;
     bindWindowPointerDrag({
       onMove: (ev) => {
         const dx = ev.clientX - startX;
@@ -447,6 +486,7 @@ function NumberField({
         onChange(rounded);
       },
       onEnd: () => {
+        __inputDragActive = false;
         document.body.style.cursor = '';
         if (!moved) inputRef.current?.focus();
       },
@@ -460,9 +500,9 @@ function NumberField({
         document.body.style.cursor = '';
       }}
       title="Drag to adjust · click to type"
-      className={`flex h-7 cursor-ew-resize items-center rounded-md border border-input bg-muted/55 px-1.5 text-foreground focus-within:border-ring/50 ${className}`}
+      className={`flex h-7 cursor-ew-resize items-center rounded-[8px] bg-muted/70 px-2 text-foreground transition-colors hover:bg-muted focus-within:bg-muted focus-within:ring-1 focus-within:ring-ring/25 ${className}`}
     >
-      {prefix && <span className="pr-1 text-[9px] font-medium text-muted-foreground">{prefix}</span>}
+      {prefix && <span className={`mr-1 text-[11px] leading-none ${prefixColor ? 'font-medium' : 'font-medium text-muted-foreground'}`} style={prefixColor ? { color: prefixColor } : undefined}>{prefix}</span>}
       <input
         ref={inputRef}
         type="text"
@@ -485,10 +525,112 @@ function NumberField({
             onChange(clampNumber(value + step * direction, min, max));
           }
         }}
-        className={`min-w-0 flex-1 cursor-ew-resize bg-transparent font-mono text-[10px] text-foreground outline-none focus:cursor-text ${inputClassName}`}
+        className={`min-w-0 flex-1 cursor-ew-resize bg-transparent text-[12px] tabular-nums text-foreground outline-none focus:cursor-text ${inputClassName}`}
       />
       {suffix && <span className="pl-0.5 text-[10px] text-muted-foreground">{suffix}</span>}
     </div>
+  );
+}
+
+function InspectorSlider({
+  value,
+  min,
+  max,
+  sliderMin = min,
+  sliderMax = max,
+  step,
+  scrubStep,
+  precision,
+  inputClassName = 'w-[58px]',
+  sliderClassName = 'flex-1',
+  onChange,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  sliderMin?: number;
+  sliderMax?: number;
+  step: number;
+  scrubStep?: number;
+  precision: number;
+  inputClassName?: string;
+  sliderClassName?: string;
+  onChange: (value: number) => void;
+}) {
+  const sliderValue = clampNumber(value, sliderMin, sliderMax);
+  const progress = sliderMax > sliderMin
+    ? clampNumber((sliderValue - sliderMin) / (sliderMax - sliderMin), 0, 1)
+    : 0;
+  const thumbInset = 12;
+  const thumbPosition = `calc(${thumbInset}px + ${progress} * (100% - ${thumbInset * 2}px))`;
+
+  return (
+    <>
+      <NumberField
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        scrubStep={scrubStep}
+        precision={precision}
+        className={inputClassName}
+        onChange={onChange}
+      />
+      <label
+        className={`relative h-7 min-w-0 overflow-hidden rounded-[8px] ${sliderClassName}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <span
+          className="pointer-events-none absolute inset-0 rounded-[8px] bg-muted/70 transition-colors"
+        />
+        <span
+          className="pointer-events-none absolute inset-y-0 w-6 -translate-x-1/2 rounded-[8px] bg-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.26)] transition-colors"
+          style={{ left: thumbPosition }}
+        />
+        <input
+          type="range"
+          min={sliderMin}
+          max={sliderMax}
+          step={step}
+          value={sliderValue}
+          aria-valuemin={min}
+          aria-valuemax={max}
+          aria-valuenow={value}
+          onChange={(event) => onChange(Number(event.target.value))}
+          className="absolute inset-0 h-full w-full cursor-ew-resize appearance-none opacity-0"
+        />
+      </label>
+    </>
+  );
+}
+
+function AxisLockButton({
+  locked,
+  label,
+  onToggle,
+}: {
+  locked: boolean;
+  label: string;
+  onToggle: () => void;
+}) {
+  const Icon = locked ? Link2 : Unlink2;
+  return (
+    <button
+      type="button"
+      aria-label={`${locked ? 'Unlock' : 'Lock'} ${label} axes`}
+      title={locked ? `${label}: linked axes` : `${label}: separate axes`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+      className={`ml-1 flex size-5 shrink-0 items-center justify-center rounded-[6px] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40 ${
+        locked
+          ? 'bg-muted text-foreground hover:bg-muted/80'
+          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+      }`}
+    >
+      <Icon className="size-3" />
+    </button>
   );
 }
 
@@ -685,8 +827,8 @@ export default function AppLayout() {
           return {
             ...track,
             name: trackName,
-            min: 0,
-            max: DEFAULT_ROTATION_END,
+            min: ROTATION_MIN,
+            max: ROTATION_MAX,
             defaultValue: DEFAULT_ROTATION_START,
             keyframes: [
               { id: `${track.id}-start`, time: 0, value: DEFAULT_ROTATION_START, easing: 'ease-in-out' as const },
@@ -755,6 +897,8 @@ export default function AppLayout() {
       z: recipe.translateZ ?? 0,
     });
     setMoveKeyframes([]);
+    setQualityKeyframes([]);
+    setInnerScaleKeyframes([]);
     setKeyLightIntensity(recipe.keyLightIntensity);
     setKeyLightPosition({ x: 5, y: 5, z: 4 });
     setKeyLightSoftness(0.35);
@@ -1031,9 +1175,12 @@ export default function AppLayout() {
   const [bevelSize, setBevelSize] = useState<number>(0.08);
   const [bevelSegments, setBevelSegments] = useState<number>(3);
   const [geometryQuality, setGeometryQuality] = useState<number>(GEOMETRY_QUALITY_DEFAULT);
+  const [qualityKeyframes, setQualityKeyframes] = useState<ScalarKeyframe[]>([]);
   const [layerSpacing, setLayerSpacing] = useState<number>(0.8);
   const [innerElementScale, setInnerElementScale] = useState({ x: 1, y: 1, z: 1 });
+  const [innerScaleKeyframes, setInnerScaleKeyframes] = useState<Vector3Keyframe[]>([]);
   const [objectScale, setObjectScale] = useState<number>(SCALE_DEFAULT);
+  const [objectScaleAxes, setObjectScaleAxes] = useState<LightPosition>({ x: 1, y: 1, z: 1 });
   const [moveOffset, setMoveOffset] = useState<LightPosition>({ x: 0, y: 0, z: 0 });
   const [moveKeyframes, setMoveKeyframes] = useState<Vector3Keyframe[]>([]);
 
@@ -1060,6 +1207,9 @@ export default function AppLayout() {
   const [zoom, setZoom] = useState<number>(1.0);
   const [viewInertiaEnabled, setViewInertiaEnabled] = useState<boolean>(true);
   const [showCenterPoint, setShowCenterPoint] = useState<boolean>(false);
+  const [showTransformGizmo, setShowTransformGizmo] = useState<boolean>(false);
+  const [isScaleLocked, setIsScaleLocked] = useState<boolean>(true);
+  const [isInnerScaleLocked, setIsInnerScaleLocked] = useState<boolean>(true);
   const [zenMode, setZenMode] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
 
@@ -1238,6 +1388,13 @@ export default function AppLayout() {
     setTrackValue('scale', newValue, setObjectScale);
   };
 
+  const handleScaleAxisChange = (axis: keyof LightPosition, newValue: number) => {
+    setSelectedMotionTrackId('scale');
+    setActiveRecipeId(null);
+    setIsScaleLocked(false);
+    setObjectScaleAxes((prev) => ({ ...prev, [axis]: clampNumber(newValue, 0.1, SCALE_MAX) }));
+  };
+
   const handleViewRotationCommit = (delta: { x: number; y: number; z: number }) => {
     setSelectedMotionTrackId('rotation');
     setActiveRecipeId(null);
@@ -1247,12 +1404,12 @@ export default function AppLayout() {
     const currentY = rotation && rotation.keyframes.length > 0
       ? interpolateKeyframes(playheadTime, rotation)
       : rotationOffset.y;
-    const nextY = normalizeDegrees(currentY + delta.y);
+    const nextY = clampNumber(currentY + delta.y, ROTATION_MIN, ROTATION_MAX);
 
     setRotationOffset((prev) => ({
-      x: normalizeDegrees(prev.x + delta.x),
+      x: clampNumber(prev.x + delta.x, ROTATION_MIN, ROTATION_MAX),
       y: nextY,
-      z: normalizeDegrees(prev.z + delta.z)
+      z: clampNumber(prev.z + delta.z, ROTATION_MIN, ROTATION_MAX)
     }));
 
     setTracks((prevTracks) => {
@@ -1297,23 +1454,33 @@ export default function AppLayout() {
     });
   };
 
-  const handleViewRotationSet = (target: Partial<{ x: number; y: number; z: number }>, options: { commit?: boolean } = {}) => {
+  const handleViewRotationSet = (
+    target: Partial<{ x: number; y: number; z: number }>,
+    options: { commit?: boolean; updateTimeline?: boolean } = {}
+  ) => {
     setSelectedMotionTrackId('rotation');
     setActiveRecipeId(null);
     const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
-    const normalizedTarget = {
-      x: target.x === undefined ? undefined : normalizeDegrees(target.x),
-      y: target.y === undefined ? undefined : normalizeDegrees(target.y),
-      z: target.z === undefined ? undefined : normalizeDegrees(target.z),
+    const clampedTarget = {
+      x: target.x === undefined ? undefined : clampNumber(target.x, ROTATION_MIN, ROTATION_MAX),
+      y: target.y === undefined ? undefined : clampNumber(target.y, ROTATION_MIN, ROTATION_MAX),
+      z: target.z === undefined ? undefined : clampNumber(target.z, ROTATION_MIN, ROTATION_MAX),
     };
 
     setRotationOffset((prev) => ({
-      x: normalizedTarget.x ?? prev.x,
-      y: normalizedTarget.y ?? prev.y,
-      z: normalizedTarget.z ?? prev.z,
+      x: clampedTarget.x ?? prev.x,
+      y: clampedTarget.y ?? prev.y,
+      z: clampedTarget.z ?? prev.z,
     }));
 
-    const targetY = normalizedTarget.y;
+    if (options.updateTimeline === false) {
+      if (clampedTarget.y !== undefined) {
+        setPreviewRotationY(clampedTarget.y);
+      }
+      return;
+    }
+
+    const targetY = clampedTarget.y;
     if (targetY !== undefined && options.commit === false) {
       setPreviewRotationY(targetY);
       return;
@@ -1389,8 +1556,8 @@ export default function AppLayout() {
       id: 'rotation',
       name: 'Rotation',
       color: '#ffd23f',
-      min: 0,
-      max: DEFAULT_ROTATION_END,
+      min: ROTATION_MIN,
+      max: ROTATION_MAX,
       defaultValue: DEFAULT_ROTATION_START,
       keyframes: [
         { id: 'kf-rot1', time: 0, value: DEFAULT_ROTATION_START, easing: 'ease-in-out' },
@@ -1422,14 +1589,13 @@ export default function AppLayout() {
   const scaleTrack = tracks.find((track) => track.id === 'scale') ?? tracks[2];
   const lightingTrack = tracks.find((track) => track.id === 'lighting') ?? tracks[3];
   const undoStackRef = useRef<EditorSnapshot[]>([]);
+  const redoStackRef = useRef<EditorSnapshot[]>([]);
   const lastUndoSnapshotKeyRef = useRef('');
   const isRestoringUndoRef = useRef(false);
 
   const createEditorSnapshot = (): EditorSnapshot => ({
     activeRecipeId,
     shapes,
-    selectedShapeId,
-    selectedMotionTrackId,
     duration,
     materialPreset,
     roughness,
@@ -1447,9 +1613,12 @@ export default function AppLayout() {
     bevelSize,
     bevelSegments,
     geometryQuality,
+    qualityKeyframes,
     layerSpacing,
     innerElementScale,
+    innerScaleKeyframes,
     objectScale,
+    objectScaleAxes,
     moveOffset,
     moveKeyframes,
     enableGradient,
@@ -1473,9 +1642,11 @@ export default function AppLayout() {
     lastUndoSnapshotKeyRef.current = JSON.stringify(snapshot);
     setActiveRecipeId(snapshot.activeRecipeId);
     setShapes(snapshot.shapes);
-    setSelectedShapeId(snapshot.selectedShapeId);
+    // Validate current selection against restored shapes (don't restore selection — it's UI state)
+    setSelectedShapeId((currentId) =>
+      currentId && snapshot.shapes.some((s) => s.id === currentId) ? currentId : snapshot.shapes[0]?.id ?? null
+    );
     setOpenShapePicker(null);
-    setSelectedMotionTrackId(snapshot.selectedMotionTrackId);
     setDuration(snapshot.duration);
     setCurrentTime((time) => clampNumber(time, 0, snapshot.duration));
     setMaterialPreset(snapshot.materialPreset);
@@ -1494,9 +1665,12 @@ export default function AppLayout() {
     setBevelSize(snapshot.bevelSize);
     setBevelSegments(snapshot.bevelSegments);
     setGeometryQuality(snapshot.geometryQuality);
+    setQualityKeyframes(snapshot.qualityKeyframes);
     setLayerSpacing(snapshot.layerSpacing);
     setInnerElementScale(snapshot.innerElementScale);
+    setInnerScaleKeyframes(snapshot.innerScaleKeyframes);
     setObjectScale(snapshot.objectScale);
+    setObjectScaleAxes(snapshot.objectScaleAxes ?? { x: 1, y: 1, z: 1 });
     setMoveOffset(snapshot.moveOffset);
     setMoveKeyframes(snapshot.moveKeyframes);
     setEnableGradient(snapshot.enableGradient);
@@ -1520,31 +1694,45 @@ export default function AppLayout() {
   const undoLastEditorChange = () => {
     const stack = undoStackRef.current;
     if (stack.length <= 1) return;
-    stack.pop();
+    const current = stack.pop()!;
+    redoStackRef.current = [...redoStackRef.current, current].slice(-MAX_UNDO_STEPS);
     const previous = stack[stack.length - 1];
     if (previous) restoreEditorSnapshot(previous);
   };
 
+  const redoLastEditorChange = () => {
+    const stack = redoStackRef.current;
+    if (stack.length === 0) return;
+    const next = stack.pop()!;
+    isRestoringUndoRef.current = true;
+    lastUndoSnapshotKeyRef.current = JSON.stringify(next);
+    undoStackRef.current = [...undoStackRef.current, next].slice(-MAX_UNDO_STEPS);
+    restoreEditorSnapshot(next);
+  };
+
+  // Push undo snapshot only when state settles (not during active drags)
+  const pendingDragSnapshotRef = useRef(false);
   useEffect(() => {
     if (shapes.length === 0) return;
 
-    const snapshot = createEditorSnapshot();
-    const snapshotKey = JSON.stringify(snapshot);
-
     if (isRestoringUndoRef.current) {
       isRestoringUndoRef.current = false;
-      lastUndoSnapshotKeyRef.current = snapshotKey;
       return;
     }
 
-    if (snapshotKey === lastUndoSnapshotKeyRef.current) return;
+    // During scrub drags, defer snapshot until drag ends
+    if (__inputDragActive) {
+      pendingDragSnapshotRef.current = true;
+      return;
+    }
+
+    const snapshot = createEditorSnapshot();
     undoStackRef.current = [...undoStackRef.current, snapshot].slice(-MAX_UNDO_STEPS);
-    lastUndoSnapshotKeyRef.current = snapshotKey;
+    redoStackRef.current = [];
+    pendingDragSnapshotRef.current = false;
   }, [
     activeRecipeId,
     shapes,
-    selectedShapeId,
-    selectedMotionTrackId,
     duration,
     materialPreset,
     roughness,
@@ -1562,9 +1750,12 @@ export default function AppLayout() {
     bevelSize,
     bevelSegments,
     geometryQuality,
+    qualityKeyframes,
     layerSpacing,
     innerElementScale,
+    innerScaleKeyframes,
     objectScale,
+    objectScaleAxes,
     moveOffset,
     moveKeyframes,
     enableGradient,
@@ -1583,9 +1774,23 @@ export default function AppLayout() {
     tracks,
   ]);
 
+  // Flush deferred snapshot when a scrub drag ends
+  useEffect(() => {
+    const flush = () => {
+      if (pendingDragSnapshotRef.current && !__inputDragActive) {
+        pendingDragSnapshotRef.current = false;
+        const snapshot = createEditorSnapshot();
+        undoStackRef.current = [...undoStackRef.current, snapshot].slice(-MAX_UNDO_STEPS);
+        redoStackRef.current = [];
+      }
+    };
+    window.addEventListener('pointerup', flush);
+    return () => window.removeEventListener('pointerup', flush);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // --- Derived morph state: which two shapes surround the playhead, and the blend between them ---
-  const sortedShapes = [...shapes].sort((a, b) => a.time - b.time);
-  const morph = (() => {
+  const sortedShapes = useMemo(() => [...shapes].sort((a, b) => a.time - b.time), [shapes]);
+  const morph = useMemo(() => {
     const fallback: ShapeStop = {
       id: 'empty', time: 0, iconId: '', iconName: 'Shape', svgContent: '', color: '#ffffff', colorSecondary: '#ffffff',
       fillGradientType: 'linear', fillStops: undefined, fillKeyframes: [],
@@ -1622,7 +1827,7 @@ export default function AppLayout() {
       ? (windowProgress < 0.5 ? 0 : 1)
       : clampNumber(applyEasing(from.easing, windowProgress), 0, 1);
     return { from, to, progress };
-  })();
+  }, [currentTime, sortedShapes]);
 
   const selectedShape = shapes.find((s) => s.id === selectedShapeId) ?? sortedShapes[0] ?? null;
   const shapeName = (stop: ShapeStop | null) =>
@@ -1698,6 +1903,9 @@ export default function AppLayout() {
   };
   const activeMaterialSettings = interpolateMaterialKeyframes(currentTime, baseMaterialSettings, materialKeyframes);
 
+  const activeGeometryQuality = interpolateScalarKeyframes(currentTime, geometryQuality, qualityKeyframes);
+  const activeInnerScale = interpolateLightPositionKeyframes(currentTime, innerElementScale, innerScaleKeyframes);
+
   const hasLayerGapControls = false;
 
   const keyframeAtPlayhead = (track: TimelineTrack) => {
@@ -1725,7 +1933,7 @@ export default function AppLayout() {
   };
 
   const keyframeNavButtonClass =
-    'flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40';
+    'flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground/45 transition-colors duration-100 hover:bg-muted/50 hover:text-foreground focus-visible:outline-none';
 
   const getPropertyKeyframeNavigator = (keyframes: TimeKeyframe[]) => {
     if (keyframes.length === 0) return null;
@@ -1734,33 +1942,37 @@ export default function AppLayout() {
     return { previous, next };
   };
 
-  const renderPreviousPropertyKeyframeButton = (time: number | undefined, label: string) => time === undefined ? null : (
+  // Always rendered (takes space), invisible when there is no adjacent keyframe to jump to.
+  // Made smaller + lower opacity for Figma-like minimalism.
+  const renderPreviousPropertyKeyframeButton = (time: number | undefined, label: string) => (
     <button
       type="button"
       aria-label={`Previous ${label} keyframe`}
-      title={`Previous ${label} keyframe`}
+      title={time !== undefined ? `Previous ${label} keyframe` : undefined}
+      disabled={time === undefined}
       onClick={(event) => {
         event.stopPropagation();
         jumpToPropertyKeyframe(time);
       }}
-      className={keyframeNavButtonClass}
+      className={`${keyframeNavButtonClass} ${time === undefined ? 'invisible' : 'opacity-60 hover:opacity-100'}`}
     >
-      <ChevronLeft className="size-3.5" />
+      <ChevronLeft className="size-2.5" />
     </button>
   );
 
-  const renderNextPropertyKeyframeButton = (time: number | undefined, label: string) => time === undefined ? null : (
+  const renderNextPropertyKeyframeButton = (time: number | undefined, label: string) => (
     <button
       type="button"
       aria-label={`Next ${label} keyframe`}
-      title={`Next ${label} keyframe`}
+      title={time !== undefined ? `Next ${label} keyframe` : undefined}
+      disabled={time === undefined}
       onClick={(event) => {
         event.stopPropagation();
         jumpToPropertyKeyframe(time);
       }}
-      className={keyframeNavButtonClass}
+      className={`${keyframeNavButtonClass} ${time === undefined ? 'invisible' : 'opacity-60 hover:opacity-100'}`}
     >
-      <ChevronRight className="size-3.5" />
+      <ChevronRight className="size-2.5" />
     </button>
   );
 
@@ -1771,15 +1983,11 @@ export default function AppLayout() {
   ) => {
     const navigator = getPropertyKeyframeNavigator(keyframes);
 
-    if (!navigator) {
-      return <div className="flex shrink-0 items-center">{keyframeButton}</div>;
-    }
-
     return (
-      <div className="flex shrink-0 items-center gap-0.5">
-        {renderPreviousPropertyKeyframeButton(navigator.previous, label)}
+      <div className="flex w-[44px] shrink-0 items-center justify-between -mr-1">
+        {renderPreviousPropertyKeyframeButton(navigator?.previous, label)}
         {keyframeButton}
-        {renderNextPropertyKeyframeButton(navigator.next, label)}
+        {renderNextPropertyKeyframeButton(navigator?.next, label)}
       </div>
     );
   };
@@ -1900,6 +2108,109 @@ export default function AppLayout() {
           easing: previousKeyframe?.easing ?? 'ease-in-out',
         }
       ].sort((a, b) => a.time - b.time);
+    });
+  };
+
+  // --- Quality keyframe helpers ---
+  const qualityKeyframeAtPlayhead = () => {
+    const playheadTime = quantizeTimeToFrame(currentTime);
+    return qualityKeyframes.find((kf) => Math.abs(kf.time - playheadTime) < 0.04);
+  };
+
+  const toggleQualityKeyframeAtPlayhead = () => {
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
+    setActiveRecipeId(null);
+    setQualityKeyframes((prev) => {
+      const existing = prev.find((kf) => Math.abs(kf.time - playheadTime) < 0.04);
+      if (existing) return prev.filter((kf) => kf.id !== existing.id);
+      const previousKf = [...prev].sort((a, b) => a.time - b.time).filter((kf) => kf.time <= playheadTime).pop();
+      return [...prev, {
+        id: `quality-${Date.now().toString(36)}`,
+        time: playheadTime,
+        value: activeGeometryQuality,
+        easing: previousKf?.easing ?? 'ease-in-out' as const,
+      }].sort((a, b) => a.time - b.time);
+    });
+  };
+
+  const updateQuality = (value: number) => {
+    const clamped = clampNumber(value, 0.015, 0.12);
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
+    setActiveRecipeId(null);
+    setGeometryQuality(clamped);
+    setQualityKeyframes((prev) => {
+      if (prev.length === 0) return prev;
+      const existing = prev.find((kf) => Math.abs(kf.time - playheadTime) < 0.04);
+      if (existing) return prev.map((kf) => kf.id === existing.id ? { ...kf, value: clamped } : kf);
+      const previousKf = [...prev].sort((a, b) => a.time - b.time).filter((kf) => kf.time <= playheadTime).pop();
+      return [...prev, {
+        id: `quality-${Date.now().toString(36)}`,
+        time: playheadTime,
+        value: clamped,
+        easing: previousKf?.easing ?? 'ease-in-out' as const,
+      }].sort((a, b) => a.time - b.time);
+    });
+  };
+
+  // --- Inner Scale keyframe helpers ---
+  const innerScaleKeyframeAtPlayhead = () => {
+    const playheadTime = quantizeTimeToFrame(currentTime);
+    return innerScaleKeyframes.find((kf) => Math.abs(kf.time - playheadTime) < 0.04);
+  };
+
+  const toggleInnerScaleKeyframeAtPlayhead = () => {
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
+    setActiveRecipeId(null);
+    setInnerScaleKeyframes((prev) => {
+      const existing = prev.find((kf) => Math.abs(kf.time - playheadTime) < 0.04);
+      if (existing) return prev.filter((kf) => kf.id !== existing.id);
+      const previousKf = [...prev].sort((a, b) => a.time - b.time).filter((kf) => kf.time <= playheadTime).pop();
+      return [...prev, {
+        id: `inner-scale-${Date.now().toString(36)}`,
+        time: playheadTime,
+        value: activeInnerScale,
+        easing: previousKf?.easing ?? 'ease-in-out' as const,
+      }].sort((a, b) => a.time - b.time);
+    });
+  };
+
+  const updateInnerScaleAxis = (axis: keyof LightPosition, value: number) => {
+    const clamped = clampNumber(value, axis === 'z' ? 0.2 : 0.35, 1.35);
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
+    const nextScale = { ...activeInnerScale, [axis]: clamped };
+    setActiveRecipeId(null);
+    setInnerElementScale(nextScale);
+    setInnerScaleKeyframes((prev) => {
+      if (prev.length === 0) return prev;
+      const existing = prev.find((kf) => Math.abs(kf.time - playheadTime) < 0.04);
+      if (existing) return prev.map((kf) => kf.id === existing.id ? { ...kf, value: nextScale } : kf);
+      const previousKf = [...prev].sort((a, b) => a.time - b.time).filter((kf) => kf.time <= playheadTime).pop();
+      return [...prev, {
+        id: `inner-scale-${Date.now().toString(36)}`,
+        time: playheadTime,
+        value: nextScale,
+        easing: previousKf?.easing ?? 'ease-in-out' as const,
+      }].sort((a, b) => a.time - b.time);
+    });
+  };
+
+  const updateInnerScaleAll = (value: number) => {
+    const clamped = clampNumber(value, 0.35, 1.35);
+    const playheadTime = clampNumber(quantizeTimeToFrame(currentTime), 0, duration);
+    const nextScale = { x: clamped, y: clamped, z: clamped };
+    setActiveRecipeId(null);
+    setInnerElementScale(nextScale);
+    setInnerScaleKeyframes((prev) => {
+      if (prev.length === 0) return prev;
+      const existing = prev.find((kf) => Math.abs(kf.time - playheadTime) < 0.04);
+      if (existing) return prev.map((kf) => kf.id === existing.id ? { ...kf, value: nextScale } : kf);
+      const previousKf = [...prev].sort((a, b) => a.time - b.time).filter((kf) => kf.time <= playheadTime).pop();
+      return [...prev, {
+        id: `inner-scale-${Date.now().toString(36)}`,
+        time: playheadTime,
+        value: nextScale,
+        easing: previousKf?.easing ?? 'ease-in-out' as const,
+      }].sort((a, b) => a.time - b.time);
     });
   };
 
@@ -2040,14 +2351,12 @@ export default function AppLayout() {
           event.stopPropagation();
           toggleMaterialKeyframeAtPlayhead();
         }}
-        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
-          isKeyedHere
-            ? 'bg-muted/70 text-foreground'
-            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+        className={`size-4 shrink-0 rounded flex items-center justify-center transition-colors duration-100 focus-visible:outline-none ${
+          isKeyedHere ? '' : 'hover:bg-muted/40'
         }`}
       >
         <span
-          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-background' : 'border-border'}`}
+          className={`size-[7px] rotate-45 rounded-[1px] border transition-all ${isKeyedHere ? 'border-transparent' : 'border-muted-foreground/40'}`}
           style={{ backgroundColor: isKeyedHere ? '#a78bfa' : 'transparent' }}
         />
       </button>
@@ -2067,14 +2376,12 @@ export default function AppLayout() {
           event.stopPropagation();
           toggleLightPositionKeyframeAtPlayhead();
         }}
-        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
-          isKeyedHere
-            ? 'bg-muted/70 text-foreground'
-            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+        className={`size-4 shrink-0 rounded flex items-center justify-center transition-colors duration-100 focus-visible:outline-none ${
+          isKeyedHere ? '' : 'hover:bg-muted/40'
         }`}
       >
         <span
-          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-background' : 'border-border'}`}
+          className={`size-[7px] rotate-45 rounded-[1px] border transition-all ${isKeyedHere ? 'border-transparent' : 'border-muted-foreground/40'}`}
           style={{ backgroundColor: isKeyedHere ? '#ff5b9a' : 'transparent' }}
         />
       </button>
@@ -2094,14 +2401,12 @@ export default function AppLayout() {
           event.stopPropagation();
           toggleMoveKeyframeAtPlayhead();
         }}
-        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
-          isKeyedHere
-            ? 'bg-muted/70 text-foreground'
-            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+        className={`size-4 shrink-0 rounded flex items-center justify-center transition-colors duration-100 focus-visible:outline-none ${
+          isKeyedHere ? '' : 'hover:bg-muted/40'
         }`}
       >
         <span
-          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-background' : 'border-border'}`}
+          className={`size-[7px] rotate-45 rounded-[1px] border transition-all ${isKeyedHere ? 'border-transparent' : 'border-muted-foreground/40'}`}
           style={{ backgroundColor: isKeyedHere ? MOVE_COLOR : 'transparent' }}
         />
       </button>
@@ -2110,9 +2415,64 @@ export default function AppLayout() {
     return renderPropertyKeyframeControlGroup(moveKeyframes, 'move', keyframeButton);
   };
 
+  const renderQualityKeyframeControl = () => {
+    const isKeyedHere = Boolean(qualityKeyframeAtPlayhead());
+    const keyframeButton = (
+      <button
+        type="button"
+        aria-label={`${isKeyedHere ? 'Remove' : 'Add'} quality keyframe at current time`}
+        title={`${isKeyedHere ? 'Remove' : 'Add'} quality keyframe`}
+        onClick={(event) => {
+          event.stopPropagation();
+          toggleQualityKeyframeAtPlayhead();
+        }}
+        className={`size-4 shrink-0 rounded flex items-center justify-center transition-colors duration-100 focus-visible:outline-none ${
+          isKeyedHere ? '' : 'hover:bg-muted/40'
+        }`}
+      >
+        <span
+          className={`size-[7px] rotate-45 rounded-[1px] border transition-all ${isKeyedHere ? 'border-transparent' : 'border-muted-foreground/40'}`}
+          style={{ backgroundColor: isKeyedHere ? '#94a3b8' : 'transparent' }}
+        />
+      </button>
+    );
+    return renderPropertyKeyframeControlGroup(qualityKeyframes, 'quality', keyframeButton);
+  };
+
+  const renderInnerScaleKeyframeControl = () => {
+    const isKeyedHere = Boolean(innerScaleKeyframeAtPlayhead());
+    const keyframeButton = (
+      <button
+        type="button"
+        aria-label={`${isKeyedHere ? 'Remove' : 'Add'} inner scale keyframe at current time`}
+        title={`${isKeyedHere ? 'Remove' : 'Add'} inner scale keyframe`}
+        onClick={(event) => {
+          event.stopPropagation();
+          toggleInnerScaleKeyframeAtPlayhead();
+        }}
+        className={`size-4 shrink-0 rounded flex items-center justify-center transition-colors duration-100 focus-visible:outline-none ${
+          isKeyedHere ? '' : 'hover:bg-muted/40'
+        }`}
+      >
+        <span
+          className={`size-[7px] rotate-45 rounded-[1px] border transition-all ${isKeyedHere ? 'border-transparent' : 'border-muted-foreground/40'}`}
+          style={{ backgroundColor: isKeyedHere ? '#fb923c' : 'transparent' }}
+        />
+      </button>
+    );
+    return renderPropertyKeyframeControlGroup(innerScaleKeyframes, 'inner scale', keyframeButton);
+  };
+
   const motionPropertyRowClass = (trackId: MotionTrackId) =>
-    `flex items-center gap-3 rounded-md -mx-1 px-1 py-1 transition-colors ${
-      selectedMotionTrackId === trackId ? 'bg-muted/70' : 'hover:bg-muted/40'
+    `flex min-h-8 items-center gap-1 rounded-[8px] -mx-1.5 px-1.5 py-0.5 transition-colors duration-100 ${
+      selectedMotionTrackId === trackId ? 'bg-muted/50' : 'hover:bg-muted/25'
+    }`;
+
+  // Figma/Framer-style consistent label + control rows
+  const LABEL_WIDTH = 'w-[66px]';
+  const propertyRowClass = (isActive?: boolean) =>
+    `flex min-h-8 items-center gap-1 rounded-[8px] -mx-1.5 px-1.5 py-0.5 transition-colors duration-100 ${
+      isActive ? 'bg-muted/50' : 'hover:bg-muted/25'
     }`;
 
   const renderKeyframeControl = (track: TimelineTrack, value: number) => {
@@ -2126,14 +2486,12 @@ export default function AppLayout() {
           event.stopPropagation();
           toggleKeyframeAtPlayhead(track, value);
         }}
-        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
-          isKeyedHere
-            ? 'bg-muted/70 text-foreground'
-            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+        className={`size-4 shrink-0 rounded flex items-center justify-center transition-colors duration-100 focus-visible:outline-none ${
+          isKeyedHere ? '' : 'hover:bg-muted/40'
         }`}
       >
         <span
-          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-background' : 'border-border'}`}
+          className={`size-[7px] rotate-45 rounded-[1px] border transition-all ${isKeyedHere ? 'border-transparent' : 'border-muted-foreground/40'}`}
           style={{ backgroundColor: isKeyedHere ? track.color : 'transparent' }}
         />
       </button>
@@ -2187,14 +2545,12 @@ export default function AppLayout() {
           event.stopPropagation();
           toggleSelectedShapeColorKeyframe();
         }}
-        className={`size-6 shrink-0 rounded-md flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
-          isKeyedHere
-            ? 'bg-muted/70 text-foreground'
-            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+        className={`size-4 shrink-0 rounded flex items-center justify-center transition-colors duration-100 focus-visible:outline-none ${
+          isKeyedHere ? '' : 'hover:bg-muted/40'
         }`}
       >
         <span
-          className={`size-2.5 rotate-45 border ${isKeyedHere ? 'border-background' : 'border-border'}`}
+          className={`size-[7px] rotate-45 rounded-[1px] border transition-all ${isKeyedHere ? 'border-transparent' : 'border-muted-foreground/40'}`}
           style={{
             background: isKeyedHere
               ? `linear-gradient(135deg, ${selectedShapeFill}, ${selectedShapeFillSecondary})`
@@ -2267,6 +2623,20 @@ export default function AppLayout() {
       if (event.defaultPrevented || event.repeat) return;
       if (isEditableShortcutTarget(event.target)) return;
 
+      // Redo: Cmd+Shift+Z (must check before undo)
+      const isRedoShortcut =
+        (event.metaKey || event.ctrlKey) &&
+        event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === 'z';
+
+      if (isRedoShortcut) {
+        event.preventDefault();
+        redoLastEditorChange();
+        return;
+      }
+
+      // Undo: Cmd+Z
       const isUndoShortcut =
         (event.metaKey || event.ctrlKey) &&
         !event.shiftKey &&
@@ -2289,7 +2659,7 @@ export default function AppLayout() {
 
     window.addEventListener('keydown', handleEditorShortcut);
     return () => window.removeEventListener('keydown', handleEditorShortcut);
-  }, [handlePlayToggle, undoLastEditorChange]);
+  }, [handlePlayToggle, undoLastEditorChange, redoLastEditorChange]);
 
   const handleReset = () => {
     setIsPlaying(false);
@@ -2313,6 +2683,8 @@ export default function AppLayout() {
     ...moveKeyframes.map((keyframe) => keyframe.time),
     ...keyLightPositionKeyframes.map((keyframe) => keyframe.time),
     ...materialKeyframes.map((keyframe) => keyframe.time),
+    ...qualityKeyframes.map((keyframe) => keyframe.time),
+    ...innerScaleKeyframes.map((keyframe) => keyframe.time),
   ].map((time) => Number(clampNumber(time, 0, duration).toFixed(3)))))
     .sort((a, b) => a - b);
 
@@ -2389,6 +2761,26 @@ export default function AppLayout() {
         label: `M ${keyframe.value.metalness.toFixed(2)} R ${keyframe.value.roughness.toFixed(2)}`,
       })),
     }] : []),
+    ...(qualityKeyframes.length ? [{
+      id: 'quality',
+      name: 'Quality',
+      color: '#94a3b8',
+      keyframes: qualityKeyframes.map((kf) => ({
+        id: kf.id,
+        time: kf.time,
+        label: kf.value.toFixed(3),
+      })),
+    }] : []),
+    ...(innerScaleKeyframes.length ? [{
+      id: 'inner-scale',
+      name: 'Inner Scale',
+      color: '#fb923c',
+      keyframes: innerScaleKeyframes.map((kf) => ({
+        id: kf.id,
+        time: kf.time,
+        label: `X ${kf.value.x.toFixed(2)} Y ${kf.value.y.toFixed(2)} Z ${kf.value.z.toFixed(2)}`,
+      })),
+    }] : []),
   ];
 
   const clearTimelineTrackRow = (trackId: string) => {
@@ -2413,6 +2805,14 @@ export default function AppLayout() {
       setMaterialKeyframes([]);
       markCustom();
     }
+    if (rowId === 'quality') {
+      setQualityKeyframes([]);
+      markCustom();
+    }
+    if (rowId === 'inner-scale') {
+      setInnerScaleKeyframes([]);
+      markCustom();
+    }
   };
 
   const removeTimelinePropertyKeyframe = (rowId: string, keyframeId: string) => {
@@ -2430,6 +2830,14 @@ export default function AppLayout() {
     }
     if (rowId === 'material') {
       setMaterialKeyframes((prev) => prev.filter((keyframe) => keyframe.id !== keyframeId));
+      markCustom();
+    }
+    if (rowId === 'quality') {
+      setQualityKeyframes((prev) => prev.filter((kf) => kf.id !== keyframeId));
+      markCustom();
+    }
+    if (rowId === 'inner-scale') {
+      setInnerScaleKeyframes((prev) => prev.filter((kf) => kf.id !== keyframeId));
       markCustom();
     }
   };
@@ -2647,14 +3055,15 @@ export default function AppLayout() {
               bevelThickness={bevelThickness}
               bevelSize={bevelSize}
               bevelSegments={bevelSegments}
-              geometryQuality={geometryQuality}
+              geometryQuality={activeGeometryQuality}
               layerSpacing={layerSpacing}
-              innerElementScale={innerElementScale}
+              innerElementScale={activeInnerScale}
               transitionType={transitionType}
               wipeDirection={wipeDirection}
               transitionProgress={activeTransitionProgress}
               rotationOffset={{ x: rotationOffset.x, y: activeRotationY, z: rotationOffset.z }}
               objectScale={activeObjectScale}
+              objectScaleAxes={objectScaleAxes}
               moveOffset={activeMoveOffset}
               isPlaying={isPlaying}
               ambientColor={ambientColor}
@@ -2668,9 +3077,27 @@ export default function AppLayout() {
               zoom={zoom}
               viewInertiaEnabled={viewInertiaEnabled}
               showCenterPoint={showCenterPoint}
+              showTransformGizmo={showTransformGizmo}
               onZoomChange={setZoom}
               onViewRotationCommit={handleViewRotationCommit}
               onViewRotationSet={handleViewRotationSet}
+              onObjectScaleChange={(value) => {
+                handleScaleChange(value);
+                setActiveRecipeId(null);
+              }}
+              onObjectScaleAxisChange={handleScaleAxisChange}
+              onMoveOffsetChange={(axis, value) => {
+                updateMoveAxis(axis, value);
+                setActiveRecipeId(null);
+              }}
+              onRotationAxisChange={(axis, value) => {
+                if (axis === 'y') {
+                  handleSpinChange(value);
+                } else {
+                  setRotationOffset((current) => ({ ...current, [axis]: value }));
+                  setActiveRecipeId(null);
+                }
+              }}
               onModelReadyChange={setIsPreviewModelReady}
             />
 
@@ -2696,22 +3123,20 @@ export default function AppLayout() {
                 >
                   <MoreHorizontal className="size-4" />
                 </PopoverTrigger>
-                <PopoverContent align="end" side="bottom" sideOffset={8} className="w-44 border-border bg-popover p-2 text-popover-foreground">
+                <PopoverContent align="end" side="bottom" sideOffset={8} className="w-44 border-border bg-popover p-1.5 text-popover-foreground">
                   <button
                     type="button"
                     onClick={() => {
-                      setRotationOffset({ x: 0, y: 0, z: 0 });
-                      setZoom(1);
                       canvas3DRef.current?.resetRotation();
                     }}
-                    className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                    className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                   >
                     <span className="text-[11px] text-foreground">Reset view</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setViewInertiaEnabled((enabled) => !enabled)}
-                    className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                    className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                   >
                     <span className="text-[11px] text-foreground">Inertia</span>
                     <Switch
@@ -2724,12 +3149,25 @@ export default function AppLayout() {
                   <button
                     type="button"
                     onClick={() => setShowCenterPoint((visible) => !visible)}
-                    className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                    className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                   >
                     <span className="text-[11px] text-foreground">Center point</span>
                     <Switch
                       checked={showCenterPoint}
                       onCheckedChange={(checked) => setShowCenterPoint(checked)}
+                      onClick={(event) => event.stopPropagation()}
+                      size="sm"
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowTransformGizmo((visible) => !visible)}
+                    className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  >
+                    <span className="text-[11px] text-foreground">Transform gizmo</span>
+                    <Switch
+                      checked={showTransformGizmo}
+                      onCheckedChange={(checked) => setShowTransformGizmo(checked)}
                       onClick={(event) => event.stopPropagation()}
                       size="sm"
                     />
@@ -2831,51 +3269,40 @@ export default function AppLayout() {
 
         </div>
 
-        <div className={`transition-all duration-300 ease-out flex flex-col shrink-0 overflow-y-auto bg-background dark:bg-[#0f1012] ${
-          zenMode ? 'w-0 opacity-0 border-l-0 pointer-events-none p-0' : 'w-[328px] border-l border-border px-4 py-4 gap-5'
+        <div className={`transition-all duration-300 ease-out flex flex-col shrink-0 overflow-y-auto bg-background dark:bg-[#111113] ${
+          zenMode ? 'w-0 opacity-0 border-l-0 pointer-events-none p-0' : 'w-[312px] border-l border-border/40 px-4 py-3 gap-3'
         }`}>
 
           {/* Style */}
-          <div className="flex flex-col gap-3 border-b border-border pb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                <Wand2 className="size-3.5" />
-                Style
-              </div>
-              <span className="text-[10px] text-muted-foreground">{MATERIAL_METADATA[materialPreset].name}</span>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex h-6 items-center justify-between">
+              <div className="text-[10px] font-semibold tracking-[0.12em] text-muted-foreground/70">STYLE</div>
+              <div className="text-[10px] text-muted-foreground/50 tabular-nums">{MATERIAL_METADATA[materialPreset].name}</div>
             </div>
 
-            <div ref={inspectorRefs.fill} className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 flex-col">
-                <span className="text-[10px] font-medium text-muted-foreground">Fill</span>
+            <div ref={inspectorRefs.fill} className={propertyRowClass()}>
+              <span className={`${LABEL_WIDTH} shrink-0 text-[11px] text-muted-foreground`}>Fill</span>
+              <div className="flex-1 min-w-0">
+                <ColorPicker
+                  value={selectedShapeFill}
+                  onChange={(val) => updateSelectedShapeColor(val)}
+                  gradient={fillMode === 'gradient'}
+                  onGradientToggle={(on) => { setFillMode(on ? 'gradient' : 'solid'); setEnableGradient(on); markCustom(); }}
+                  gradientType={selectedShapeGradientType}
+                  onGradientTypeChange={updateSelectedShapeGradientType}
+                  stops={selectedShapeFillStops}
+                  onStopsChange={updateSelectedShapeFillStops}
+                  secondaryValue={selectedShapeFillSecondary}
+                  onSecondaryChange={(val) => updateSelectedShapeColor(val, true)}
+                  className="h-7 w-full rounded-[5px] px-2 py-0 bg-foreground/[0.06] border-0 text-foreground hover:bg-foreground/[0.09]"
+                />
               </div>
-              <div className="ml-auto flex items-center justify-end gap-2">
-                <div className="w-[126px]">
-                  <ColorPicker
-                    value={selectedShapeFill}
-                    onChange={(val) => updateSelectedShapeColor(val)}
-                    gradient={fillMode === 'gradient'}
-                    onGradientToggle={(on) => { setFillMode(on ? 'gradient' : 'solid'); setEnableGradient(on); markCustom(); }}
-                    gradientType={selectedShapeGradientType}
-                    onGradientTypeChange={updateSelectedShapeGradientType}
-                    stops={selectedShapeFillStops}
-                    onStopsChange={updateSelectedShapeFillStops}
-                    secondaryValue={selectedShapeFillSecondary}
-                    onSecondaryChange={(val) => updateSelectedShapeColor(val, true)}
-                    className="h-7 w-full rounded-md px-2 py-0 bg-muted/45 border-border text-foreground"
-                  />
-                </div>
-                <div className="flex shrink-0 flex-col gap-1">
-                  {renderColorKeyframeControl()}
-                </div>
-              </div>
+              {renderColorKeyframeControl()}
             </div>
 
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between px-0.5">
-                <span className="text-[10px] font-medium text-muted-foreground">Finish</span>
-              </div>
-              <div className="grid grid-cols-6 gap-2">
+            <div className="pt-0.5">
+              <div className="mb-1 flex h-5 items-center text-[10px] font-semibold tracking-[0.12em] text-muted-foreground/70">FINISH</div>
+              <div className="flex items-center gap-2.5">
                 {FINISH_PRESETS.map((preset) => {
                   const isActive = materialPreset === preset;
                   return (
@@ -2889,17 +3316,15 @@ export default function AppLayout() {
                         setActiveRecipeId(null);
                         setMaterialKeyframes([]);
                       }}
-                      className={`group/finish relative flex h-9 min-w-0 items-center justify-center overflow-visible rounded-lg border p-1 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
-                        isActive ? 'border-ring/50 bg-accent' : 'border-border bg-muted/45 hover:border-ring/50 hover:bg-muted/60'
-                      }`}
+                      className="group/finish relative flex items-center justify-center focus-visible:outline-none"
                     >
-                      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-background/40 ring-1 ring-foreground/10 dark:bg-background/30 dark:ring-white/15">
-                        <span
-                          className="size-[18px] rounded-full shadow-[inset_0_1px_2px_rgba(255,255,255,0.42),inset_0_-1px_2px_rgba(0,0,0,0.22),0_1px_2px_rgba(0,0,0,0.14)]"
-                          style={{ background: MATERIAL_PREVIEW[preset] }}
-                        />
-                      </span>
-                      <span className="pointer-events-none absolute -top-7 left-1/2 z-30 -translate-x-1/2 rounded-md border border-border bg-popover px-2 py-1 text-[10px] font-medium text-popover-foreground opacity-0 shadow-xl transition-opacity group-hover/finish:opacity-100 group-focus-visible/finish:opacity-100">
+                      <span
+                        className={`size-6 rounded-full shadow-[inset_0_1px_2px_rgba(255,255,255,0.35),inset_0_-1px_2px_rgba(0,0,0,0.2)] transition-all duration-100 ${
+                          isActive ? 'ring-2 ring-ring/60 ring-offset-1 ring-offset-background' : 'hover:ring-2 hover:ring-foreground/20 hover:ring-offset-1 hover:ring-offset-background'
+                        }`}
+                        style={{ background: MATERIAL_PREVIEW[preset] }}
+                      />
+                      <span className="pointer-events-none absolute -top-7 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded border border-border bg-popover px-2 py-1 text-[10px] font-medium text-popover-foreground opacity-0 shadow-md transition-opacity duration-100 group-hover/finish:opacity-100">
                         {MATERIAL_METADATA[preset].name}
                       </span>
                     </button>
@@ -2908,216 +3333,268 @@ export default function AppLayout() {
               </div>
             </div>
 
-            <div ref={inspectorRefs.material} className="space-y-2 border-t border-border pt-3 animate-fade-in">
-              <div className="flex items-center justify-between gap-2">
+            <div ref={inspectorRefs.material} className="pt-1">
+              <div className="flex items-center gap-2 mb-1">
                 <button
                   type="button"
                   onClick={() => setIsAdvancedMaterialOpen((open) => !open)}
-                  className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md text-left text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  className="flex h-5 min-w-0 flex-1 items-center gap-1 rounded text-left text-[10px] font-medium text-muted-foreground/70 hover:text-foreground transition-colors focus-visible:outline-none"
                   aria-expanded={isAdvancedMaterialOpen}
                 >
-                  <ChevronRight className={`size-3 transition-transform ${isAdvancedMaterialOpen ? 'rotate-90' : ''}`} />
-                  <Sliders className="size-3" />
-                  Advanced
+                  <ChevronRight className={`size-2.5 transition-transform duration-150 ${isAdvancedMaterialOpen ? 'rotate-90' : ''}`} />
+                  ADVANCED
                   {materialKeyframes.length > 0 && <span className="ml-1 size-1.5 rounded-full bg-violet-400" />}
                 </button>
                 {renderMaterialKeyframeControl()}
               </div>
               {isAdvancedMaterialOpen && [
-                { key: 'roughness' as const, label: 'Smoothness', value: activeMaterialSettings.roughness, min: 0, max: 1, step: 0.02, fmt: (v: number) => v.toFixed(2) },
-                { key: 'metalness' as const, label: 'Metallic', value: activeMaterialSettings.metalness, min: 0, max: 1, step: 0.02, fmt: (v: number) => v.toFixed(2) },
-                { key: 'reflectance' as const, label: 'Reflectance', value: activeMaterialSettings.reflectance, min: 0, max: 1, step: 0.02, fmt: (v: number) => v.toFixed(2) },
-                { key: 'clearcoat' as const, label: 'Clearcoat', value: activeMaterialSettings.clearcoat, min: 0, max: 1, step: 0.05, fmt: (v: number) => v.toFixed(2) },
-                { key: 'clearcoatRoughness' as const, label: 'Clearcoat Softness', value: activeMaterialSettings.clearcoatRoughness, min: 0, max: 1, step: 0.05, fmt: (v: number) => v.toFixed(2) },
-                { key: 'transmission' as const, label: 'Transparency', value: activeMaterialSettings.transmission, min: 0, max: 1, step: 0.05, fmt: (v: number) => v.toFixed(2) },
-                { key: 'thickness' as const, label: 'Glass Depth', value: activeMaterialSettings.thickness, min: 0.1, max: 4, step: 0.1, fmt: (v: number) => v.toFixed(1) },
-                { key: 'emissiveIntensity' as const, label: 'Emission', value: activeMaterialSettings.emissiveIntensity, min: 0, max: 5, step: 0.1, fmt: (v: number) => v.toFixed(1) },
-              ].map(({ key, label, value, min, max, step, fmt }) => (
-                <div key={key} className="flex items-center justify-between gap-3">
-                  <span className="w-24 shrink-0 text-[11px] text-muted-foreground">{label}</span>
-                  <NumberField value={value} min={min} max={max} step={step} precision={fmt(value).includes('.') ? fmt(value).split('.')[1].length : 0} onChange={(next) => updateMaterialSetting(key, next, min, max)} />
+                { key: 'roughness' as const, label: 'Smoothness', value: activeMaterialSettings.roughness, min: 0, max: 1, sliderMax: 1, step: 0.02, precision: 2 },
+                { key: 'metalness' as const, label: 'Metallic', value: activeMaterialSettings.metalness, min: 0, max: 1, sliderMax: 1, step: 0.02, precision: 2 },
+                { key: 'reflectance' as const, label: 'Reflectance', value: activeMaterialSettings.reflectance, min: 0, max: 1, sliderMax: 1, step: 0.02, precision: 2 },
+                { key: 'clearcoat' as const, label: 'Clearcoat', value: activeMaterialSettings.clearcoat, min: 0, max: 1, sliderMax: 1, step: 0.05, precision: 2 },
+                { key: 'clearcoatRoughness' as const, label: 'Coat Soft', value: activeMaterialSettings.clearcoatRoughness, min: 0, max: 1, sliderMax: 1, step: 0.05, precision: 2 },
+                { key: 'transmission' as const, label: 'Transparency', value: activeMaterialSettings.transmission, min: 0, max: 1, sliderMax: 1, step: 0.05, precision: 2 },
+                { key: 'thickness' as const, label: 'Glass Depth', value: activeMaterialSettings.thickness, min: 0.1, max: 4, sliderMax: 2, step: 0.1, precision: 1 },
+                { key: 'emissiveIntensity' as const, label: 'Emission', value: activeMaterialSettings.emissiveIntensity, min: 0, max: 5, sliderMax: 2, step: 0.1, precision: 1 },
+              ].map(({ key, label, value, min, max, sliderMax, step, precision }) => (
+                <div key={key} className={propertyRowClass()}>
+                  <span className={`${LABEL_WIDTH} shrink-0 text-[11px] text-muted-foreground`}>{label}</span>
+                  <InspectorSlider
+                    value={value}
+                    min={min}
+                    max={max}
+                    sliderMax={sliderMax}
+                    step={step}
+                    precision={precision}
+                    inputClassName="w-[58px]"
+                    onChange={(next) => updateMaterialSetting(key, next, min, max)}
+                  />
                 </div>
               ))}
             </div>
           </div>
 
           {/* Shape */}
-          <div className="flex flex-col gap-3 border-b border-border pb-4">
-            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              <Cuboid className="size-3.5" />
-              Geometry
-            </div>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex h-6 items-center text-[10px] font-semibold tracking-[0.12em] text-muted-foreground/70">SHAPE</div>
 
             {/* Extrude */}
-            <div ref={inspectorRefs.extrusion} className={motionPropertyRowClass('extrusion')} onClick={() => setSelectedMotionTrackId('extrusion')}>
-              <span className="text-[11px] text-muted-foreground w-24 shrink-0">
+            <div ref={inspectorRefs.extrusion} className={propertyRowClass(selectedMotionTrackId === 'extrusion')} onClick={() => setSelectedMotionTrackId('extrusion')}>
+              <span className={`${LABEL_WIDTH} shrink-0 text-[11px] text-muted-foreground`}>
                 Extrude
-                {extrusionTrack.keyframes.length > 0 && <span className="inline-block w-1 h-1 rounded-full bg-emerald-500 ml-1 align-middle" />}
+                {extrusionTrack.keyframes.length > 0 && <span className="inline-block size-1 rounded-full ml-1 align-middle" style={{ backgroundColor: extrusionTrack.color }} />}
               </span>
               {(() => {
                 const depthValue = finiteNumber(extrusionTrack.keyframes.length > 0 ? activeExtrusionDepth : extrusionDepth, EXTRUDE_DEFAULT);
                 return (
                   <>
-                    <span className="flex-1" />
-                    <NumberField value={depthValue} min={0.2} max={EXTRUDE_MAX} step={0.25} scrubStep={1} precision={2} onChange={(value) => { handleDepthChange(value); setActiveRecipeId(null); }} />
+                    <InspectorSlider
+                      value={depthValue}
+                      min={0.2}
+                      max={EXTRUDE_MAX}
+                      sliderMax={40}
+                      step={0.25}
+                      scrubStep={1}
+                      precision={2}
+                      onChange={(value) => { handleDepthChange(value); setActiveRecipeId(null); }}
+                    />
                     {renderKeyframeControl(extrusionTrack, depthValue)}
                   </>
                 );
               })()}
             </div>
 
-            {hasLayerGapControls && (
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[11px] text-muted-foreground w-24 shrink-0">Layer Gap</span>
-                {(() => {
-                  const gapValue = finiteNumber(layerSpacing, 0);
-                  return (
-                    <>
-                      <span className="flex-1" />
-                      <NumberField value={gapValue} min={0} max={2} step={0.05} precision={2} onChange={(value) => { setLayerSpacing(value); setActiveRecipeId(null); }} />
-                    </>
-                  );
-                })()}
-              </div>
-            )}
-
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-[11px] text-muted-foreground w-24 shrink-0">Inner Scale</span>
-              <span className="flex-1" />
-              <div className="flex items-center gap-1">
-                {(['x', 'y', 'z'] as const).map((axis) => (
-                  <NumberField
-                    key={axis}
-                    value={innerElementScale[axis]}
-                    min={axis === 'z' ? 0.2 : 0.35}
-                    max={1.35}
-                    step={0.01}
-                    scrubStep={0.03}
-                    precision={2}
-                    prefix={axis.toUpperCase()}
-                    className="w-[54px] px-1"
-                    inputClassName="text-right"
-                    onChange={(value) => {
-                      setInnerElementScale((current) => ({ ...current, [axis]: value }));
-                      setActiveRecipeId(null);
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Rounded edges — same row rhythm as Extrude: label · value · trailing control */}
-            <div className="flex items-center gap-3 -mx-1 px-1 py-1">
-              <span className="w-24 shrink-0 text-[11px] text-muted-foreground">Rounded Edges</span>
-              <span className="flex-1" />
+            {/* Bevel */}
+            <div className={propertyRowClass()}>
+              <span className={`${LABEL_WIDTH} shrink-0 text-[11px] text-muted-foreground`}>Bevel</span>
               {bevelEnabled && (
-                <NumberField
-                  value={bevelSegments}
-                  min={1}
-                  max={MAX_BEVEL_SEGMENTS}
-                  step={1}
-                  precision={0}
-                  className="w-[62px] animate-fade-in"
-                  onChange={(value) => { setBevelSegments(Math.round(value)); setActiveRecipeId(null); }}
-                />
+                <>
+                  <InspectorSlider
+                    value={bevelSegments}
+                    min={1}
+                    max={MAX_BEVEL_SEGMENTS}
+                    sliderMax={12}
+                    step={1}
+                    precision={0}
+                    onChange={(value) => { setBevelSegments(Math.round(value)); setActiveRecipeId(null); }}
+                  />
+                </>
               )}
-              <div className="flex w-6 shrink-0 items-center justify-end">
+              {!bevelEnabled && <span className="h-7 flex-1" />}
+              <div className="flex w-[44px] shrink-0 justify-center -mr-1">
                 <Switch
                   checked={bevelEnabled}
-                  onCheckedChange={(val) => {
-                    setBevelEnabled(val);
-                    setActiveRecipeId(null);
-                  }}
+                  onCheckedChange={(val) => { setBevelEnabled(val); setActiveRecipeId(null); }}
                   size="sm"
                 />
               </div>
             </div>
-            <div className="flex items-center justify-between gap-3 -mx-1 px-1 py-1">
-              <span className="w-24 shrink-0 text-[11px] text-muted-foreground">Quality</span>
-              <span className="flex-1" />
-              <NumberField
-                value={geometryQuality}
+
+            {/* Quality */}
+            <div className={propertyRowClass()}>
+              <span className={`${LABEL_WIDTH} shrink-0 text-[11px] text-muted-foreground`}>
+                Quality
+                {qualityKeyframes.length > 0 && <span className="inline-block size-1 rounded-full ml-1 align-middle" style={{ backgroundColor: '#94a3b8' }} />}
+              </span>
+              <InspectorSlider
+                value={activeGeometryQuality}
                 min={0.015}
                 max={0.12}
+                sliderMin={0.015}
+                sliderMax={0.08}
                 step={0.005}
                 precision={3}
-                onChange={(value) => {
-                  setGeometryQuality(value);
-                  setActiveRecipeId(null);
-                }}
+                onChange={updateQuality}
               />
+              {renderQualityKeyframeControl()}
             </div>
           </div>
 
-          {/* Motion */}
-          <div className="flex flex-col gap-1.5 pb-4">
-            <div className="flex items-center gap-2 pb-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              <Orbit className="size-3.5" />
-              Motion
-            </div>
+          {/* Divider */}
+          <div className="h-px bg-border/40" />
 
-            {/* Rotation — X/Y/Z, Y is the animated hero rotation */}
-            <div ref={inspectorRefs.rotation} className={motionPropertyRowClass('rotation')} onClick={() => setSelectedMotionTrackId('rotation')}>
-              <span className="flex-1" />
-              <div className="flex h-7 items-center gap-2">
-                {([
-                  { label: 'X', axis: 'x' as const, value: normalizeDegrees(rotationOffset.x) },
-                  { label: 'Y', axis: 'y' as const, value: normalizeDegrees(activeRotationY), animated: true },
-                  { label: 'Z', axis: 'z' as const, value: normalizeDegrees(rotationOffset.z) },
-                ]).map(({ label, axis, value, animated }) => (
-                  <NumberField
-                    key={axis}
-                    value={value}
-                    min={0}
-                    max={360}
-                    step={1}
-                    prefix={label}
-                    suffix="°"
-                    precision={0}
-                    className="h-7 w-[50px]"
-                    inputClassName="text-right pr-0.5"
-                    onChange={(nextValue) => {
-                      const normalized = normalizeDegrees(nextValue);
-                      if (animated) {
-                        handleSpinChange(normalized);
-                      } else {
-                        setRotationOffset((prev) => ({ ...prev, [axis]: normalized }));
-                        setActiveRecipeId(null);
-                      }
-                    }}
-                  />
-                ))}
-              </div>
-              {renderKeyframeControl(rotationTrack, normalizeDegrees(activeRotationY))}
-            </div>
+          {/* Transform — Scale + Inner Scale grouped together (Figma-like) */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex h-6 items-center text-[10px] font-semibold tracking-[0.12em] text-muted-foreground/70">TRANSFORM</div>
 
             {/* Scale */}
-            <div ref={inspectorRefs.scale} className={motionPropertyRowClass('scale')} onClick={() => setSelectedMotionTrackId('scale')}>
-              <Maximize2 className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="w-10 shrink-0 text-[11px] text-foreground">Scale</span>
+            <div ref={inspectorRefs.scale} className={propertyRowClass(selectedMotionTrackId === 'scale')} onClick={() => setSelectedMotionTrackId('scale')}>
+              <span className={`${LABEL_WIDTH} flex shrink-0 items-center text-[11px] text-muted-foreground`}>
+                <span>
+                  Scale
+                  {scaleTrack.keyframes.length > 0 && <span className="inline-block size-1 rounded-full ml-1 align-middle" style={{ backgroundColor: scaleTrack.color }} />}
+                </span>
+                <AxisLockButton locked={isScaleLocked} label="Scale" onToggle={() => setIsScaleLocked((locked) => !locked)} />
+              </span>
               {(() => {
                 const scaleValue = finiteNumber(scaleTrack.keyframes.length > 0 ? activeObjectScale : objectScale, SCALE_DEFAULT);
                 return (
                   <>
-                    <span className="flex-1" />
-                    <NumberField
-                      value={scaleValue}
-                      min={0.1}
-                      max={SCALE_MAX}
-                      step={0.05}
-                      precision={2}
-                      onChange={(value) => { handleScaleChange(value); setActiveRecipeId(null); }}
-                    />
+                    {isScaleLocked ? (
+                      <InspectorSlider
+                        value={scaleValue}
+                        min={0.1}
+                        max={SCALE_MAX}
+                        sliderMax={2}
+                        step={0.05}
+                        precision={2}
+                        onChange={(value) => { handleScaleChange(value); setActiveRecipeId(null); }}
+                      />
+                    ) : (
+                      <div className="flex flex-1 items-center justify-start gap-1">
+                        {(['X', 'Y', 'Z'] as const).map((axis) => (
+                          <NumberField
+                            key={axis}
+                            value={objectScaleAxes[axis.toLowerCase() as keyof LightPosition]}
+                            min={0.1}
+                            max={SCALE_MAX}
+                            step={0.05}
+                            prefix={axis}
+                            prefixColor={AXIS_COLORS[axis]}
+                            precision={2}
+                            className="w-[50px]"
+                            inputClassName="text-right"
+                            onChange={(value) => handleScaleAxisChange(axis.toLowerCase() as keyof LightPosition, value)}
+                          />
+                        ))}
+                      </div>
+                    )}
                     {renderKeyframeControl(scaleTrack, scaleValue)}
                   </>
                 );
               })()}
             </div>
 
-            <div ref={inspectorRefs.move} className={motionPropertyRowClass('move')} onClick={() => setSelectedMotionTrackId('move')}>
-              <span className="w-14 shrink-0 text-[11px] text-muted-foreground">Move</span>
-              <span className="flex-1" />
-              <div className="flex h-7 items-center gap-1.5">
+            {/* Inner Scale — now lives right under Scale (user request) */}
+            <div className={propertyRowClass()}>
+              <span className={`${LABEL_WIDTH} flex shrink-0 items-center text-[11px] text-muted-foreground`}>
+                <span>
+                  Inner
+                  {innerScaleKeyframes.length > 0 && <span className="inline-block size-1 rounded-full ml-1 align-middle" style={{ backgroundColor: '#fb923c' }} />}
+                </span>
+                <AxisLockButton locked={isInnerScaleLocked} label="Inner scale" onToggle={() => setIsInnerScaleLocked((locked) => !locked)} />
+              </span>
+              {isInnerScaleLocked ? (
+                <InspectorSlider
+                  value={(activeInnerScale.x + activeInnerScale.y + activeInnerScale.z) / 3}
+                  min={0.35}
+                  max={1.35}
+                  sliderMax={1.25}
+                  step={0.01}
+                  scrubStep={0.03}
+                  precision={2}
+                  onChange={updateInnerScaleAll}
+                />
+              ) : (
+                <div className="flex flex-1 items-center justify-start gap-1">
+                  {(['x', 'y', 'z'] as const).map((axis) => (
+                    <NumberField
+                      key={axis}
+                      value={activeInnerScale[axis]}
+                      min={axis === 'z' ? 0.2 : 0.35}
+                      max={1.35}
+                      step={0.01}
+                      scrubStep={0.03}
+                      precision={2}
+                      prefix={axis.toUpperCase()}
+                      prefixColor={AXIS_COLORS[axis.toUpperCase()]}
+                      className="w-[50px]"
+                      inputClassName="text-right"
+                      onChange={(value) => updateInnerScaleAxis(axis, value)}
+                    />
+                  ))}
+                </div>
+              )}
+              {renderInnerScaleKeyframeControl()}
+            </div>
+
+            {/* Rotation */}
+            <div ref={inspectorRefs.rotation} className={propertyRowClass(selectedMotionTrackId === 'rotation')} onClick={() => setSelectedMotionTrackId('rotation')}>
+              <span className={`${LABEL_WIDTH} shrink-0 text-[11px] text-muted-foreground`}>
+                Rotation
+                {rotationTrack.keyframes.length > 0 && <span className="inline-block size-1 rounded-full ml-1 align-middle" style={{ backgroundColor: rotationTrack.color }} />}
+              </span>
+              <div className="flex flex-1 items-center justify-start gap-1">
+                {([
+                  { label: 'X', axis: 'x' as const, value: rotationOffset.x },
+                  { label: 'Y', axis: 'y' as const, value: activeRotationY, animated: true },
+                  { label: 'Z', axis: 'z' as const, value: rotationOffset.z },
+                ]).map(({ label, axis, value, animated }) => (
+                  <NumberField
+                    key={axis}
+                    value={value}
+                    min={ROTATION_MIN}
+                    max={ROTATION_MAX}
+                    step={1}
+                    scrubStep={3}
+                    prefix={label}
+                    prefixColor={AXIS_COLORS[label]}
+                    suffix="°"
+                    precision={0}
+                    className="w-[50px]"
+                    inputClassName="text-right"
+                    onChange={(nextValue) => {
+                      const clamped = clampNumber(nextValue, ROTATION_MIN, ROTATION_MAX);
+                      if (animated) {
+                        handleSpinChange(clamped);
+                      } else {
+                        setRotationOffset((prev) => ({ ...prev, [axis]: clamped }));
+                        setActiveRecipeId(null);
+                      }
+                    }}
+                  />
+                ))}
+              </div>
+              {renderKeyframeControl(rotationTrack, activeRotationY)}
+            </div>
+
+            {/* Move */}
+            <div ref={inspectorRefs.move} className={propertyRowClass(selectedMotionTrackId === 'move')} onClick={() => setSelectedMotionTrackId('move')}>
+              <span className={`${LABEL_WIDTH} shrink-0 text-[11px] text-muted-foreground`}>
+                Position
+                {moveKeyframes.length > 0 && <span className="inline-block size-1 rounded-full ml-1 align-middle" style={{ backgroundColor: MOVE_COLOR }} />}
+              </span>
+              <div className="flex flex-1 items-center justify-start gap-1">
                 {([
                   { label: 'X', axis: 'x' as const },
                   { label: 'Y', axis: 'y' as const },
@@ -3130,44 +3607,47 @@ export default function AppLayout() {
                     max={100}
                     step={1}
                     prefix={label}
+                    prefixColor={AXIS_COLORS[label]}
                     precision={0}
-                    className="h-7 w-[55px]"
-                    inputClassName="text-right pr-0.5"
-                    onChange={(value) => {
-                      updateMoveAxis(axis, value);
-                    }}
+                    className="w-[50px]"
+                    inputClassName="text-right"
+                    onChange={(value) => { updateMoveAxis(axis, value); }}
                   />
                 ))}
               </div>
               {renderMoveKeyframeControl()}
             </div>
+          </div>
 
-            {/* Light — brightness inline; direction, temperature & color live in the orb popover */}
-            <div ref={inspectorRefs.lighting} className={motionPropertyRowClass('lighting')} onClick={() => setSelectedMotionTrackId('lighting')}>
-              <div onClick={(e) => e.stopPropagation()}>
-                <LightDirectionPicker
-                  position={activeKeyLightPosition}
-                  color={keyLightColor}
-                  softness={keyLightSoftness}
-                  onDirectionChange={updateLightPositionXY}
-                  onColorChange={(color) => { setKeyLightColor(color); setActiveRecipeId(null); }}
-                  onSoftnessChange={(value) => { setKeyLightSoftness(value); setActiveRecipeId(null); }}
-                  isKeyed={Boolean(lightPositionKeyframeAtPlayhead())}
-                  onToggleKeyframe={toggleLightPositionKeyframeAtPlayhead}
-                  keyframeControls={renderLightPositionKeyframeControl()}
-                />
+          {/* Divider */}
+          <div className="h-px bg-border/40" />
+
+          {/* Light */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex h-6 items-center text-[10px] font-semibold tracking-[0.12em] text-muted-foreground/70">LIGHT</div>
+
+            <div ref={inspectorRefs.lighting} className={propertyRowClass(selectedMotionTrackId === 'lighting')} onClick={() => setSelectedMotionTrackId('lighting')}>
+              <span className={`${LABEL_WIDTH} shrink-0 text-[11px] text-muted-foreground`}>
+                Light
+                {lightingTrack.keyframes.length > 0 && <span className="inline-block size-1 rounded-full ml-1 align-middle" style={{ backgroundColor: lightingTrack.color }} />}
+              </span>
+              <div className="flex flex-1 items-center justify-end gap-1">
+                <div onClick={(e) => e.stopPropagation()}>
+                  <LightDirectionPicker
+                    position={activeKeyLightPosition}
+                    color={keyLightColor}
+                    softness={keyLightSoftness}
+                    onDirectionChange={updateLightPositionXY}
+                    onColorChange={(color) => { setKeyLightColor(color); setActiveRecipeId(null); }}
+                    onSoftnessChange={(value) => { setKeyLightSoftness(value); setActiveRecipeId(null); }}
+                    isKeyed={Boolean(lightPositionKeyframeAtPlayhead())}
+                    onToggleKeyframe={toggleLightPositionKeyframeAtPlayhead}
+                    keyframeControls={renderLightPositionKeyframeControl()}
+                  />
+                </div>
+                <NumberField value={finiteNumber(lightingTrack.keyframes.length > 0 ? activeKeyLightIntensity : keyLightIntensity, 1)} min={0} max={LIGHT_MAX} step={0.1} precision={1} className="w-[58px]" onChange={(value) => { handleBrightnessChange(value); setActiveRecipeId(null); }} />
               </div>
-              <span className="w-10 shrink-0 text-[11px] text-foreground">Light</span>
-              {(() => {
-                const brightnessValue = finiteNumber(lightingTrack.keyframes.length > 0 ? activeKeyLightIntensity : keyLightIntensity, 1);
-                return (
-                  <>
-                    <span className="flex-1" />
-                    <NumberField value={brightnessValue} min={0} max={LIGHT_MAX} step={0.1} precision={1} onChange={(value) => { handleBrightnessChange(value); setActiveRecipeId(null); }} />
-                    {renderKeyframeControl(lightingTrack, brightnessValue)}
-                  </>
-                );
-              })()}
+              {renderKeyframeControl(lightingTrack, finiteNumber(lightingTrack.keyframes.length > 0 ? activeKeyLightIntensity : keyLightIntensity, 1))}
             </div>
           </div>
 

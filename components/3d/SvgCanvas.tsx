@@ -7,7 +7,7 @@ import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 import { createThreeMaterial, MaterialPresetId } from './MaterialPresets';
 import { createDiagonalWipePlanes } from './DiagonalWipe';
-import { isPrimaryButtonReleased } from '@/lib/drag-events';
+import { bindWindowPointerDrag, isPrimaryButtonReleased } from '@/lib/drag-events';
 
 export interface PathOverride {
   id: string;
@@ -56,6 +56,7 @@ export interface SvgCanvasProps {
   transitionProgress: number; // 0 to 1
   rotationOffset: { x: number; y: number; z: number };
   objectScale: number;
+  objectScaleAxes?: { x: number; y: number; z: number };
   moveOffset: { x: number; y: number; z: number };
   isPlaying: boolean;
   ambientColor: string;
@@ -69,11 +70,16 @@ export interface SvgCanvasProps {
   zoom: number;
   viewInertiaEnabled?: boolean;
   showCenterPoint?: boolean;
+  showTransformGizmo?: boolean;
   pathOverridesA?: PathOverride[];
   pathOverridesB?: PathOverride[];
   onZoomChange?: (zoom: number) => void;
   onViewRotationCommit?: (rotationDelta: { x: number; y: number; z: number }) => void;
-  onViewRotationSet?: (rotation: Partial<{ x: number; y: number; z: number }>, options?: { commit?: boolean }) => void;
+  onViewRotationSet?: (rotation: Partial<{ x: number; y: number; z: number }>, options?: { commit?: boolean; updateTimeline?: boolean }) => void;
+  onObjectScaleChange?: (scale: number) => void;
+  onObjectScaleAxisChange?: (axis: keyof NonNullable<SvgCanvasProps['objectScaleAxes']>, value: number) => void;
+  onMoveOffsetChange?: (axis: keyof SvgCanvasProps['moveOffset'], value: number) => void;
+  onRotationAxisChange?: (axis: keyof SvgCanvasProps['rotationOffset'], value: number) => void;
   onModelReadyChange?: (ready: boolean) => void;
 }
 
@@ -96,6 +102,22 @@ const SVG_PATH_LAYER_GAP_RATIO = 0.018;
 const SVG_PATH_LAYER_GAP_MIN = 0.035;
 const VECTORFORGE_SLASH_DEPTH_RATIO = 0.16;
 const WIPE_SEAM_OVERLAP_WORLD = 0.8 * MODEL_SCALE;
+const TRANSFORM_GIZMO_SIZE = 0.74;
+const TRANSFORM_GIZMO_COLORS = {
+  x: 0xfb7185,
+  y: 0x34d399,
+  z: 0x38bdf8,
+} satisfies Record<'x' | 'y' | 'z', number>;
+const TRANSFORM_GIZMO_ARC_COLORS = {
+  x: 0xff5f87,
+  y: 0x1dd8c2,
+  z: 0x0ea5ff,
+} satisfies Record<'x' | 'y' | 'z', number>;
+type TransformAxis = keyof typeof TRANSFORM_GIZMO_COLORS;
+type TransformGizmoHandle = {
+  kind: 'move' | 'rotate' | 'scale';
+  axis?: TransformAxis;
+};
 
 const applySvgModelScale = (group: THREE.Group) => {
   group.scale.set(MODEL_SCALE, -MODEL_SCALE, MODEL_SCALE);
@@ -229,7 +251,10 @@ const getVisibleIconCenter = (groups: Array<THREE.Group | null>) => {
 
   groups.forEach((group) => {
     if (!group?.visible || group.children.length === 0) return;
-    const groupCenter = getGroupMassCenter(group, 'world');
+    const cachedLocalCenter = group.userData.massCenterLocal as THREE.Vector3 | undefined;
+    const groupCenter = cachedLocalCenter instanceof THREE.Vector3
+      ? group.localToWorld(cachedLocalCenter.clone())
+      : getGroupMassCenter(group, 'world');
     if (!groupCenter) return;
     center.add(groupCenter);
     count += 1;
@@ -246,6 +271,21 @@ const getVisiblePivotBounds = (groups: Array<THREE.Group | null>, pivot: THREE.G
   pivot.updateMatrixWorld(true);
   groups.forEach((group) => {
     if (!group?.visible || group.children.length === 0) return;
+    const cachedBounds = group.userData.localBounds as THREE.Box3 | undefined;
+    if (cachedBounds instanceof THREE.Box3 && !cachedBounds.isEmpty()) {
+      for (const x of [cachedBounds.min.x, cachedBounds.max.x]) {
+        for (const y of [cachedBounds.min.y, cachedBounds.max.y]) {
+          for (const z of [cachedBounds.min.z, cachedBounds.max.z]) {
+            vertex.set(x, y, z);
+            group.localToWorld(vertex);
+            pivot.worldToLocal(vertex);
+            bounds.expandByPoint(vertex);
+          }
+        }
+      }
+      return;
+    }
+
     group.updateMatrixWorld(true);
     group.traverse((object) => {
       const mesh = object as THREE.Mesh;
@@ -266,6 +306,286 @@ const getVisiblePivotBounds = (groups: Array<THREE.Group | null>, pivot: THREE.G
   return bounds.isEmpty() ? null : bounds;
 };
 
+const getGroupLocalBounds = (group: THREE.Group) => {
+  const bounds = new THREE.Box3();
+  const vertex = new THREE.Vector3();
+
+  group.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.geometry) return;
+    mesh.updateMatrix();
+    const position = mesh.geometry.getAttribute('position');
+    if (!position) return;
+
+    for (let index = 0; index < position.count; index += 1) {
+      vertex.fromBufferAttribute(position, index).applyMatrix4(mesh.matrix);
+      if (!Number.isFinite(vertex.x) || !Number.isFinite(vertex.y) || !Number.isFinite(vertex.z)) continue;
+      bounds.expandByPoint(vertex);
+    }
+  });
+
+  return bounds.isEmpty() ? null : bounds;
+};
+
+const cacheGroupGeometryAnalysis = (group: THREE.Group) => {
+  group.userData.massCenterLocal = getGroupMassCenter(group, 'local');
+  group.userData.localBounds = getGroupLocalBounds(group);
+};
+
+const createTransformGizmoMaterial = (color: number, opacity = 0.9) => {
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    transparent: opacity < 1,
+    opacity,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  material.userData.transformBaseColor = color;
+  material.userData.transformBaseOpacity = opacity;
+  return material;
+};
+
+const createTransformGizmoHitMaterial = () => {
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.001,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  material.userData.transformGizmoHit = true;
+  return material;
+};
+
+const createRotationDragOverlay = () => {
+  const group = new THREE.Group();
+  group.name = 'rotation-drag-overlay';
+  group.visible = false;
+  group.renderOrder = 2020;
+
+  const radius = TRANSFORM_GIZMO_SIZE * 1.12;
+  const ringPoints: THREE.Vector3[] = [];
+  for (let index = 0; index < 96; index += 1) {
+    const angle = (index / 96) * Math.PI * 2;
+    ringPoints.push(new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, 0));
+  }
+
+  const ring = new THREE.LineLoop(
+    new THREE.BufferGeometry().setFromPoints(ringPoints),
+    new THREE.LineBasicMaterial({
+      color: 0x9ca3af,
+      transparent: true,
+      opacity: 0.58,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    })
+  );
+  ring.renderOrder = 2020;
+  group.add(ring);
+
+  const dial = new THREE.Group();
+  dial.name = 'rotation-drag-dial';
+  dial.renderOrder = 2022;
+
+  const sector = new THREE.Mesh(
+    new THREE.BufferGeometry(),
+    new THREE.MeshBasicMaterial({
+      color: 0xfb923c,
+      transparent: true,
+      opacity: 0.18,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+      side: THREE.DoubleSide,
+    })
+  );
+  sector.name = 'rotation-drag-sector';
+  sector.renderOrder = 2021;
+  group.add(sector);
+
+  const spoke = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.015, 0.015, radius, 16),
+    new THREE.MeshBasicMaterial({
+      color: 0x0ea5ff,
+      transparent: true,
+      opacity: 1,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    })
+  );
+  spoke.rotation.z = -Math.PI / 2;
+  spoke.position.x = radius / 2;
+  spoke.renderOrder = 2023;
+  dial.add(spoke);
+
+  const handle = new THREE.Mesh(
+    new THREE.SphereGeometry(0.07, 22, 14),
+    new THREE.MeshBasicMaterial({
+      color: 0xfacc15,
+      transparent: false,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    })
+  );
+  handle.position.x = radius;
+  handle.renderOrder = 2024;
+  dial.add(handle);
+
+  group.add(dial);
+  group.userData.dial = dial;
+  group.userData.sector = sector;
+  group.userData.radius = radius;
+  return group;
+};
+
+const orientObjectToAxis = (object: THREE.Object3D, axis: TransformAxis) => {
+  if (axis === 'x') object.rotation.z = -Math.PI / 2;
+  if (axis === 'z') object.rotation.x = Math.PI / 2;
+};
+
+const createTransformGizmo = () => {
+  const group = new THREE.Group();
+  group.name = 'transform-gizmo';
+  group.visible = false;
+  group.renderOrder = 2000;
+
+  const hitObjects: THREE.Object3D[] = [];
+  const hitMaterial = createTransformGizmoHitMaterial();
+  const axisLength = TRANSFORM_GIZMO_SIZE;
+  const rodRadius = 0.014;
+  const coneRadius = 0.066;
+  const coneHeight = 0.2;
+  const coneStemLength = 0.18;
+  const coneCenterOffset = axisLength + coneStemLength + coneHeight / 2;
+  const arcEndpointDistance = axisLength * 0.985;
+  const axisEnd: Record<TransformAxis, THREE.Vector3> = {
+    x: new THREE.Vector3(axisLength, 0, 0),
+    y: new THREE.Vector3(0, axisLength, 0),
+    z: new THREE.Vector3(0, 0, axisLength),
+  };
+  const scaleBallPosition: Record<TransformAxis, THREE.Vector3> = {
+    x: new THREE.Vector3(arcEndpointDistance, 0, 0),
+    y: new THREE.Vector3(0, arcEndpointDistance, 0),
+    z: new THREE.Vector3(0, 0, arcEndpointDistance),
+  };
+  const scaleBallMaterial = createTransformGizmoMaterial(0x22d3ee, 1);
+
+  (Object.keys(TRANSFORM_GIZMO_COLORS) as TransformAxis[]).forEach((axis) => {
+    const material = createTransformGizmoMaterial(TRANSFORM_GIZMO_COLORS[axis], 1);
+    const rodMaterial = createTransformGizmoMaterial(0xfacc15, 1);
+
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(rodRadius, rodRadius, axisLength, 16), rodMaterial);
+    orientObjectToAxis(rod, axis);
+    rod.position.set(
+      axis === 'x' ? axisLength / 2 : 0,
+      axis === 'y' ? axisLength / 2 : 0,
+      axis === 'z' ? axisLength / 2 : 0
+    );
+    rod.renderOrder = 2002;
+    rod.userData.transformGizmo = { kind: 'move', axis } satisfies TransformGizmoHandle;
+    hitObjects.push(rod);
+    group.add(rod);
+
+    const coneStem = new THREE.Mesh(new THREE.CylinderGeometry(rodRadius, rodRadius, coneStemLength, 16), rodMaterial);
+    orientObjectToAxis(coneStem, axis);
+    coneStem.position.set(
+      axis === 'x' ? axisLength + coneStemLength / 2 : 0,
+      axis === 'y' ? axisLength + coneStemLength / 2 : 0,
+      axis === 'z' ? axisLength + coneStemLength / 2 : 0
+    );
+    coneStem.renderOrder = 2007;
+    coneStem.userData.transformGizmo = { kind: 'move', axis } satisfies TransformGizmoHandle;
+    hitObjects.push(coneStem);
+    group.add(coneStem);
+
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(coneRadius, coneHeight, 28), material);
+    orientObjectToAxis(cone, axis);
+    cone.position.set(
+      axis === 'x' ? coneCenterOffset : 0,
+      axis === 'y' ? coneCenterOffset : 0,
+      axis === 'z' ? coneCenterOffset : 0
+    );
+    cone.renderOrder = 2008;
+    cone.userData.transformGizmo = { kind: 'move', axis } satisfies TransformGizmoHandle;
+    hitObjects.push(cone);
+    group.add(cone);
+
+    const joint = new THREE.Mesh(new THREE.SphereGeometry(0.072, 22, 14), scaleBallMaterial.clone());
+    joint.position.copy(scaleBallPosition[axis]);
+    joint.renderOrder = 2010;
+    joint.userData.transformGizmo = { kind: 'scale', axis } satisfies TransformGizmoHandle;
+    joint.userData.transformGizmoPart = 'joint';
+    hitObjects.push(joint);
+    group.add(joint);
+
+    const jointHit = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 10), hitMaterial.clone());
+    jointHit.position.copy(joint.position);
+    jointHit.userData.transformGizmo = { kind: 'scale', axis } satisfies TransformGizmoHandle;
+    hitObjects.push(jointHit);
+    group.add(jointHit);
+
+    const arrowHitLength = coneStemLength + coneHeight;
+    const moveHit = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, arrowHitLength, 12), hitMaterial.clone());
+    orientObjectToAxis(moveHit, axis);
+    moveHit.position.set(
+      axis === 'x' ? axisLength + arrowHitLength / 2 : 0,
+      axis === 'y' ? axisLength + arrowHitLength / 2 : 0,
+      axis === 'z' ? axisLength + arrowHitLength / 2 : 0
+    );
+    moveHit.userData.transformGizmo = { kind: 'move', axis } satisfies TransformGizmoHandle;
+    hitObjects.push(moveHit);
+    group.add(moveHit);
+
+  });
+
+  const arcPairs: Array<{ axis: TransformAxis; from: TransformAxis; to: TransformAxis }> = [
+    { axis: 'x', from: 'y', to: 'z' },
+    { axis: 'y', from: 'z', to: 'x' },
+    { axis: 'z', from: 'x', to: 'y' },
+  ];
+
+  arcPairs.forEach(({ axis, from, to }) => {
+    const fromPoint = axisEnd[from].clone().multiplyScalar(0.985);
+    const toPoint = axisEnd[to].clone().multiplyScalar(0.985);
+    const controlPoint = fromPoint.clone().add(toPoint).normalize().multiplyScalar(axisLength * 1.08);
+    const curve = new THREE.QuadraticBezierCurve3(fromPoint, controlPoint, toPoint);
+    const material = createTransformGizmoMaterial(TRANSFORM_GIZMO_ARC_COLORS[axis], 1);
+    const arc = new THREE.Mesh(new THREE.TubeGeometry(curve, 42, 0.014, 10, false), material);
+    arc.renderOrder = 2000;
+    arc.userData.transformGizmo = { kind: 'rotate', axis } satisfies TransformGizmoHandle;
+    hitObjects.push(arc);
+    group.add(arc);
+
+    const arcHit = new THREE.Mesh(new THREE.TubeGeometry(curve, 28, 0.065, 8, false), hitMaterial.clone());
+    arcHit.userData.transformGizmo = { kind: 'rotate', axis } satisfies TransformGizmoHandle;
+    hitObjects.push(arcHit);
+    group.add(arcHit);
+  });
+
+  group.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.frustumCulled = false;
+  });
+
+  return { group, hitObjects };
+};
+
+const disposeObjectTree = (object: THREE.Object3D | null) => {
+  object?.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.geometry?.dispose();
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    materials.forEach((material) => material.dispose());
+  });
+};
+
 const updateGroupMaterialState = (
   group: THREE.Group | null,
   {
@@ -279,6 +599,9 @@ const updateGroupMaterialState = (
   }
 ) => {
   if (!group) return;
+  const materialStateKey = `${Math.round(opacity * 1000)}:${transparent ? 1 : 0}:${clippingPlanes?.length ?? 0}`;
+  if (group.userData.materialStateKey === materialStateKey) return;
+  group.userData.materialStateKey = materialStateKey;
   group.traverse((object) => {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh || !mesh.material) return;
@@ -790,6 +1113,7 @@ const getOrCreateGradientTexture = (
 export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rotationDragTooltipRef = useRef<HTMLDivElement>(null);
   const [modelReady, setModelReady] = useState(false);
   const colorAStopsKey = (props.colorAStops ?? []).map((stop) => `${stop.color}:${Number(stop.position).toFixed(3)}`).join('|');
   const colorBStopsKey = (props.colorBStops ?? []).map((stop) => `${stop.color}:${Number(stop.position).toFixed(3)}`).join('|');
@@ -822,14 +1146,20 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
   const activePointerIdRef = useRef<number | null>(null);
   const onViewRotationCommitRef = useRef(props.onViewRotationCommit);
   const onViewRotationSetRef = useRef(props.onViewRotationSet);
+  const onObjectScaleChangeRef = useRef(props.onObjectScaleChange);
+  const onObjectScaleAxisChangeRef = useRef(props.onObjectScaleAxisChange);
+  const onMoveOffsetChangeRef = useRef(props.onMoveOffsetChange);
+  const onRotationAxisChangeRef = useRef(props.onRotationAxisChange);
   const liveRenderPropsRef = useRef({
     transitionType: props.transitionType,
     transitionProgress: props.transitionProgress,
     wipeDirection: props.wipeDirection,
     rotationOffset: props.rotationOffset,
     objectScale: props.objectScale,
+    objectScaleAxes: props.objectScaleAxes ?? { x: 1, y: 1, z: 1 },
     moveOffset: props.moveOffset,
     showCenterPoint: props.showCenterPoint,
+    showTransformGizmo: props.showTransformGizmo,
     isPlaying: props.isPlaying,
     keyLightIntensity: props.keyLightIntensity
   });
@@ -854,7 +1184,33 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
   const markerXRef = useRef<SVGGElement>(null);
   const markerYRef = useRef<SVGGElement>(null);
   const markerZRef = useRef<SVGGElement>(null);
+  const transformGizmoGroupRef = useRef<THREE.Group | null>(null);
+  const transformGizmoHitObjectsRef = useRef<THREE.Object3D[]>([]);
+  const transformRaycasterRef = useRef(new THREE.Raycaster());
+  const transformPointerRef = useRef(new THREE.Vector2());
+  const rotationDragOverlayRef = useRef<THREE.Group | null>(null);
+  const transformScreenAxisRef = useRef<Record<TransformAxis, { x: number; y: number }>>({
+    x: { x: 1, y: 0 },
+    y: { x: 0, y: -1 },
+    z: { x: 0.7, y: -0.7 },
+  });
+  const transformHoveredHandleRef = useRef<string | null>(null);
+  const transformActiveHandleRef = useRef<string | null>(null);
+  const rotationDragOverlayStateRef = useRef<{ axis: TransformAxis | null; angle: number }>({ axis: null, angle: 0 });
+  const rotationDragScreenRef = useRef<{
+    startAngle: number;
+    startValue: number;
+    center: { x: number; y: number };
+    basisX: { x: number; y: number };
+    basisY: { x: number; y: number };
+  } | null>(null);
+  const rotationDragWorldFrameRef = useRef<{
+    position: THREE.Vector3;
+    quaternion: THREE.Quaternion;
+    scale: THREE.Vector3;
+  } | null>(null);
   const viewNudgeFrameRef = useRef<number | null>(null);
+  const resetViewFrameRef = useRef<number | null>(null);
   const viewNudgeStateRef = useRef<Record<'x' | 'y', { value: number | null; target: number | null }>>({
     x: { value: null, target: null },
     y: { value: null, target: null },
@@ -866,13 +1222,19 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     wipeDirection: props.wipeDirection,
     rotationOffset: props.rotationOffset,
     objectScale: props.objectScale,
+    objectScaleAxes: props.objectScaleAxes ?? { x: 1, y: 1, z: 1 },
     moveOffset: props.moveOffset,
     showCenterPoint: props.showCenterPoint,
+    showTransformGizmo: props.showTransformGizmo,
     isPlaying: props.isPlaying,
     keyLightIntensity: props.keyLightIntensity
   };
   onViewRotationCommitRef.current = props.onViewRotationCommit;
   onViewRotationSetRef.current = props.onViewRotationSet;
+  onObjectScaleChangeRef.current = props.onObjectScaleChange;
+  onObjectScaleAxisChangeRef.current = props.onObjectScaleAxisChange;
+  onMoveOffsetChangeRef.current = props.onMoveOffsetChange;
+  onRotationAxisChangeRef.current = props.onRotationAxisChange;
   viewInertiaEnabledRef.current = props.viewInertiaEnabled ?? true;
 
   useEffect(() => {
@@ -963,12 +1325,45 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     },
 
     resetRotation() {
+      if (resetViewFrameRef.current !== null) {
+        cancelAnimationFrame(resetViewFrameRef.current);
+        resetViewFrameRef.current = null;
+      }
+      if (viewNudgeFrameRef.current !== null) {
+        cancelAnimationFrame(viewNudgeFrameRef.current);
+        viewNudgeFrameRef.current = null;
+      }
+      isInertiaActiveRef.current = false;
+      rotationVelocityRef.current = { x: 0, y: 0 };
+
+      const startRotation = liveRenderPropsRef.current.rotationOffset;
+      const startZoom = currentZoomRef.current;
+      const duration = 320;
+      const startTime = performance.now();
       targetZoomRef.current = 1.0;
-      currentZoomRef.current = 1.0;
       animationStartRef.current = performance.now();
-      if (iconAGroupRef.current) iconAGroupRef.current.rotation.set(0, 0, 0);
-      if (iconBGroupRef.current) iconBGroupRef.current.rotation.set(0, 0, 0);
       props.onZoomChange?.(1.0);
+      const tick = (now: number) => {
+        const t = Math.max(0, Math.min(1, (now - startTime) / duration));
+        const eased = 1 - Math.pow(1 - t, 3);
+        currentZoomRef.current = startZoom + (1 - startZoom) * eased;
+        onViewRotationSetRef.current?.({
+          x: startRotation.x * (1 - eased),
+          y: startRotation.y * (1 - eased),
+          z: startRotation.z * (1 - eased),
+        }, { commit: false });
+
+        if (t < 1) {
+          resetViewFrameRef.current = requestAnimationFrame(tick);
+          return;
+        }
+
+        resetViewFrameRef.current = null;
+        currentZoomRef.current = 1.0;
+        onViewRotationSetRef.current?.({ x: 0, y: 0, z: 0 }, { commit: true });
+      };
+
+      resetViewFrameRef.current = requestAnimationFrame(tick);
     }
   }));
 
@@ -1165,6 +1560,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     }
 
     applySvgModelScale(group);
+    cacheGroupGeometryAnalysis(group);
 
     return group;
   };
@@ -1214,6 +1610,341 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       }
     };
     viewNudgeFrameRef.current = requestAnimationFrame(tick);
+  };
+
+  const transformHandleKey = (handle: TransformGizmoHandle | null | undefined) =>
+    handle ? `${handle.kind}:${handle.axis ?? 'center'}` : null;
+
+  const setTransformGizmoHighlight = (hovered: TransformGizmoHandle | null, active?: TransformGizmoHandle | null) => {
+    const gizmo = transformGizmoGroupRef.current;
+    if (!gizmo) return;
+    const hoveredKey = transformHandleKey(hovered);
+    if (active !== undefined) {
+      transformActiveHandleRef.current = transformHandleKey(active);
+    }
+    if (hoveredKey === transformHoveredHandleRef.current && active === undefined) return;
+    transformHoveredHandleRef.current = hoveredKey;
+    const activeKey = transformActiveHandleRef.current;
+
+    gizmo.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.material || !mesh.userData.transformGizmo) return;
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      materials.forEach((material) => {
+        if (material.userData.transformGizmoHit) return;
+        const handleKey = transformHandleKey(mesh.userData.transformGizmo as TransformGizmoHandle);
+        const isActive = activeKey !== null && handleKey === activeKey;
+        const isHovered = hoveredKey !== null && handleKey === hoveredKey;
+        const baseColor = finiteNumber(material.userData.transformBaseColor, 0xffffff);
+        const baseOpacity = finiteNumber(material.userData.transformBaseOpacity, 0.9);
+        const basicMaterial = material as THREE.MeshBasicMaterial;
+        const nextColor = new THREE.Color(baseColor);
+        if (isHovered) nextColor.lerp(new THREE.Color(0xffffff), 0.46);
+        basicMaterial.color.copy(isActive ? new THREE.Color(0xffffff) : nextColor);
+        basicMaterial.opacity = isActive ? 1 : isHovered ? Math.min(1, baseOpacity + 0.2) : baseOpacity;
+        basicMaterial.transparent = basicMaterial.opacity < 1;
+        mesh.scale.setScalar(1);
+      });
+    });
+  };
+
+  const setRotationDragOverlay = (axis: TransformAxis | null, angleDeg = 0) => {
+    const overlay = rotationDragOverlayRef.current;
+    const gizmo = transformGizmoGroupRef.current;
+    if (!overlay) return;
+    if (!axis || !gizmo) {
+      overlay.visible = false;
+      rotationDragOverlayStateRef.current = { axis: null, angle: 0 };
+      rotationDragScreenRef.current = null;
+      rotationDragWorldFrameRef.current = null;
+      const tooltip = rotationDragTooltipRef.current;
+      if (tooltip) tooltip.style.opacity = '0';
+      if (gizmo && liveRenderPropsRef.current.showTransformGizmo) {
+        gizmo.visible = true;
+      }
+      return;
+    }
+
+    rotationDragOverlayStateRef.current = { axis, angle: angleDeg };
+    overlay.visible = true;
+    gizmo.visible = false;
+    const frame = rotationDragWorldFrameRef.current ?? (() => {
+      pivotGroupRef.current?.updateMatrixWorld(true);
+      gizmo.updateMatrixWorld(true);
+      const localNormal = axis === 'x'
+        ? new THREE.Vector3(1, 0, 0)
+        : axis === 'y'
+          ? new THREE.Vector3(0, 1, 0)
+          : new THREE.Vector3(0, 0, 1);
+      const normal = localNormal.transformDirection(pivotGroupRef.current?.matrixWorld ?? new THREE.Matrix4());
+      return {
+        position: gizmo.getWorldPosition(new THREE.Vector3()),
+        quaternion: new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal),
+        scale: gizmo.getWorldScale(new THREE.Vector3()),
+      };
+    })();
+    overlay.position.copy(frame.position);
+    overlay.quaternion.copy(frame.quaternion);
+    overlay.scale.copy(frame.scale);
+
+    const dial = overlay.userData.dial as THREE.Group | undefined;
+    if (dial) {
+      dial.rotation.z = THREE.MathUtils.degToRad(angleDeg);
+    }
+  };
+
+  const updateRotationDragSector = (startAngleDeg: number, currentAngleDeg: number) => {
+    const overlay = rotationDragOverlayRef.current;
+    const sector = overlay?.userData.sector as THREE.Mesh | undefined;
+    if (!overlay || !sector) return;
+    const radius = finiteNumber(overlay.userData.radius, TRANSFORM_GIZMO_SIZE);
+    const delta = shortestAngleDelta(currentAngleDeg, startAngleDeg);
+    const steps = Math.max(2, Math.ceil(Math.abs(delta) / 6));
+    const positions: number[] = [];
+
+    for (let index = 0; index < steps; index += 1) {
+      const a0 = THREE.MathUtils.degToRad(startAngleDeg + (delta * index) / steps);
+      const a1 = THREE.MathUtils.degToRad(startAngleDeg + (delta * (index + 1)) / steps);
+      positions.push(
+        0, 0, 0,
+        Math.cos(a0) * radius, Math.sin(a0) * radius, 0,
+        Math.cos(a1) * radius, Math.sin(a1) * radius, 0
+      );
+    }
+
+    const geometry = sector.geometry as THREE.BufferGeometry;
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.computeBoundingSphere();
+  };
+
+  const updateRotationDragTooltip = (delta: number, clientX: number, clientY: number) => {
+    const tooltip = rotationDragTooltipRef.current;
+    if (!tooltip) return;
+    tooltip.textContent = `${delta >= 0 ? '+' : ''}${Math.round(delta)}°`;
+    tooltip.style.transform = `translate3d(${clientX + 14}px, ${clientY - 34}px, 0)`;
+    tooltip.style.opacity = '1';
+  };
+
+  const rotationDialAngleFromPointer = (clientX: number, clientY: number) => {
+    const frame = rotationDragScreenRef.current;
+    if (!frame) return null;
+    const px = clientX - frame.center.x;
+    const py = clientY - frame.center.y;
+    const { basisX, basisY } = frame;
+    const det = basisX.x * basisY.y - basisX.y * basisY.x;
+    if (Math.abs(det) < 0.0001) return null;
+    const u = (px * basisY.y - py * basisY.x) / det;
+    const v = (basisX.x * py - basisX.y * px) / det;
+    return THREE.MathUtils.radToDeg(Math.atan2(v, u));
+  };
+
+  const shortestAngleDelta = (angle: number, origin: number) => {
+    let delta = angle - origin;
+    while (delta > 180) delta -= 360;
+    while (delta < -180) delta += 360;
+    return delta;
+  };
+
+  const getRotationDragScreenFrame = (startValue: number) => {
+    const overlay = rotationDragOverlayRef.current;
+    const camera = cameraRef.current;
+    const canvas = canvasRef.current;
+    if (!overlay || !camera || !canvas) return null;
+
+    overlay.updateMatrixWorld(true);
+    const rect = canvas.getBoundingClientRect();
+    const radius = finiteNumber(overlay.userData.radius, TRANSFORM_GIZMO_SIZE);
+    const projectPoint = (point: THREE.Vector3) => {
+      const projected = point.applyMatrix4(overlay.matrixWorld).project(camera);
+      return {
+        x: rect.left + ((projected.x + 1) / 2) * rect.width,
+        y: rect.top + ((1 - projected.y) / 2) * rect.height,
+      };
+    };
+    const center = projectPoint(new THREE.Vector3(0, 0, 0));
+    const xPoint = projectPoint(new THREE.Vector3(radius, 0, 0));
+    const yPoint = projectPoint(new THREE.Vector3(0, radius, 0));
+
+    return {
+      startAngle: 0,
+      startValue,
+      center,
+      basisX: { x: xPoint.x - center.x, y: xPoint.y - center.y },
+      basisY: { x: yPoint.x - center.x, y: yPoint.y - center.y },
+    };
+  };
+
+  const startTransformDrag = (
+    event: PointerEvent,
+    cursor: string,
+    handle: TransformGizmoHandle,
+    onMove: (event: PointerEvent) => void
+  ) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    document.body.style.cursor = cursor;
+    setTransformGizmoHighlight(handle, handle);
+    if (handle.kind === 'rotate' && transformGizmoGroupRef.current) {
+      transformGizmoGroupRef.current.visible = false;
+    }
+    onMove(event);
+    bindWindowPointerDrag({
+      onMove,
+      onEnd: () => {
+        document.body.style.cursor = '';
+        setTransformGizmoHighlight(null, null);
+        if (handle.kind === 'rotate') setRotationDragOverlay(null);
+      },
+    });
+  };
+
+  const beginTransformMove = (axis: TransformAxis, event: PointerEvent) => {
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startValue = finiteNumber(liveRenderPropsRef.current.moveOffset[axis], 0);
+    const cursor = axis === 'x' ? 'ew-resize' : axis === 'y' ? 'ns-resize' : 'grab';
+    startTransformDrag(event, cursor, { kind: 'move', axis }, (ev) => {
+      const { x: ux, y: uy } = transformScreenAxisRef.current[axis];
+      const projectedDelta = (ev.clientX - startX) * ux + (ev.clientY - startY) * uy;
+      const next = Math.round(Math.max(-100, Math.min(100, startValue + projectedDelta * 0.35)));
+      onMoveOffsetChangeRef.current?.(axis, next);
+    });
+  };
+
+  const beginTransformScale = (event: PointerEvent, axis?: TransformAxis) => {
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const baseScale = finiteNumber(liveRenderPropsRef.current.objectScale, 1);
+    const axisScales = liveRenderPropsRef.current.objectScaleAxes;
+    const startScale = axis ? finiteNumber(axisScales[axis], 1) : baseScale;
+    const cursor = axis === 'x' ? 'ew-resize' : axis === 'y' ? 'ns-resize' : 'grab';
+    startTransformDrag(event, cursor, { kind: 'scale', axis }, (ev) => {
+      const projectedDelta = axis
+        ? (ev.clientX - startX) * transformScreenAxisRef.current[axis].x + (ev.clientY - startY) * transformScreenAxisRef.current[axis].y
+        : startY - ev.clientY;
+      const next = Number(Math.max(0.1, Math.min(3, startScale + projectedDelta * 0.008)).toFixed(2));
+      if (axis) {
+        onObjectScaleAxisChangeRef.current?.(axis, next);
+      } else {
+        onObjectScaleChangeRef.current?.(next);
+      }
+    });
+  };
+
+  const beginTransformRotate = (axis: TransformAxis, event: PointerEvent) => {
+    const startValue = finiteNumber(liveRenderPropsRef.current.rotationOffset[axis], 0);
+    const gizmo = transformGizmoGroupRef.current;
+    const pivot = pivotGroupRef.current;
+    if (!gizmo || !pivot) return;
+    pivot.updateMatrixWorld(true);
+    gizmo.updateMatrixWorld(true);
+    const localNormal = axis === 'x'
+      ? new THREE.Vector3(1, 0, 0)
+      : axis === 'y'
+        ? new THREE.Vector3(0, 1, 0)
+        : new THREE.Vector3(0, 0, 1);
+    const normal = localNormal.transformDirection(pivot.matrixWorld);
+    rotationDragWorldFrameRef.current = {
+      position: gizmo.getWorldPosition(new THREE.Vector3()),
+      quaternion: new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal),
+      scale: gizmo.getWorldScale(new THREE.Vector3()),
+    };
+    setRotationDragOverlay(axis, 0);
+    gizmo.visible = false;
+    const screenFrame = getRotationDragScreenFrame(startValue);
+    if (!screenFrame) {
+      setRotationDragOverlay(null);
+      return;
+    }
+    rotationDragScreenRef.current = screenFrame;
+    const startDialAngle = rotationDialAngleFromPointer(event.clientX, event.clientY) ?? 0;
+    rotationDragScreenRef.current = { ...screenFrame, startAngle: startDialAngle };
+    setRotationDragOverlay(axis, startDialAngle);
+    updateRotationDragSector(startDialAngle, startDialAngle);
+    updateRotationDragTooltip(0, event.clientX, event.clientY);
+    startTransformDrag(event, 'grabbing', { kind: 'rotate', axis }, (ev) => {
+      const drag = rotationDragScreenRef.current;
+      if (!drag) return;
+      const angle = rotationDialAngleFromPointer(ev.clientX, ev.clientY);
+      if (angle === null) return;
+      const delta = shortestAngleDelta(angle, drag.startAngle);
+      const next = Math.round(Math.max(-1440, Math.min(1440, drag.startValue + delta)));
+      setRotationDragOverlay(axis, angle);
+      updateRotationDragSector(drag.startAngle, angle);
+      updateRotationDragTooltip(delta, ev.clientX, ev.clientY);
+      onRotationAxisChangeRef.current?.(axis, next);
+    });
+  };
+
+  const updateTransformGizmo = (
+    center: THREE.Vector3 | null,
+    camera: THREE.PerspectiveCamera
+  ) => {
+    const gizmo = transformGizmoGroupRef.current;
+    const pivot = pivotGroupRef.current;
+    if (!gizmo || !pivot) return;
+    const visible = Boolean(liveRenderPropsRef.current.showTransformGizmo && center);
+    const overlayState = rotationDragOverlayStateRef.current;
+    gizmo.visible = visible && !overlayState.axis;
+    if (!visible || !center) {
+      setTransformGizmoHighlight(null, null);
+      return;
+    }
+
+    gizmo.position.copy(pivot.worldToLocal(center.clone()));
+    const parentScale = Math.max(0.05, finiteNumber(liveRenderPropsRef.current.objectScale, 1));
+    const axisScale = liveRenderPropsRef.current.objectScaleAxes;
+    gizmo.scale.set(
+      1 / Math.max(0.05, parentScale * finiteNumber(axisScale.x, 1)),
+      1 / Math.max(0.05, parentScale * finiteNumber(axisScale.y, 1)),
+      1 / Math.max(0.05, parentScale * finiteNumber(axisScale.z, 1))
+    );
+    if (overlayState.axis) {
+      setRotationDragOverlay(overlayState.axis, overlayState.angle);
+    }
+
+    const centerScreen = center.clone().project(camera);
+    const axisVectors: Record<TransformAxis, THREE.Vector3> = {
+      x: new THREE.Vector3(1, 0, 0),
+      y: new THREE.Vector3(0, 1, 0),
+      z: new THREE.Vector3(0, 0, 1),
+    };
+
+    (Object.keys(axisVectors) as TransformAxis[]).forEach((axis) => {
+      const worldEnd = center
+        .clone()
+        .add(axisVectors[axis].clone().transformDirection(pivot.matrixWorld).multiplyScalar(TRANSFORM_GIZMO_SIZE * parentScale));
+      const projectedEnd = worldEnd.project(camera);
+      const dx = projectedEnd.x - centerScreen.x;
+      const dy = centerScreen.y - projectedEnd.y;
+      const length = Math.max(0.001, Math.hypot(dx, dy));
+      transformScreenAxisRef.current[axis] = { x: dx / length, y: dy / length };
+    });
+  };
+
+  const hitTransformGizmo = (event: PointerEvent) => {
+    if (!liveRenderPropsRef.current.showTransformGizmo) return null;
+    const canvas = canvasRef.current;
+    const camera = cameraRef.current;
+    const hits = transformGizmoHitObjectsRef.current;
+    if (!canvas || !camera || hits.length === 0) return null;
+
+    const rect = canvas.getBoundingClientRect();
+    const pointer = transformPointerRef.current;
+    pointer.set(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -(((event.clientY - rect.top) / rect.height) * 2 - 1)
+    );
+    const raycaster = transformRaycasterRef.current;
+    raycaster.setFromCamera(pointer, camera);
+    const intersections = raycaster.intersectObjects(hits, true);
+    const hit = intersections.find((item) => {
+      const handle = item.object.userData.transformGizmo as TransformGizmoHandle | undefined;
+      return handle?.kind === 'scale';
+    }) ?? intersections[0];
+    const handle = hit?.object.userData.transformGizmo as TransformGizmoHandle | undefined;
+    return handle ?? null;
   };
 
   // 2D SVG Orientation Compass Updater (updates line/circle/text endpoints)
@@ -1342,6 +2073,15 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     pivotGroup.add(centerMarker);
     centerMarkerRef.current = centerMarker;
 
+    const transformGizmo = createTransformGizmo();
+    pivotGroup.add(transformGizmo.group);
+    transformGizmoGroupRef.current = transformGizmo.group;
+    transformGizmoHitObjectsRef.current = transformGizmo.hitObjects;
+
+    const rotationDragOverlay = createRotationDragOverlay();
+    scene.add(rotationDragOverlay);
+    rotationDragOverlayRef.current = rotationDragOverlay;
+
     // Define Clipping planes
     const clipPlaneA = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 2.5);
     const clipPlaneB = new THREE.Plane(new THREE.Vector3(1, 0, 0), 2.5);
@@ -1376,6 +2116,21 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     
     const handlePointerDown = (e: PointerEvent) => {
       if (e.button !== 0 || !canvas) return;
+      const transformHandle = hitTransformGizmo(e);
+      if (transformHandle) {
+        if (transformHandle.kind === 'scale') {
+          beginTransformScale(e, transformHandle.axis);
+          return;
+        }
+        if (transformHandle.kind === 'move' && transformHandle.axis) {
+          beginTransformMove(transformHandle.axis, e);
+          return;
+        }
+        if (transformHandle.kind === 'rotate' && transformHandle.axis) {
+          beginTransformRotate(transformHandle.axis, e);
+          return;
+        }
+      }
       isDraggingRef.current = true;
       hasViewDragMovedRef.current = false;
       activePointerIdRef.current = e.pointerId;
@@ -1385,7 +2140,10 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     };
 
     const handlePointerMove = (e: PointerEvent) => {
-      if (!isDraggingRef.current) return;
+      if (!isDraggingRef.current) {
+        setTransformGizmoHighlight(hitTransformGizmo(e));
+        return;
+      }
       if (activePointerIdRef.current !== e.pointerId) return;
       if (isPrimaryButtonReleased(e)) {
         handlePointerUp(e);
@@ -1450,6 +2208,12 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       } catch (err) {}
     };
 
+    const handlePointerLeave = () => {
+      if (!isDraggingRef.current) {
+        setTransformGizmoHighlight(null);
+      }
+    };
+
     // Smooth Scroll-Wheel Zooming
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -1474,6 +2238,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
     canvas.addEventListener('pointermove', handlePointerMove);
     canvas.addEventListener('pointerup', handlePointerUp);
     canvas.addEventListener('pointercancel', handlePointerCancel);
+    canvas.addEventListener('pointerleave', handlePointerLeave);
     canvas.addEventListener('wheel', handleWheel, { passive: false });
     canvas.addEventListener('dblclick', handleDoubleClick);
 
@@ -1485,6 +2250,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
       cameraRef.current.aspect = w / h;
       cameraRef.current.updateProjectionMatrix();
       rendererRef.current.setSize(w, h);
+      cameraRef.current.position.z = framedCameraDistance(cameraRef.current) / currentZoomRef.current;
     };
     window.addEventListener('resize', handleResize);
     const resizeObserver = new ResizeObserver(handleResize);
@@ -1498,14 +2264,24 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
         canvas.removeEventListener('pointermove', handlePointerMove);
         canvas.removeEventListener('pointerup', handlePointerUp);
         canvas.removeEventListener('pointercancel', handlePointerCancel);
+        canvas.removeEventListener('pointerleave', handlePointerLeave);
         canvas.removeEventListener('wheel', handleWheel);
         canvas.removeEventListener('dblclick', handleDoubleClick);
       }
+      disposeObjectTree(transformGizmoGroupRef.current);
+      disposeObjectTree(rotationDragOverlayRef.current);
+      transformGizmoGroupRef.current = null;
+      rotationDragOverlayRef.current = null;
+      transformGizmoHitObjectsRef.current = [];
       renderer.dispose();
       studioEnvironment?.dispose();
       if (viewNudgeFrameRef.current !== null) {
         cancelAnimationFrame(viewNudgeFrameRef.current);
         viewNudgeFrameRef.current = null;
+      }
+      if (resetViewFrameRef.current !== null) {
+        cancelAnimationFrame(resetViewFrameRef.current);
+        resetViewFrameRef.current = null;
       }
     };
   }, [props.onZoomChange]);
@@ -1635,12 +2411,18 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
         pivotGroupRef.current.rotation.y = displayRotation.y;
         pivotGroupRef.current.rotation.z = displayRotation.z;
         const baseScale = Math.max(0.05, finiteNumber(liveProps.objectScale, 1));
-        pivotGroupRef.current.scale.set(baseScale, baseScale, baseScale);
+        const axisScale = liveProps.objectScaleAxes;
+        pivotGroupRef.current.scale.set(
+          baseScale * finiteNumber(axisScale.x, 1),
+          baseScale * finiteNumber(axisScale.y, 1),
+          baseScale * finiteNumber(axisScale.z, 1)
+        );
         pivotGroupRef.current.position.set(
           finiteNumber(liveProps.moveOffset.x, 0) * 0.02,
           finiteNumber(liveProps.moveOffset.y, 0) * 0.02,
           finiteNumber(liveProps.moveOffset.z, 0) * 0.02
         );
+        pivotGroupRef.current.updateMatrixWorld(true);
       }
 
       // 2. Smoothly damp the scroll-wheel camera zoom
@@ -1720,11 +2502,14 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
         }
       }
 
+      const shouldUpdateCenterTools = Boolean(liveProps.showCenterPoint || liveProps.showTransformGizmo);
+      const visibleCenter = shouldUpdateCenterTools
+        ? getVisibleIconCenter([iconAGroupRef.current, iconBGroupRef.current])
+        : null;
+
       if (centerMarkerRef.current && pivotGroupRef.current) {
         const marker = centerMarkerRef.current;
         marker.visible = Boolean(liveProps.showCenterPoint);
-        pivotGroupRef.current.updateMatrixWorld(true);
-        const visibleCenter = getVisibleIconCenter([iconAGroupRef.current, iconBGroupRef.current]);
 
         if (liveProps.showCenterPoint && visibleCenter) {
           marker.visible = true;
@@ -1750,6 +2535,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
           marker.visible = false;
         }
       }
+      updateTransformGizmo(visibleCenter, camera);
 
       if (isCrossfade && iconAGroupRef.current && iconBGroupRef.current) {
         const iconA = iconAGroupRef.current;
@@ -1808,6 +2594,10 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>((props, ref) =
           </div>
         </div>
       )}
+      <div
+        ref={rotationDragTooltipRef}
+        className="pointer-events-none fixed left-0 top-0 z-50 rounded-md border border-white/10 bg-black/75 px-2 py-1 text-[11px] font-medium tabular-nums text-white shadow-xl opacity-0 transition-opacity duration-75"
+      />
       
       {/* Interactive 3D Orientation Gizmo — minimal, Figma-like (no chrome, centered with the play bar) */}
       <svg

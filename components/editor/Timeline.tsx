@@ -583,6 +583,8 @@ export const interpolateFillKeyframes = (
 
 const RAIL_WIDTH = 140;
 const SNAP_THRESHOLD_SECONDS = 0.08;
+const PLAYHEAD_SNAP_THRESHOLD_SECONDS = 0.06;
+const SECOND_SNAP_THRESHOLD_SECONDS = 0.035;
 const TIMELINE_ZOOM_MIN = 1;
 const TIMELINE_ZOOM_MAX = 3;
 const TIMELINE_ZOOM_STEP = 0.25;
@@ -691,7 +693,11 @@ export const Timeline: React.FC<TimelineProps> = ({
   onOpenShapePicker,
   wipeDirections,
 }) => {
-  const [selectedKeyframe, setSelectedKeyframe] = useState<{ trackId: string; kfId: string } | null>(null);
+  const [selectedKeyframe, setSelectedKeyframe] = useState<
+    | { type: 'track'; trackId: string; kfId: string }
+    | { type: 'property'; rowId: string; kfId: string }
+    | null
+  >(null);
   const [openClipEditor, setOpenClipEditor] = useState<string | null>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [timelineZoom, setTimelineZoom] = useState(1);
@@ -807,11 +813,13 @@ export const Timeline: React.FC<TimelineProps> = ({
   // Clear a stale keyframe selection if the keyframe disappears.
   useEffect(() => {
     if (!selectedKeyframe) return;
-    const track = tracks.find((t) => t.id === selectedKeyframe.trackId);
-    if (!track || !track.keyframes.some((k) => k.id === selectedKeyframe.kfId)) {
+    const exists = selectedKeyframe.type === 'track'
+      ? tracks.some((track) => track.id === selectedKeyframe.trackId && track.keyframes.some((keyframe) => keyframe.id === selectedKeyframe.kfId))
+      : propertyRows.some((row) => row.id === selectedKeyframe.rowId && row.keyframes.some((keyframe) => keyframe.id === selectedKeyframe.kfId));
+    if (!exists) {
       setSelectedKeyframe(null);
     }
-  }, [tracks, selectedKeyframe]);
+  }, [propertyRows, tracks, selectedKeyframe]);
 
   useEffect(() => {
     if (!timeEditor) return;
@@ -1014,30 +1022,49 @@ export const Timeline: React.FC<TimelineProps> = ({
     rawTime: number,
     options: {
       bypass?: boolean;
-      excludeShapeId?: string;
-      excludeKeyframe?: { trackId: string; kfId: string };
-      excludeTrackId?: string;
-    } = {}
-  ) => {
+    excludeShapeId?: string;
+    excludeKeyframe?: { trackId: string; kfId: string };
+    excludeTrackId?: string;
+    snapToPlayhead?: boolean;
+    snapToWholeSeconds?: boolean;
+  } = {}
+) => {
     const clamped = Math.max(0, Math.min(duration, rawTime));
     const quantizeIfNeeded = (time: number) =>
       frameSnapActive && !options.bypass ? Math.max(0, Math.min(duration, quantizeTimeToFrame(time))) : time;
 
     if (!snapEnabled || options.bypass) return clamped;
 
+    const nearestWithin = (times: number[], threshold: number) => times.reduce<{ time: number; distance: number } | null>((closest, time) => {
+      const distance = Math.abs(time - clamped);
+      if (distance > threshold) return closest;
+      if (!closest || distance < closest.distance) return { time, distance };
+      return closest;
+    }, null);
+
+    if (options.snapToPlayhead) {
+      const playheadTime = frameSnapActive ? quantizeTimeToFrame(currentTime) : currentTime;
+      if (Math.abs(playheadTime - clamped) <= PLAYHEAD_SNAP_THRESHOLD_SECONDS && playheadTime >= 0 && playheadTime <= duration) {
+        return quantizeIfNeeded(playheadTime);
+      }
+    }
+
     const hasExcludedSnapTarget = Boolean(options.excludeShapeId || options.excludeKeyframe || options.excludeTrackId);
     const candidateTimes = hasExcludedSnapTarget
       ? breakpointTimes(options)
       : scrubSnapTimesRef.current ?? baseBreakpointTimes;
 
-    const nearest = candidateTimes.reduce<{ time: number; distance: number } | null>((closest, time) => {
-      const distance = Math.abs(time - clamped);
-      if (distance > SNAP_THRESHOLD_SECONDS) return closest;
-      if (!closest || distance < closest.distance) return { time, distance };
-      return closest;
-    }, null);
+    const nearest = nearestWithin(candidateTimes, SNAP_THRESHOLD_SECONDS);
+    if (nearest) return quantizeIfNeeded(nearest.time);
 
-    return quantizeIfNeeded(nearest ? nearest.time : clamped);
+    if (options.snapToWholeSeconds) {
+      const wholeSecond = Math.round(clamped);
+      if (wholeSecond > 0 && wholeSecond <= duration && Math.abs(wholeSecond - clamped) <= SECOND_SNAP_THRESHOLD_SECONDS) {
+        return quantizeIfNeeded(wholeSecond);
+      }
+    }
+
+    return quantizeIfNeeded(clamped);
   };
 
   const getTimelineGeometry = (): TimelineGeometry | null => {
@@ -1220,7 +1247,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   const handleScrubStart = (e: React.MouseEvent) => {
     setSelectedKeyframe(null);
     onScrubStart?.();
-    const initialOptions = { bypass: e.altKey };
+    const initialOptions = { bypass: e.altKey, snapToWholeSeconds: true };
     scrubGeometryRef.current = getTimelineGeometry();
     scrubSnapTimesRef.current = baseBreakpointTimes;
     scrubLastTimeRef.current = null;
@@ -1229,7 +1256,7 @@ export const Timeline: React.FC<TimelineProps> = ({
     startScrubEdgeScroll(initialOptions);
     bindWindowMouseDrag({
       onMove: (ev) => {
-        const options = { bypass: ev.altKey };
+        const options = { bypass: ev.altKey, snapToWholeSeconds: true };
         scrubEdgeClientXRef.current = ev.clientX;
         emitScrubTime(timeFromClientX(ev.clientX, { ...options, clampToViewport: true, geometry: scrubGeometryRef.current }));
       },
@@ -1314,14 +1341,23 @@ export const Timeline: React.FC<TimelineProps> = ({
         return;
       }
 
-      const track = tracks.find((item) => item.id === selectedKeyframe.trackId);
-      if (!track?.keyframes.some((keyframe) => keyframe.id === selectedKeyframe.kfId)) return;
+      if (selectedKeyframe.type === 'track') {
+        const track = tracks.find((item) => item.id === selectedKeyframe.trackId);
+        if (!track?.keyframes.some((keyframe) => keyframe.id === selectedKeyframe.kfId)) return;
+        event.preventDefault();
+        removeTrackKeyframe(selectedKeyframe.trackId, selectedKeyframe.kfId);
+        return;
+      }
+
+      const row = propertyRows.find((item) => item.id === selectedKeyframe.rowId);
+      if (!row?.keyframes.some((keyframe) => keyframe.id === selectedKeyframe.kfId)) return;
       event.preventDefault();
-      removeTrackKeyframe(selectedKeyframe.trackId, selectedKeyframe.kfId);
+      setSelectedKeyframe(null);
+      onRemovePropertyKeyframe?.(selectedKeyframe.rowId, selectedKeyframe.kfId);
     };
     window.addEventListener('keydown', handleDeleteSelectedKeyframe);
     return () => window.removeEventListener('keydown', handleDeleteSelectedKeyframe);
-  }, [onRemoveShape, selectedKeyframe, selectedShapeId, shapes.length, tracks]);
+  }, [onRemovePropertyKeyframe, onRemoveShape, propertyRows, selectedKeyframe, selectedShapeId, shapes.length, tracks]);
 
   const handleKeyframeDrag = (e: React.MouseEvent, trackId: string, kfId: string) => {
     e.stopPropagation();
@@ -1342,6 +1378,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       const newTime = Number(snapTime(rawTime, {
         bypass: ev.altKey,
         excludeKeyframe: { trackId, kfId },
+        snapToPlayhead: true,
       }).toFixed(3));
       onTracksChange(
         tracks.map((track) =>
@@ -1397,12 +1434,16 @@ export const Timeline: React.FC<TimelineProps> = ({
       if (maxT + delta > duration) delta = duration - maxT;
       if (snapEnabled && !ev.altKey) {
         const movedTimes = initial.map((keyframe) => keyframe.time + delta);
-        const targets = breakpointTimes({ excludeTrackId: trackId });
+        const playheadTime = frameSnapActive ? quantizeTimeToFrame(currentTime) : currentTime;
+        const targets = [
+          ...breakpointTimes({ excludeTrackId: trackId }).map((time) => ({ time, threshold: SNAP_THRESHOLD_SECONDS })),
+          ...(playheadTime >= 0 && playheadTime <= duration ? [{ time: playheadTime, threshold: PLAYHEAD_SNAP_THRESHOLD_SECONDS }] : []),
+        ];
         const snapCandidate = movedTimes.reduce<{ delta: number; distance: number } | null>((closest, movedTime) => {
-          const target = targets.reduce<{ time: number; distance: number } | null>((nearest, targetTime) => {
-            const distance = Math.abs(targetTime - movedTime);
-            if (distance > SNAP_THRESHOLD_SECONDS) return nearest;
-            if (!nearest || distance < nearest.distance) return { time: targetTime, distance };
+          const target = targets.reduce<{ time: number; distance: number } | null>((nearest, target) => {
+            const distance = Math.abs(target.time - movedTime);
+            if (distance > target.threshold) return nearest;
+            if (!nearest || distance < nearest.distance) return { time: target.time, distance };
             return nearest;
           }, null);
           if (!target) return closest;
@@ -1500,7 +1541,7 @@ export const Timeline: React.FC<TimelineProps> = ({
         if (!draggedRef.current) onScrubStart?.();
         draggedRef.current = true;
       }
-      const snapped = snapTime(rawTimeFromClientX(ev.clientX) - grabOffset, { bypass: ev.altKey, excludeShapeId: shapeId });
+      const snapped = snapTime(rawTimeFromClientX(ev.clientX) - grabOffset, { bypass: ev.altKey, excludeShapeId: shapeId, snapToPlayhead: true });
       const newTime = Number(clampShapeTime(shapeId, snapped).toFixed(3));
       onShapesChange(shapes.map((s) => (s.id === shapeId ? { ...s, time: newTime } : s)));
       },
@@ -1755,7 +1796,12 @@ export const Timeline: React.FC<TimelineProps> = ({
             >
               <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: row.color }} />
               <span className="flex-1 truncate text-[11px] font-medium text-muted-foreground">{row.name}</span>
-              <span className="font-mono text-[10px] text-muted-foreground">{row.keyframes.length}</span>
+              <span className="flex size-5 shrink-0 items-center justify-center" aria-label={`${row.keyframes.length} keyframes`}>
+                <span
+                  className="size-[7px] rotate-45 rounded-[1px] border border-transparent"
+                  style={{ backgroundColor: row.color }}
+                />
+              </span>
             </div>
           ))}
           {tracks.map((track) => {
@@ -2383,36 +2429,43 @@ export const Timeline: React.FC<TimelineProps> = ({
                   />
                 )}
                 {row.keyframes.map((keyframe) => (
-                  <button
-                    type="button"
-                    key={keyframe.id}
-                    title={`${row.name}${keyframe.label ? ` · ${keyframe.label}` : ''} @ ${keyframe.time.toFixed(2)}s`}
-                    className="absolute top-1/2 flex size-4 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
-                    style={{
-                      left: xForFrac(keyframe.time / duration),
-                      zIndex: 14,
-                    }}
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      onActivePropertyRowChange?.(row.id);
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onActivePropertyRowChange?.(row.id);
-                    }}
-                    onContextMenu={(event) => openContextMenu(event, row.name, [
-                      goToMenuItem(event, keyframe.time, () => onActivePropertyRowChange?.(row.id)),
-                      { label: 'Select property', onSelect: () => onActivePropertyRowChange?.(row.id) },
-                      { type: 'separator' },
-                      {
-                        label: 'Remove keyframe',
-                        danger: true,
-                        onSelect: () => onRemovePropertyKeyframe?.(row.id, keyframe.id),
-                      },
-                    ])}
-                  >
-                    <TimelineDiamond color={row.color} borderColor="rgba(0,0,0,0.8)" />
-                  </button>
+                  (() => {
+                    const selected = selectedKeyframe?.type === 'property' && selectedKeyframe.rowId === row.id && selectedKeyframe.kfId === keyframe.id;
+                    return (
+                      <button
+                        type="button"
+                        key={keyframe.id}
+                        title={`${row.name}${keyframe.label ? ` · ${keyframe.label}` : ''} @ ${keyframe.time.toFixed(2)}s`}
+                        className="absolute top-1/2 flex size-4 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
+                        style={{
+                          left: xForFrac(keyframe.time / duration),
+                          zIndex: 14,
+                        }}
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          setSelectedKeyframe({ type: 'property', rowId: row.id, kfId: keyframe.id });
+                          onActivePropertyRowChange?.(row.id);
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedKeyframe({ type: 'property', rowId: row.id, kfId: keyframe.id });
+                          onActivePropertyRowChange?.(row.id);
+                        }}
+                        onContextMenu={(event) => openContextMenu(event, row.name, [
+                          goToMenuItem(event, keyframe.time, () => onActivePropertyRowChange?.(row.id)),
+                          { label: 'Select property', onSelect: () => onActivePropertyRowChange?.(row.id) },
+                          { type: 'separator' },
+                          {
+                            label: 'Remove keyframe',
+                            danger: true,
+                            onSelect: () => onRemovePropertyKeyframe?.(row.id, keyframe.id),
+                          },
+                        ])}
+                      >
+                        <TimelineDiamond color={row.color} borderColor="rgba(0,0,0,0.8)" selected={selected} />
+                      </button>
+                    );
+                  })()
                 ))}
               </div>
             ))}
@@ -2466,7 +2519,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                       easing: prev?.easing ?? 'ease-in-out',
                     };
                     selectTrack(track.id);
-                    setSelectedKeyframe({ trackId: track.id, kfId: kf.id });
+                    setSelectedKeyframe({ type: 'track', trackId: track.id, kfId: kf.id });
                     onTracksChange(
                       tracks.map((tr) => (tr.id === track.id ? { ...tr, keyframes: [...tr.keyframes, kf].sort((a, b) => a.time - b.time) } : tr))
                     );
@@ -2497,12 +2550,12 @@ export const Timeline: React.FC<TimelineProps> = ({
 
                   {/* Keyframe diamonds */}
                   {track.keyframes.map((kf) => {
-                    const selected = selectedKeyframe?.trackId === track.id && selectedKeyframe?.kfId === kf.id;
+                    const selected = selectedKeyframe?.type === 'track' && selectedKeyframe.trackId === track.id && selectedKeyframe.kfId === kf.id;
                     const editingTime = timeEditor?.trackId === track.id && timeEditor.kfId === kf.id;
                     const startMouseDown = (e: React.MouseEvent) => {
                       e.stopPropagation();
                       selectTrack(track.id);
-                      setSelectedKeyframe({ trackId: track.id, kfId: kf.id });
+                      setSelectedKeyframe({ type: 'track', trackId: track.id, kfId: kf.id });
                       if (e.button !== 0) return;
                       handleKeyframeDrag(e, track.id, kf.id);
                     };
@@ -2527,12 +2580,12 @@ export const Timeline: React.FC<TimelineProps> = ({
                         onMouseDown={startMouseDown}
                         onContextMenu={(e) => {
                           selectTrack(track.id);
-                          setSelectedKeyframe({ trackId: track.id, kfId: kf.id });
+                          setSelectedKeyframe({ type: 'track', trackId: track.id, kfId: kf.id });
                           openContextMenu(e, track.name, [
                             { label: 'Edit time', shortcut: `${kf.time.toFixed(2)}s`, onSelect: () => setTimeEditor({ trackId: track.id, kfId: kf.id, draft: kf.time.toFixed(2) }) },
                             goToMenuItem(e, kf.time, () => {
                               selectTrack(track.id);
-                              setSelectedKeyframe({ trackId: track.id, kfId: kf.id });
+                              setSelectedKeyframe({ type: 'track', trackId: track.id, kfId: kf.id });
                             }),
                             ...easingMenuItems(kf.easing, (easing) => setSingleKeyframeEasing(track.id, kf.id, easing)),
                             { type: 'separator' },
@@ -2546,7 +2599,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                             return;
                           }
                           selectTrack(track.id);
-                          setSelectedKeyframe({ trackId: track.id, kfId: kf.id });
+                          setSelectedKeyframe({ type: 'track', trackId: track.id, kfId: kf.id });
                           onTimeChange(kf.time);
                         }}
                       >

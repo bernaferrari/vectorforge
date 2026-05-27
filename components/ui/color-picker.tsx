@@ -1285,10 +1285,10 @@ export function ColorPicker({ value, onChange, alpha, onAlphaChange, className, 
         )}
       >
         <div
-          className="size-4 shrink-0 rounded-md border border-border shadow-sm"
+          className="size-3.5 shrink-0 rounded-[4px] border border-foreground/10 shadow-sm"
           style={{ background: isGradient ? gradientCss : primaryHex }}
         />
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px] font-medium uppercase tracking-wide text-foreground">
+        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
           {isGradient ? "Gradient" : primaryHex}
         </span>
       </PopoverTrigger>
