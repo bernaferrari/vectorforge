@@ -1,75 +1,95 @@
-'use client';
+"use client"
 
-import React, { useState } from 'react';
-import { Download, Video, Check, Copy, Box } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import confetti from 'canvas-confetti';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useTheme } from 'next-themes';
+import React, { useState } from "react"
+import { Download, Video, Check, Copy, Box } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import confetti from "canvas-confetti"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { useTheme } from "next-themes"
 
 interface ExportModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onExportGltf: () => void;
-  onExportVideo: () => Promise<void>;
+  isOpen: boolean
+  onClose: () => void
+  onExportGltf: () => void
+  onExportVideo: () => Promise<void>
   // parameters to populate dynamic code generators
-  materialPreset: string;
-  colorA: string;
-  colorB: string;
-  roughness: number;
-  metalness: number;
-  reflectance: number;
-  clearcoat: number;
-  clearcoatRoughness: number;
-  transmission: number;
-  thickness: number;
-  emissiveIntensity: number;
-  extrusionDepth: number;
-  bevelEnabled: boolean;
-  bevelThickness: number;
-  bevelSize: number;
-  bevelSegments: number;
-  layerSpacing: number;
-  transitionType: string;
-  ambientIntensity: number;
-  keyLightIntensity: number;
-  rimLightIntensity: number;
-  svgPathA: string;
-  svgPathB: string;
+  materialPreset: string
+  colorA: string
+  colorB: string
+  roughness: number
+  metalness: number
+  reflectance: number
+  clearcoat: number
+  clearcoatRoughness: number
+  transmission: number
+  thickness: number
+  emissiveIntensity: number
+  extrusionDepth: number
+  bevelEnabled: boolean
+  bevelThickness: number
+  bevelSize: number
+  bevelSegments: number
+  layerSpacing: number
+  transitionType: string
+  ambientIntensity: number
+  keyLightIntensity: number
+  rimLightIntensity: number
+  svgPathA: string
+  svgPathB: string
 }
 
-const CodeBlock = ({ code, lang, className }: { code: string; lang: string; className?: string }) => {
-  const { resolvedTheme } = useTheme();
-  const [html, setHtml] = useState<string | null>(null);
+type ExportTab = "options" | "r3f" | "android"
+
+const isExportTab = (value: string): value is ExportTab =>
+  value === "options" || value === "r3f" || value === "android"
+
+const CodeBlock = ({
+  code,
+  lang,
+  className,
+}: {
+  code: string
+  lang: string
+  className?: string
+}) => {
+  const { resolvedTheme } = useTheme()
+  const [html, setHtml] = useState<string | null>(null)
 
   React.useEffect(() => {
-    let cancelled = false;
-    setHtml(null);
-    void import('shiki')
-      .then(({ codeToHtml }) => codeToHtml(code, {
-        lang,
-        theme: resolvedTheme === 'light' ? 'github-light' : 'github-dark',
-      }))
+    let cancelled = false
+    setHtml(null)
+    void import("shiki")
+      .then(({ codeToHtml }) =>
+        codeToHtml(code, {
+          lang,
+          theme: resolvedTheme === "light" ? "github-light" : "github-dark",
+        })
+      )
       .then((nextHtml) => {
-        if (!cancelled) setHtml(nextHtml);
+        if (!cancelled) setHtml(nextHtml)
       })
       .catch(() => {
-        if (!cancelled) setHtml(null);
-      });
+        if (!cancelled) setHtml(null)
+      })
     return () => {
-      cancelled = true;
-    };
-  }, [code, lang, resolvedTheme]);
+      cancelled = true
+    }
+  }, [code, lang, resolvedTheme])
 
-  const surfaceClass = `block max-h-[56vh] w-full max-w-full overflow-auto rounded-lg border border-border bg-muted/35 font-mono text-[11px] leading-relaxed text-muted-foreground ${className ?? ''}`;
+  const surfaceClass = `block max-h-[56vh] w-full max-w-full overflow-auto rounded-lg border border-border bg-muted/35 font-mono text-[11px] leading-relaxed text-muted-foreground ${className ?? ""}`
 
   if (!html) {
     return (
       <pre className={`${surfaceClass} p-4`}>
         <code>{code}</code>
       </pre>
-    );
+    )
   }
 
   return (
@@ -77,8 +97,8 @@ const CodeBlock = ({ code, lang, className }: { code: string; lang: string; clas
       className={`${surfaceClass} [&_pre]:m-0 [&_pre]:min-w-max [&_pre]:!bg-transparent [&_pre]:p-4 [&_pre]:font-mono [&_pre]:text-[11px] [&_pre]:leading-relaxed`}
       dangerouslySetInnerHTML={{ __html: html }}
     />
-  );
-};
+  )
+}
 
 export const ExportModal: React.FC<ExportModalProps> = ({
   isOpen,
@@ -102,21 +122,21 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   bevelSize,
   bevelSegments,
   layerSpacing,
-  transitionType,
+  transitionType: _transitionType,
   ambientIntensity,
   keyLightIntensity,
   rimLightIntensity,
   svgPathA,
-  svgPathB
+  svgPathB,
 }) => {
-  const [activeTab, setActiveTab] = useState<'options' | 'r3f' | 'android'>('options');
-  const [isRecording, setIsRecording] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<ExportTab>("options")
+  const [isRecording, setIsRecording] = useState(false)
+  const [isCopied, setIsCopied] = useState(false)
 
   // Generate dynamic React Three Fiber code template
   const generateR3fCode = () => {
-    const escA = svgPathA.replace(/`/g, '\\`').trim();
-    const escB = svgPathB.replace(/`/g, '\\`').trim();
+    const escA = svgPathA.replace(/`/g, "\\`").trim()
+    const escB = svgPathB.replace(/`/g, "\\`").trim()
 
     return `'use client';
 
@@ -233,8 +253,8 @@ function ExtrudedIcon({ progress = 0 }: ExtrudedIconProps) {
     </group>
   );
 }
-`;
-  };
+`
+  }
 
   const generateAndroidGradleCode = () => `dependencies {
     implementation("com.google.android.filament:filament-android:<filament-version>")
@@ -393,45 +413,58 @@ class FilamentIconView(context: Context) : SurfaceView(context), Choreographer.F
         engine.destroy()
     }
 }
-`;
-  };
+`
+  }
 
   const handleCopyCode = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setIsCopied(true);
+    navigator.clipboard.writeText(text)
+    setIsCopied(true)
     confetti({
       particleCount: 80,
       spread: 60,
       origin: { y: 0.6 },
-      colors: ['#7c5cff', '#ff5b9a', '#ffd700']
-    });
-    setTimeout(() => setIsCopied(false), 2000);
-  };
+      colors: ["#7c5cff", "#ff5b9a", "#ffd700"],
+    })
+    setTimeout(() => setIsCopied(false), 2000)
+  }
 
   const handleVideoExport = async () => {
-    if (isRecording) return;
+    if (isRecording) return
     try {
-      setIsRecording(true);
-      await onExportVideo();
+      setIsRecording(true)
+      await onExportVideo()
       confetti({
         particleCount: 150,
         spread: 80,
         origin: { y: 0.6 },
-        colors: ['#4ee2a3', '#7c5cff', '#ffffff']
-      });
+        colors: ["#4ee2a3", "#7c5cff", "#ffffff"],
+      })
     } finally {
-      setIsRecording(false);
+      setIsRecording(false)
     }
-  };
+  }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+    >
       <DialogContent className="max-h-[calc(100vh-40px)] w-[640px] max-w-[calc(100vw-32px)] gap-0 overflow-hidden p-0 shadow-2xl sm:max-w-[640px]">
         <DialogHeader className="border-b border-border px-4 py-3 pr-11">
-          <DialogTitle className="text-sm font-semibold text-foreground">Export</DialogTitle>
+          <DialogTitle className="text-sm font-semibold text-foreground">
+            Export
+          </DialogTitle>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)} className="min-h-0 min-w-0 gap-0">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => {
+            if (isExportTab(value)) setActiveTab(value)
+          }}
+          className="min-h-0 min-w-0 gap-0"
+        >
           <div className="border-b border-border px-4 py-3">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="options">Assets</TabsTrigger>
@@ -448,24 +481,44 @@ class FilamentIconView(context: Context) : SurfaceView(context), Choreographer.F
                     <Box className="size-4" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-medium text-foreground">3D model</h3>
-                    <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">Export the current icon as a Filament-ready binary glTF asset.</p>
+                    <h3 className="text-sm font-medium text-foreground">
+                      3D model
+                    </h3>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                      Export the current icon as a Filament-ready binary glTF
+                      asset.
+                    </p>
                   </div>
-                  <Button variant="secondary" className="shrink-0 gap-1.5" onClick={onExportGltf}>
+                  <Button
+                    variant="secondary"
+                    className="shrink-0 gap-1.5"
+                    onClick={onExportGltf}
+                  >
                     <Download className="size-3.5" />
                     GLB
                   </Button>
                 </div>
 
                 <div className="flex items-center gap-3 p-3">
-                  <div className={`flex size-9 shrink-0 items-center justify-center rounded-md border ${
-                    isRecording ? 'border-red-500/25 bg-red-500/10 text-red-500' : 'border-border bg-background text-muted-foreground'
-                  }`}>
-                    <Video className={`size-4 ${isRecording ? 'animate-pulse' : ''}`} />
+                  <div
+                    className={`flex size-9 shrink-0 items-center justify-center rounded-md border ${
+                      isRecording
+                        ? "border-red-500/25 bg-red-500/10 text-red-500"
+                        : "border-border bg-background text-muted-foreground"
+                    }`}
+                  >
+                    <Video
+                      className={`size-4 ${isRecording ? "animate-pulse" : ""}`}
+                    />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-medium text-foreground">Video</h3>
-                    <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">Render the full timeline from 0s to the end as a WebM video.</p>
+                    <h3 className="text-sm font-medium text-foreground">
+                      Video
+                    </h3>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                      Render the full timeline from 0s to the end as a WebM
+                      video.
+                    </p>
                   </div>
                   <Button
                     variant="secondary"
@@ -474,50 +527,84 @@ class FilamentIconView(context: Context) : SurfaceView(context), Choreographer.F
                     className="shrink-0 gap-1.5"
                   >
                     <Video className="size-3.5" />
-                    {isRecording ? 'Rendering' : 'WebM'}
+                    {isRecording ? "Rendering" : "WebM"}
                   </Button>
                 </div>
               </div>
             </TabsContent>
 
-            <TabsContent value="r3f" className="relative min-w-0 p-4 outline-none">
-              <div className="absolute right-6 top-6 z-10">
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
+            <TabsContent
+              value="r3f"
+              className="relative min-w-0 p-4 outline-none"
+            >
+              <div className="absolute top-6 right-6 z-10">
+                <Button
+                  size="sm"
+                  variant="ghost"
                   className="border border-border bg-background/90 text-foreground shadow-sm hover:bg-muted"
                   onClick={() => handleCopyCode(generateR3fCode())}
                 >
-                  {isCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  {isCopied ? 'Copied!' : 'Copy Code'}
+                  {isCopied ? (
+                    <Check className="h-3.5 w-3.5 text-green-400" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                  {isCopied ? "Copied!" : "Copy Code"}
                 </Button>
               </div>
               <CodeBlock code={generateR3fCode()} lang="tsx" />
             </TabsContent>
 
-            <TabsContent value="android" className="relative min-w-0 p-4 outline-none">
-              <div className="absolute right-6 top-6 z-10">
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
+            <TabsContent
+              value="android"
+              className="relative min-w-0 p-4 outline-none"
+            >
+              <div className="absolute top-6 right-6 z-10">
+                <Button
+                  size="sm"
+                  variant="ghost"
                   className="border border-border bg-background/90 text-foreground shadow-sm hover:bg-muted"
-                  onClick={() => handleCopyCode(`${generateAndroidGradleCode()}\n\n${generateAndroidFilamentCode()}`)}
+                  onClick={() =>
+                    handleCopyCode(
+                      `${generateAndroidGradleCode()}\n\n${generateAndroidFilamentCode()}`
+                    )
+                  }
                 >
-                  {isCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  {isCopied ? 'Copied!' : 'Copy Code'}
+                  {isCopied ? (
+                    <Check className="h-3.5 w-3.5 text-green-400" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                  {isCopied ? "Copied!" : "Copy Code"}
                 </Button>
               </div>
               <div className="mb-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-                Place the exported GLB at <span className="font-mono text-foreground">app/src/main/assets/exports/icon.glb</span>.
+                Place the exported GLB at{" "}
+                <span className="font-mono text-foreground">
+                  app/src/main/assets/exports/icon.glb
+                </span>
+                .
               </div>
               <div className="flex max-h-[52vh] min-w-0 flex-col gap-3 overflow-auto">
                 <div className="min-w-0">
-                  <div className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Gradle</div>
-                  <CodeBlock code={generateAndroidGradleCode()} lang="kotlin" className="max-h-none" />
+                  <div className="mb-1.5 text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                    Gradle
+                  </div>
+                  <CodeBlock
+                    code={generateAndroidGradleCode()}
+                    lang="kotlin"
+                    className="max-h-none"
+                  />
                 </div>
                 <div className="min-w-0">
-                  <div className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Kotlin</div>
-                  <CodeBlock code={generateAndroidFilamentCode()} lang="kotlin" className="max-h-none" />
+                  <div className="mb-1.5 text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                    Kotlin
+                  </div>
+                  <CodeBlock
+                    code={generateAndroidFilamentCode()}
+                    lang="kotlin"
+                    className="max-h-none"
+                  />
                 </div>
               </div>
             </TabsContent>
@@ -525,5 +612,5 @@ class FilamentIconView(context: Context) : SurfaceView(context), Choreographer.F
         </Tabs>
       </DialogContent>
     </Dialog>
-  );
-};
+  )
+}

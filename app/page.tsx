@@ -1,7 +1,7 @@
-'use client';
+"use client"
 
-import AppLayout from "@/components/editor/AppLayout";
+import AppLayout from "@/components/editor/AppLayout"
 
 export default function Page() {
-  return <AppLayout />;
+  return <AppLayout />
 }

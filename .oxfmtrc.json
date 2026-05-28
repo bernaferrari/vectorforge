@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "endOfLine": "lf",
+  "semi": false,
+  "singleQuote": false,
+  "tabWidth": 2,
+  "trailingComma": "es5",
+  "printWidth": 80,
+  "sortTailwindcss": {
+    "stylesheet": "app/globals.css",
+    "functions": ["cn", "cva"]
+  },
+  "ignorePatterns": [
+    ".next/**",
+    ".turbo/**",
+    "coverage/**",
+    "dist/**",
+    "node_modules/**",
+    "pnpm-lock.yaml",
+    "tsconfig.tsbuildinfo",
+    "vanilla-mock-backup/**"
+  ]
+}

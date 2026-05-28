@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc"],
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "browser": true,
+    "es2024": true,
+    "node": true
+  },
+  "ignorePatterns": [
+    ".next/**",
+    "coverage/**",
+    "dist/**",
+    "node_modules/**",
+    "vanilla-mock-backup/**",
+    "*.tsbuildinfo"
+  ],
+  "rules": {}
+}
