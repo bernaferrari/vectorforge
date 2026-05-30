@@ -15,59 +15,19 @@ const FALLBACK_MATERIAL_SYMBOL_NAMES = [
   "event_list",
   "palette",
   "bolt",
-  "play_arrow",
-  "shopping_cart",
-  "add",
-  "close",
-  "check",
-  "menu",
-  "camera_alt",
-  "image",
-  "music_note",
-  "mail",
-  "chat",
-  "call",
-  "calendar_month",
-  "lock",
-  "folder",
-  "shopping_bag",
-  "location_on",
-  "public",
-  "rocket_launch",
-  "diamond",
-  "notifications",
-  "cloud",
-  "shield",
-  "trophy",
-  "mood",
-  "download",
-  "upload",
-  "edit",
-  "delete",
-  "visibility",
-  "bookmark",
-  "share",
-  "refresh",
-  "sync",
-  "layers",
-  "dashboard",
-  "terminal",
-  "code",
-  "auto_awesome",
-  "brush",
-  "format_paint",
-  "lightbulb",
-  "extension",
-  "widgets",
-  "animation",
-  "view_in_ar",
-  "deployed_code",
-  "gesture",
-  "emoji_objects",
 ]
 
 export const materialSymbolQuery = (query: string) =>
   normalizeMaterialSymbolName(query)
+
+const MATERIAL_WIPE_READY_PAIR_INDEX = MATERIAL_WIPE_READY_PAIRS.map(
+  (pair) => ({
+    pair,
+    query: normalizeMaterialSymbolName(
+      `${pair.label} ${pair.enabled} ${pair.disabled}`
+    ),
+  })
+)
 
 export const visibleMaterialSymbols = (
   names: string[],
@@ -89,11 +49,9 @@ export const visibleWipePairs = (
 ): MaterialWipeIconPair[] => {
   const normalizedQuery = materialSymbolQuery(query)
   const filtered = normalizedQuery
-    ? MATERIAL_WIPE_READY_PAIRS.filter((pair) =>
-        normalizeMaterialSymbolName(
-          `${pair.label} ${pair.enabled} ${pair.disabled}`
-        ).includes(normalizedQuery)
-      )
+    ? MATERIAL_WIPE_READY_PAIR_INDEX.filter(({ query }) =>
+        query.includes(normalizedQuery)
+      ).map(({ pair }) => pair)
     : MATERIAL_WIPE_READY_PAIRS
   return filtered.slice(0, limit)
 }

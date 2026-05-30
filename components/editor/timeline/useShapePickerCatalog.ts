@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   fetchMaterialSymbolIcon,
   fetchMaterialSymbolNames,
@@ -13,6 +13,10 @@ import {
   visibleMaterialSymbols,
   visibleWipePairs,
 } from "./MaterialSymbolCatalog"
+import type { MaterialSymbolStatus } from "./ShapePickerSymbolModel"
+
+const errorMessageFromUnknown = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback
 
 export function useShapePickerCatalog({
   openShapePicker,
@@ -45,11 +49,10 @@ export function useShapePickerCatalog({
     useState(false)
   const [materialSymbolNames, setMaterialSymbolNames] = useState<string[]>([])
   const [materialCatalogLoading, setMaterialCatalogLoading] = useState(false)
-  const [materialSymbolStatus, setMaterialSymbolStatus] = useState<{
-    state: "idle" | "loading" | "error"
-    message?: string
-  }>({ state: "idle" })
+  const [materialSymbolStatus, setMaterialSymbolStatus] =
+    useState<MaterialSymbolStatus>({ state: "idle" })
   const [wipePairMode, setWipePairMode] = useState<"slash" | "morph">("slash")
+  const importInFlightRef = useRef(false)
 
   useEffect(() => {
     if (
@@ -110,37 +113,17 @@ export function useShapePickerCatalog({
     setMaterialSymbolSettings((current) => ({ ...current, [key]: value }))
   }
 
-  const importMaterialSymbol = async (shapeId: string) => {
-    const symbolName = normalizeMaterialSymbolName(shapeSearchQuery)
-    if (!symbolName || materialSymbolStatus.state === "loading") return
-    setMaterialSymbolStatus({ state: "loading" })
-    try {
-      const icon = await fetchMaterialSymbolIcon(
-        symbolName,
-        materialSymbolStyle
-      )
-      onShapeIconChange(shapeId, icon)
-      setShapeSearchQuery("")
-      setMaterialSymbolStatus({ state: "idle" })
-      onOpenShapePicker(null)
-    } catch (error) {
-      setMaterialSymbolStatus({
-        state: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Could not import that symbol.",
-      })
-    }
-  }
-
   const chooseMaterialSymbol = (shapeId: string, symbolName: string) => {
+    const normalizedName = normalizeMaterialSymbolName(symbolName)
+    if (!normalizedName || importInFlightRef.current) return
+
     setMaterialSymbolStatus({ state: "idle" })
     void (async () => {
+      importInFlightRef.current = true
       setMaterialSymbolStatus({ state: "loading" })
       try {
         const icon = await fetchMaterialSymbolIcon(
-          symbolName,
+          normalizedName,
           materialSymbolStyle
         )
         onShapeIconChange(shapeId, icon)
@@ -150,18 +133,27 @@ export function useShapePickerCatalog({
       } catch (error) {
         setMaterialSymbolStatus({
           state: "error",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Could not import that symbol.",
+          message: errorMessageFromUnknown(
+            error,
+            "Could not import that symbol."
+          ),
         })
+      } finally {
+        importInFlightRef.current = false
       }
     })()
   }
 
+  const importMaterialSymbol = (shapeId: string) => {
+    chooseMaterialSymbol(shapeId, shapeSearchQuery)
+  }
+
   const chooseWipePair = (shapeId: string, pair: MaterialWipeIconPair) => {
-    setMaterialSymbolStatus({ state: "loading" })
+    if (importInFlightRef.current) return
+
     void (async () => {
+      importInFlightRef.current = true
+      setMaterialSymbolStatus({ state: "loading" })
       try {
         const [enabled, disabled] = await Promise.all([
           fetchMaterialSymbolIcon(pair.enabled, materialSymbolStyle),
@@ -176,11 +168,13 @@ export function useShapePickerCatalog({
       } catch (error) {
         setMaterialSymbolStatus({
           state: "error",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Could not import that wipe pair.",
+          message: errorMessageFromUnknown(
+            error,
+            "Could not import that wipe pair."
+          ),
         })
+      } finally {
+        importInFlightRef.current = false
       }
     })()
   }

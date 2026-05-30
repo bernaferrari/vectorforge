@@ -17,7 +17,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-interface ViewOptionsPopoverProps {
+export type ViewOptionsPopoverProps = {
   viewInertiaEnabled: boolean
   showCenterPoint: boolean
   showTransformGizmo: boolean
@@ -42,7 +42,7 @@ export function ViewOptionsPopover({
         <PopoverTrigger
           aria-label="View options"
           title="View options"
-          className="flex h-7 w-8 items-center justify-center rounded-lg border border-border bg-background/70 text-muted-foreground backdrop-blur-sm transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-black/55 dark:hover:bg-black/70"
+          className="flex h-7 w-8 items-center justify-center rounded-lg border border-border bg-background/70 text-muted-foreground backdrop-blur-sm transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           <MoreHorizontal className="size-4" />
         </PopoverTrigger>
@@ -108,7 +108,7 @@ function ViewportToggleRow({
   )
 }
 
-interface PlaybackControlsProps {
+export type PlaybackControlsProps = {
   zenMode: boolean
   isPlaying: boolean
   playbackProgress: number
@@ -140,7 +140,7 @@ export function PlaybackControls({
   onExitZenMode,
 }: PlaybackControlsProps) {
   return (
-    <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/75 px-3 py-2 shadow-2xl backdrop-blur-xl transition-colors hover:border-border dark:border-white/10 dark:bg-black/65 dark:hover:border-border">
+    <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/75 px-3 py-2 shadow-2xl backdrop-blur-xl transition-colors hover:border-border">
       <Button
         size="icon"
         variant="ghost"

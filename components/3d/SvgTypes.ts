@@ -9,6 +9,7 @@ export interface PathOverride {
   visible: boolean
   color: string
   depthMultiplier: number
+  scale?: Vector3Value
 }
 
 export interface GradientStop {
@@ -66,6 +67,7 @@ export interface SvgCanvasProps {
   viewInertiaEnabled?: boolean
   showCenterPoint?: boolean
   showTransformGizmo?: boolean
+  selectedLayerId?: string | null
   pathOverridesA?: PathOverride[]
   pathOverridesB?: PathOverride[]
   onZoomChange?: (zoom: number) => void

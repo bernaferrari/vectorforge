@@ -1,6 +1,7 @@
 import * as THREE from "three"
+import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js"
 import { containsInvalidPositions, finiteNumber } from "./SvgGeometry"
-import type { GradientType, Vector3Value } from "./SvgTypes"
+import type { GradientType, SvgCanvasProps, Vector3Value } from "./SvgTypes"
 
 type FilamentExportProps = {
   materialPreset: string
@@ -176,4 +177,52 @@ export const downloadBlob = (blob: Blob, filename: string) => {
   link.click()
   link.remove()
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+export const exportFilamentGltf = ({
+  pivotGroup,
+  props,
+  sourceGroups,
+  applyModelScale,
+}: {
+  pivotGroup: THREE.Group
+  props: SvgCanvasProps
+  sourceGroups: Array<THREE.Group | null>
+  applyModelScale: (group: THREE.Group) => void
+}) => {
+  const exporter = new GLTFExporter()
+  const exportGroup = prepareFilamentExportObject(
+    pivotGroup,
+    props,
+    sourceGroups,
+    applyModelScale
+  )
+
+  exporter.parse(
+    exportGroup,
+    (gltf) => {
+      if (gltf instanceof ArrayBuffer) {
+        downloadBlob(
+          new Blob([gltf], { type: "model/gltf-binary" }),
+          "vectorforge-icon.glb"
+        )
+        return
+      }
+      const output = JSON.stringify(gltf)
+      downloadBlob(
+        new Blob([output], { type: "model/gltf+json" }),
+        "vectorforge-icon.gltf"
+      )
+    },
+    (error) => {
+      console.error("An error occurred during glTF export:", error)
+    },
+    {
+      binary: true,
+      onlyVisible: true,
+      trs: false,
+      truncateDrawRange: true,
+      maxTextureSize: 2048,
+    }
+  )
 }

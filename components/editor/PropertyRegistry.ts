@@ -1,12 +1,8 @@
 import {
-  DEFAULT_ROTATION_END,
-  DEFAULT_ROTATION_START,
   EXTRUDE_DEFAULT,
   EXTRUDE_MAX,
   LIGHT_MAX,
   MOVE_COLOR,
-  ROTATION_MAX,
-  ROTATION_MIN,
   SCALE_DEFAULT,
   SCALE_MAX,
   MotionTrackId,
@@ -31,28 +27,6 @@ export const TIMELINE_TRACK_DEFINITIONS: TimelineTrackDefinition[] = [
     min: 0.2,
     max: EXTRUDE_MAX,
     defaultValue: EXTRUDE_DEFAULT,
-  },
-  {
-    id: "rotation",
-    name: "Rotation",
-    color: "#ffd23f",
-    min: ROTATION_MIN,
-    max: ROTATION_MAX,
-    defaultValue: DEFAULT_ROTATION_START,
-    keyframes: [
-      {
-        id: "kf-rot1",
-        time: 0,
-        value: DEFAULT_ROTATION_START,
-        easing: "ease-in-out",
-      },
-      {
-        id: "kf-rot2",
-        time: 5.0,
-        value: DEFAULT_ROTATION_END,
-        easing: "ease-in-out",
-      },
-    ],
   },
   {
     id: "scale",
@@ -82,7 +56,7 @@ export const TIMELINE_TRACK_DEFINITIONS: TimelineTrackDefinition[] = [
 
 export const createInitialTimelineTracks = (): TimelineTrack[] =>
   TIMELINE_TRACK_DEFINITIONS.filter(
-    (definition) => definition.id !== "move"
+    (definition) => definition.id !== "move" && definition.id !== "rotation"
   ).map((definition) => ({
     ...definition,
     keyframes: definition.keyframes

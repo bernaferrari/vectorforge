@@ -33,8 +33,10 @@ const applySurfaceEmissive = <T extends THREE.Material>(
 ): T => {
   if (intensity <= 0) return material
 
+  const surfaceEmissiveUniform = { value: intensity }
+  material.userData.surfaceEmissiveUniform = surfaceEmissiveUniform
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.surfaceEmissiveIntensity = { value: intensity }
+    shader.uniforms.surfaceEmissiveIntensity = surfaceEmissiveUniform
     shader.fragmentShader = shader.fragmentShader
       .replace(
         "#include <common>",
@@ -45,7 +47,7 @@ const applySurfaceEmissive = <T extends THREE.Material>(
         "#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * surfaceEmissiveIntensity;"
       )
   }
-  material.customProgramCacheKey = () => `surface-emissive-${intensity}`
+  material.customProgramCacheKey = () => "surface-emissive"
   return material
 }
 

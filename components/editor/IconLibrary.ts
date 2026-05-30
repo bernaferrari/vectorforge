@@ -88,7 +88,7 @@ const appendVectorForgeSlash = (svgContent: string) => {
     .replace(/<\/svg>\s*$/i, "")
     .trim()
 
-  return `<svg viewBox="0 0 24 24">${inner}<path data-vectorforge-slash="true" d="M2.03 4.01 3.01 3.03 21.01 21.03 20.03 22.01z"/></svg>`
+  return `<svg viewBox="0 0 24 24">${inner}<path data-vectorforge-slash="true" d="M2.25 3.79 2.79 3.25 20.79 21.25 20.25 21.79z"/></svg>`
 }
 
 const materialSymbolUrl = (name: string, style: MaterialSymbolStyle) => {

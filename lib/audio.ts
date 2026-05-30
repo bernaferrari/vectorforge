@@ -1,4 +1,8 @@
 // Low-latency browser-native synthesizer sound engine for tactile audio feedback
+type BrowserAudioWindow = Window & {
+  webkitAudioContext?: typeof AudioContext
+}
+
 class SoundEngine {
   private ctx: AudioContext | null = null
   private enabled: boolean = false
@@ -11,9 +15,11 @@ class SoundEngine {
     this.enabled = on
     if (on && !this.ctx) {
       try {
-        this.ctx = new (
-          window.AudioContext || (window as any).webkitAudioContext
-        )()
+        const AudioContextConstructor =
+          window.AudioContext ||
+          (window as BrowserAudioWindow).webkitAudioContext
+        if (!AudioContextConstructor) return
+        this.ctx = new AudioContextConstructor()
       } catch (e) {
         console.warn("Web Audio API not supported in this browser", e)
       }
@@ -52,7 +58,7 @@ class SoundEngine {
     osc.stop(this.ctx.currentTime + 0.04)
   }
 
-  // satisfing wooden pop when keyframes snap or reset is clicked
+  // Satisfying wooden pop when keyframes snap or reset is clicked
   public playPop() {
     if (!this.enabled || !this.ctx) return
     this.resumeContext()

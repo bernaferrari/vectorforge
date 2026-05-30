@@ -35,7 +35,7 @@ export const WipePairPreview: React.FC<{
         {disabledUsesSlash && (
           <span
             aria-hidden="true"
-            className="absolute top-1/2 left-1/2 h-[25px] w-[3px] -translate-x-1/2 -translate-y-1/2 rotate-[-45deg] rounded-full bg-foreground shadow-[0_0_0_1px_hsl(var(--background))]"
+            className="absolute top-1/2 left-1/2 h-[25px] w-0.5 -translate-x-1/2 -translate-y-1/2 rotate-[-45deg] rounded-full bg-foreground shadow-[0_0_0_1px_hsl(var(--background))]"
           />
         )}
       </span>

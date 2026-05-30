@@ -1,4 +1,5 @@
 import { MaterialPresetId } from "../3d/MaterialPresets"
+import type { Vector3Keyframe } from "./EditorModel"
 import type { FillGradientType, TimelineTrack } from "./TimelineModel"
 
 export interface MotionRecipe {
@@ -44,6 +45,7 @@ export interface MotionRecipe {
 
   // Custom pre-configured timeline tracks
   tracks: TimelineTrack[]
+  rotationKeyframes?: Vector3Keyframe[]
 }
 
 export const MOTION_RECIPES: MotionRecipe[] = [
@@ -99,18 +101,6 @@ export const MOTION_RECIPES: MotionRecipe[] = [
         keyframes: [],
       },
       {
-        id: "rotation",
-        name: "Rotation",
-        color: "#807AFF",
-        min: 0,
-        max: 360,
-        defaultValue: 0,
-        keyframes: [
-          { id: "kf-google-r1", time: 0, value: 356, easing: "spring" },
-          { id: "kf-google-r2", time: 2.6, value: 360, easing: "ease-in-out" },
-        ],
-      },
-      {
         id: "scale",
         name: "Scale",
         color: "#FF9900",
@@ -131,6 +121,20 @@ export const MOTION_RECIPES: MotionRecipe[] = [
         max: 10,
         defaultValue: 1.08,
         keyframes: [],
+      },
+    ],
+    rotationKeyframes: [
+      {
+        id: "kf-google-r1",
+        time: 0,
+        value: { x: 0, y: 0, z: 0 },
+        easing: "ease-in-out",
+      },
+      {
+        id: "kf-google-r2",
+        time: 5,
+        value: { x: 0, y: 360, z: 0 },
+        easing: "ease-in-out",
       },
     ],
   },
@@ -187,19 +191,6 @@ export const MOTION_RECIPES: MotionRecipe[] = [
         ],
       },
       {
-        id: "rotation",
-        name: "Rotation",
-        color: "#ffd23f",
-        min: 0.0,
-        max: 2.0,
-        defaultValue: 0.4,
-        keyframes: [
-          { id: "kf-sg-r1", time: 0.6, value: 0.3, easing: "ease-in-out" },
-          { id: "kf-sg-r2", time: 2.4, value: 1.4, easing: "ease-in-out" },
-          { id: "kf-sg-r3", time: 4.2, value: 0.3, easing: "ease-in-out" },
-        ],
-      },
-      {
         id: "lighting",
         name: "Light",
         color: "#ff5b9a",
@@ -207,6 +198,26 @@ export const MOTION_RECIPES: MotionRecipe[] = [
         max: 10,
         defaultValue: 1.3,
         keyframes: [],
+      },
+    ],
+    rotationKeyframes: [
+      {
+        id: "kf-sg-r1",
+        time: 0.6,
+        value: { x: 0, y: 0.3, z: 0 },
+        easing: "ease-in-out",
+      },
+      {
+        id: "kf-sg-r2",
+        time: 2.4,
+        value: { x: 0, y: 1.4, z: 0 },
+        easing: "ease-in-out",
+      },
+      {
+        id: "kf-sg-r3",
+        time: 4.2,
+        value: { x: 0, y: 0.3, z: 0 },
+        easing: "ease-in-out",
       },
     ],
   },
@@ -259,18 +270,6 @@ export const MOTION_RECIPES: MotionRecipe[] = [
         keyframes: [],
       },
       {
-        id: "rotation",
-        name: "Rotation",
-        color: "#a48bff",
-        min: 0.0,
-        max: 2.0,
-        defaultValue: 0.6,
-        keyframes: [
-          { id: "kf-cp-r1", time: 0.8, value: 0.6, easing: "bounce" },
-          { id: "kf-cp-r2", time: 3.8, value: 1.8, easing: "bounce" },
-        ],
-      },
-      {
         id: "lighting",
         name: "Light",
         color: "#00ff7f",
@@ -282,6 +281,20 @@ export const MOTION_RECIPES: MotionRecipe[] = [
           { id: "kf-cp-l2", time: 2.3, value: 2.6, easing: "ease-in-out" },
           { id: "kf-cp-l3", time: 3.8, value: 0.8, easing: "ease-in-out" },
         ],
+      },
+    ],
+    rotationKeyframes: [
+      {
+        id: "kf-cp-r1",
+        time: 0.8,
+        value: { x: 0, y: 0.6, z: 0 },
+        easing: "bounce",
+      },
+      {
+        id: "kf-cp-r2",
+        time: 3.8,
+        value: { x: 0, y: 1.8, z: 0 },
+        easing: "bounce",
       },
     ],
   },
@@ -339,15 +352,6 @@ export const MOTION_RECIPES: MotionRecipe[] = [
           { id: "kf-lg-e2", time: 2.5, value: 8, easing: "ease-in-out" },
           { id: "kf-lg-e3", time: 4.0, value: 10, easing: "ease-in-out" },
         ],
-      },
-      {
-        id: "rotation",
-        name: "Rotation",
-        color: "#a48bff",
-        min: 0.0,
-        max: 2.0,
-        defaultValue: 0.35,
-        keyframes: [],
       },
       {
         id: "lighting",

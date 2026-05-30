@@ -1,6 +1,10 @@
 "use client"
 
 import * as THREE from "three"
+import {
+  createTransformGizmoHitMaterial,
+  createTransformGizmoMaterial,
+} from "./TransformGizmoMaterial"
 
 export const TRANSFORM_GIZMO_SIZE = 0.74
 
@@ -18,175 +22,20 @@ export const TRANSFORM_GIZMO_ARC_COLORS = {
 
 export type TransformAxis = keyof typeof TRANSFORM_GIZMO_COLORS
 
+export const TRANSFORM_AXES = [
+  "x",
+  "y",
+  "z",
+] as const satisfies readonly TransformAxis[]
+
 export type TransformGizmoHandle = {
   kind: "move" | "rotate" | "scale"
   axis?: TransformAxis
 }
 
-const createTransformGizmoMaterial = (color: number, opacity = 0.9) => {
-  const material = new THREE.MeshBasicMaterial({
-    color,
-    transparent: opacity < 1,
-    opacity,
-    depthTest: false,
-    depthWrite: false,
-    toneMapped: false,
-  })
-  material.userData.transformBaseColor = color
-  material.userData.transformBaseOpacity = opacity
-  return material
-}
-
-const createTransformGizmoHitMaterial = () => {
-  const material = new THREE.MeshBasicMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.001,
-    depthTest: false,
-    depthWrite: false,
-    toneMapped: false,
-  })
-  material.userData.transformGizmoHit = true
-  return material
-}
-
 const orientObjectToAxis = (object: THREE.Object3D, axis: TransformAxis) => {
   if (axis === "x") object.rotation.z = -Math.PI / 2
   if (axis === "z") object.rotation.x = Math.PI / 2
-}
-
-export const transformHandleKey = (
-  handle: TransformGizmoHandle | null | undefined
-) => (handle ? `${handle.kind}:${handle.axis ?? "center"}` : null)
-
-export const applyTransformGizmoHighlight = (
-  gizmo: THREE.Group,
-  hoveredKey: string | null,
-  activeKey: string | null
-) => {
-  gizmo.traverse((object) => {
-    const mesh = object as THREE.Mesh
-    if (!mesh.isMesh || !mesh.material || !mesh.userData.transformGizmo) return
-
-    const materials = Array.isArray(mesh.material)
-      ? mesh.material
-      : [mesh.material]
-    materials.forEach((material) => {
-      if (material.userData.transformGizmoHit) return
-
-      const handleKey = transformHandleKey(
-        mesh.userData.transformGizmo as TransformGizmoHandle
-      )
-      const isActive = activeKey !== null && handleKey === activeKey
-      const isHovered = hoveredKey !== null && handleKey === hoveredKey
-      const baseColor =
-        typeof material.userData.transformBaseColor === "number"
-          ? material.userData.transformBaseColor
-          : 0xffffff
-      const baseOpacity =
-        typeof material.userData.transformBaseOpacity === "number"
-          ? material.userData.transformBaseOpacity
-          : 0.9
-      const basicMaterial = material as THREE.MeshBasicMaterial
-      const nextColor = new THREE.Color(baseColor)
-
-      if (isHovered) nextColor.lerp(new THREE.Color(0xffffff), 0.46)
-      basicMaterial.color.copy(isActive ? new THREE.Color(0xffffff) : nextColor)
-      basicMaterial.opacity = isActive
-        ? 1
-        : isHovered
-          ? Math.min(1, baseOpacity + 0.2)
-          : baseOpacity
-      basicMaterial.transparent = basicMaterial.opacity < 1
-      mesh.scale.setScalar(1)
-    })
-  })
-}
-
-export const createRotationDragOverlay = () => {
-  const group = new THREE.Group()
-  group.name = "rotation-drag-overlay"
-  group.visible = false
-  group.renderOrder = 2020
-
-  const radius = TRANSFORM_GIZMO_SIZE * 1.12
-  const ringPoints: THREE.Vector3[] = []
-  for (let index = 0; index < 96; index += 1) {
-    const angle = (index / 96) * Math.PI * 2
-    ringPoints.push(
-      new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, 0)
-    )
-  }
-
-  const ring = new THREE.LineLoop(
-    new THREE.BufferGeometry().setFromPoints(ringPoints),
-    new THREE.LineBasicMaterial({
-      color: 0x9ca3af,
-      transparent: true,
-      opacity: 0.58,
-      depthTest: false,
-      depthWrite: false,
-      toneMapped: false,
-    })
-  )
-  ring.renderOrder = 2020
-  group.add(ring)
-
-  const sector = new THREE.Mesh(
-    new THREE.BufferGeometry(),
-    new THREE.MeshBasicMaterial({
-      color: 0xfb923c,
-      transparent: true,
-      opacity: 0.18,
-      depthTest: false,
-      depthWrite: false,
-      toneMapped: false,
-      side: THREE.DoubleSide,
-    })
-  )
-  sector.name = "rotation-drag-sector"
-  sector.renderOrder = 2021
-  group.add(sector)
-
-  const dial = new THREE.Group()
-  dial.name = "rotation-drag-dial"
-  dial.renderOrder = 2022
-
-  const spoke = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.015, 0.015, radius, 16),
-    new THREE.MeshBasicMaterial({
-      color: 0x0ea5ff,
-      transparent: true,
-      opacity: 1,
-      depthTest: false,
-      depthWrite: false,
-      toneMapped: false,
-    })
-  )
-  spoke.rotation.z = -Math.PI / 2
-  spoke.position.x = radius / 2
-  spoke.renderOrder = 2023
-  dial.add(spoke)
-
-  const handle = new THREE.Mesh(
-    new THREE.SphereGeometry(0.07, 22, 14),
-    new THREE.MeshBasicMaterial({
-      color: 0xfacc15,
-      transparent: false,
-      depthTest: false,
-      depthWrite: false,
-      toneMapped: false,
-    })
-  )
-  handle.position.x = radius
-  handle.renderOrder = 2024
-  dial.add(handle)
-
-  group.add(dial)
-  group.userData.dial = dial
-  group.userData.sector = sector
-  group.userData.radius = radius
-  return group
 }
 
 export const createTransformGizmo = () => {
@@ -202,6 +51,7 @@ export const createTransformGizmo = () => {
   const coneRadius = 0.066
   const coneHeight = 0.2
   const coneStemLength = 0.18
+  const scaleBallRadius = 0.072
   const coneCenterOffset = axisLength + coneStemLength + coneHeight / 2
   const arcEndpointDistance = axisLength * 0.985
   const axisEnd: Record<TransformAxis, THREE.Vector3> = {
@@ -216,7 +66,7 @@ export const createTransformGizmo = () => {
   }
   const scaleBallMaterial = createTransformGizmoMaterial(0x22d3ee, 1)
 
-  ;(Object.keys(TRANSFORM_GIZMO_COLORS) as TransformAxis[]).forEach((axis) => {
+  TRANSFORM_AXES.forEach((axis) => {
     const material = createTransformGizmoMaterial(
       TRANSFORM_GIZMO_COLORS[axis],
       1
@@ -224,14 +74,19 @@ export const createTransformGizmo = () => {
     const rodMaterial = createTransformGizmoMaterial(0xfacc15, 1)
 
     const rod = new THREE.Mesh(
-      new THREE.CylinderGeometry(rodRadius, rodRadius, axisLength, 16),
+      new THREE.CylinderGeometry(
+        rodRadius,
+        rodRadius,
+        axisLength + scaleBallRadius * 0.75,
+        16
+      ),
       rodMaterial
     )
     orientObjectToAxis(rod, axis)
     rod.position.set(
-      axis === "x" ? axisLength / 2 : 0,
-      axis === "y" ? axisLength / 2 : 0,
-      axis === "z" ? axisLength / 2 : 0
+      axis === "x" ? (axisLength + scaleBallRadius * 0.75) / 2 : 0,
+      axis === "y" ? (axisLength + scaleBallRadius * 0.75) / 2 : 0,
+      axis === "z" ? (axisLength + scaleBallRadius * 0.75) / 2 : 0
     )
     rod.renderOrder = 2002
     rod.userData.transformGizmo = {
@@ -278,7 +133,7 @@ export const createTransformGizmo = () => {
     group.add(cone)
 
     const joint = new THREE.Mesh(
-      new THREE.SphereGeometry(0.072, 22, 14),
+      new THREE.SphereGeometry(scaleBallRadius, 22, 14),
       scaleBallMaterial.clone()
     )
     joint.position.copy(scaleBallPosition[axis])

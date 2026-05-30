@@ -47,6 +47,7 @@ export type MotionTrackId =
   | "move"
   | "lighting"
 export type LightPosition = { x: number; y: number; z: number }
+export const ROTATION_COLOR = "#ffd23f"
 
 export type Vector3Keyframe = {
   id: string
@@ -122,6 +123,7 @@ export type EditorSnapshot = {
   fillStops?: FillStop[]
   fillKeyframes: FillKeyframe[]
   rotationOffset: LightPosition
+  rotationAxisKeyframes: Vector3Keyframe[]
   keyLightColor: string
   keyLightIntensity: number
   keyLightPosition: LightPosition
@@ -144,8 +146,8 @@ export const LIGHT_MAX = 25
 export const MAX_BEVEL_SEGMENTS = 24
 export const DEFAULT_ROTATION_START = 0
 export const DEFAULT_ROTATION_END = 360
-export const ROTATION_MIN = -1440
-export const ROTATION_MAX = 1440
+export const ROTATION_MIN = -100000
+export const ROTATION_MAX = 100000
 export const MOVE_COLOR = "#38bdf8"
 export const MAX_UNDO_STEPS = 80
 
@@ -243,15 +245,19 @@ export const interpolateLightPositionKeyframes = (
   keyframes: Vector3Keyframe[]
 ): LightPosition => {
   if (keyframes.length === 0) return fallback
-  const sorted = [...keyframes].sort((a, b) => a.time - b.time)
-  if (time <= sorted[0].time) return sorted[0].value
-  if (time >= sorted[sorted.length - 1].time)
-    return sorted[sorted.length - 1].value
+  if (time <= keyframes[0].time) return keyframes[0].value
+  if (time >= keyframes[keyframes.length - 1].time)
+    return keyframes[keyframes.length - 1].value
 
-  const next = sorted.find((keyframe) => keyframe.time >= time)
-  const previous = [...sorted]
-    .reverse()
-    .find((keyframe) => keyframe.time <= time)
+  let previous = keyframes[0]
+  let next = keyframes[keyframes.length - 1]
+  for (let i = 0; i < keyframes.length - 1; i++) {
+    if (time >= keyframes[i].time && time <= keyframes[i + 1].time) {
+      previous = keyframes[i]
+      next = keyframes[i + 1]
+      break
+    }
+  }
   if (!previous || !next || previous.id === next.id)
     return previous?.value ?? next?.value ?? fallback
 
@@ -270,13 +276,19 @@ export const interpolateScalarKeyframes = (
   keyframes: ScalarKeyframe[]
 ): number => {
   if (keyframes.length === 0) return fallback
-  const sorted = [...keyframes].sort((a, b) => a.time - b.time)
-  if (time <= sorted[0].time) return sorted[0].value
-  if (time >= sorted[sorted.length - 1].time)
-    return sorted[sorted.length - 1].value
+  if (time <= keyframes[0].time) return keyframes[0].value
+  if (time >= keyframes[keyframes.length - 1].time)
+    return keyframes[keyframes.length - 1].value
 
-  const next = sorted.find((kf) => kf.time >= time)
-  const previous = [...sorted].reverse().find((kf) => kf.time <= time)
+  let previous = keyframes[0]
+  let next = keyframes[keyframes.length - 1]
+  for (let i = 0; i < keyframes.length - 1; i++) {
+    if (time >= keyframes[i].time && time <= keyframes[i + 1].time) {
+      previous = keyframes[i]
+      next = keyframes[i + 1]
+      break
+    }
+  }
   if (!previous || !next || previous.id === next.id)
     return previous?.value ?? next?.value ?? fallback
 
@@ -293,15 +305,19 @@ export const interpolateMaterialKeyframes = (
   keyframes: MaterialKeyframe[]
 ): MaterialSettings => {
   if (keyframes.length === 0) return fallback
-  const sorted = [...keyframes].sort((a, b) => a.time - b.time)
-  if (time <= sorted[0].time) return sorted[0].value
-  if (time >= sorted[sorted.length - 1].time)
-    return sorted[sorted.length - 1].value
+  if (time <= keyframes[0].time) return keyframes[0].value
+  if (time >= keyframes[keyframes.length - 1].time)
+    return keyframes[keyframes.length - 1].value
 
-  const next = sorted.find((keyframe) => keyframe.time >= time)
-  const previous = [...sorted]
-    .reverse()
-    .find((keyframe) => keyframe.time <= time)
+  let previous = keyframes[0]
+  let next = keyframes[keyframes.length - 1]
+  for (let i = 0; i < keyframes.length - 1; i++) {
+    if (time >= keyframes[i].time && time <= keyframes[i + 1].time) {
+      previous = keyframes[i]
+      next = keyframes[i + 1]
+      break
+    }
+  }
   if (!previous || !next || previous.id === next.id)
     return previous?.value ?? next?.value ?? fallback
 

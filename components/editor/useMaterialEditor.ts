@@ -6,36 +6,16 @@ import {
   MaterialKeyframe,
   MaterialSettingKey,
   MaterialSettings,
-  TimeKeyframe,
   clampNumber,
-  createEditorId,
   interpolateMaterialKeyframes,
-  quantizeTimeToFrame,
 } from "./EditorModel"
 import { materialDefaultSettings } from "./FinishRegistry"
-import type { FillKeyframe } from "./TimelineModel"
-
-const DEFAULT_MATERIAL_SETTINGS: MaterialSettings = {
-  roughness: 0.075,
-  metalness: 0.48,
-  reflectance: 1,
-  clearcoat: 1,
-  clearcoatRoughness: 0.02,
-  transmission: 0,
-  thickness: 1,
-  emissiveIntensity: 0.08,
-}
-
-const previousEasingFor = <
-  T extends TimeKeyframe & { easing?: FillKeyframe["easing"] },
->(
-  keyframes: T[],
-  time: number
-): FillKeyframe["easing"] =>
-  [...keyframes]
-    .sort((a, b) => a.time - b.time)
-    .filter((keyframe) => keyframe.time <= time)
-    .pop()?.easing ?? ("ease-in-out" as const)
+import {
+  DEFAULT_MATERIAL_SETTINGS,
+  findMaterialKeyframeAtTime,
+  materialPlayheadTime,
+  upsertMaterialKeyframe,
+} from "./MaterialEditorModel"
 
 export function useMaterialEditor({
   currentTime,
@@ -111,9 +91,6 @@ export function useMaterialEditor({
     [baseMaterialSettings, currentTime, materialKeyframes]
   )
 
-  const keyframeTimeMatchesPlayhead = (time: number) =>
-    Math.abs(time - quantizeTimeToFrame(currentTime)) < 0.04
-
   const setMaterialBaseSettings = (settings: MaterialSettings) => {
     setRoughness(settings.roughness)
     setMetalness(settings.metalness)
@@ -136,36 +113,17 @@ export function useMaterialEditor({
     max: number
   ) => {
     const clamped = clampNumber(value, min, max)
-    const playheadTime = clampNumber(
-      quantizeTimeToFrame(currentTime),
-      0,
-      duration
-    )
+    const playheadTime = materialPlayheadTime(currentTime, duration)
     onEdit()
     setMaterialBaseSetting(key, clamped)
     setMaterialKeyframes((prev) => {
       if (prev.length === 0) return prev
       const nextValue = { ...activeMaterialSettings, [key]: clamped }
-      const existing = prev.find(
-        (keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04
-      )
-      if (existing) {
-        return prev.map((keyframe) =>
-          keyframe.id === existing.id
-            ? { ...keyframe, value: nextValue }
-            : keyframe
-        )
-      }
-
-      return [
-        ...prev,
-        {
-          id: createEditorId("material"),
-          time: playheadTime,
-          value: nextValue,
-          easing: previousEasingFor(prev, playheadTime),
-        },
-      ].sort((a, b) => a.time - b.time)
+      return upsertMaterialKeyframe({
+        keyframes: prev,
+        time: playheadTime,
+        value: nextValue,
+      })
     })
   }
 
@@ -179,38 +137,18 @@ export function useMaterialEditor({
     setMaterialKeyframes((prev) => {
       if (prev.length === 0) return prev
 
-      const playheadTime = clampNumber(
-        quantizeTimeToFrame(currentTime),
-        0,
-        duration
-      )
-      const existing = prev.find((keyframe) =>
-        keyframeTimeMatchesPlayhead(keyframe.time)
-      )
-      if (existing) {
-        return prev.map((keyframe) =>
-          keyframe.id === existing.id
-            ? { ...keyframe, value: settings }
-            : keyframe
-        )
-      }
-
-      return [
-        ...prev,
-        {
-          id: createEditorId("material"),
-          time: playheadTime,
-          value: settings,
-          easing: previousEasingFor(prev, playheadTime),
-        },
-      ].sort((a, b) => a.time - b.time)
+      return upsertMaterialKeyframe({
+        keyframes: prev,
+        time: materialPlayheadTime(currentTime, duration),
+        value: settings,
+      })
     })
   }
 
   const materialKeyframeAtPlayhead = () => {
-    const playheadTime = quantizeTimeToFrame(currentTime)
-    return materialKeyframes.find(
-      (keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04
+    return findMaterialKeyframeAtTime(
+      materialKeyframes,
+      materialPlayheadTime(currentTime, duration)
     )
   }
 

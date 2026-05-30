@@ -21,7 +21,7 @@ export interface WipeDirectionOption {
   tooltip: string
 }
 
-export interface TimelineProps {
+export type TimelinePlaybackProps = {
   duration: number
   onDurationChange: (duration: number) => void
   currentTime: number
@@ -31,15 +31,31 @@ export interface TimelineProps {
   isPreviewLoading?: boolean
   loop: boolean
   onLoopChange: (loop: boolean) => void
+}
+
+export type TimelineTrackProps = {
   tracks: TimelineTrack[]
   onTracksChange: (tracks: TimelineTrack[]) => void
   propertyRows?: TimelinePropertyRow[]
   onClearTrackKeyframes?: (trackId: string) => void
   onClearPropertyRow?: (rowId: string) => void
   onRemovePropertyKeyframe?: (rowId: string, keyframeId: string) => void
+  onMovePropertyKeyframe?: (
+    rowId: string,
+    keyframeId: string,
+    time: number
+  ) => void
+  onSetPropertyEasing?: (
+    rowId: string,
+    keyframeId: string | null,
+    easing: EasingType
+  ) => void
   onActivePropertyRowChange?: (rowId: string) => void
   activeTrackId?: string | null
   onActiveTrackChange?: (trackId: string) => void
+}
+
+export type TimelineShapeProps = {
   shapes: ShapeStop[]
   selectedShapeId: string | null
   onSelectShape: (id: string) => void
@@ -59,20 +75,26 @@ export interface TimelineProps {
     id: string,
     patch: Partial<Pick<ShapeStop, "transitionType" | "wipeDirection">>
   ) => void
+}
+
+export type TimelineShapePickerProps = {
   openShapePicker: string | null
   onOpenShapePicker: (id: string | null) => void
   wipeDirections: WipeDirectionOption[]
 }
 
-export type TimelineViewportGeometry = {
-  laneLeft: number
-  laneWidth: number
-  usableWidth: number
-  viewportLeft: number
-  viewportRight: number
-}
+export type TimelineProps = TimelinePlaybackProps &
+  TimelineTrackProps &
+  TimelineShapeProps &
+  TimelineShapePickerProps
 
 export type SelectedTimelineKeyframe =
   | { type: "track"; trackId: string; kfId: string }
   | { type: "property"; rowId: string; kfId: string }
   | null
+
+export type TrackTimeEditor = {
+  trackId: string
+  kfId: string
+  draft: string
+}

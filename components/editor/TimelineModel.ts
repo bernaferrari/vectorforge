@@ -1,3 +1,5 @@
+import type { PathOverride } from "../3d/SvgTypes"
+
 export type EasingType = "linear" | "ease-in-out" | "spring" | "bounce"
 
 export interface Keyframe {
@@ -37,7 +39,12 @@ export interface TimelinePropertyRow {
   id: string
   name: string
   color: string
-  keyframes: Array<{ id: string; time: number; label?: string }>
+  keyframes: Array<{
+    id: string
+    time: number
+    label?: string
+    easing?: EasingType
+  }>
 }
 
 export interface ShapeStop {
@@ -51,6 +58,7 @@ export interface ShapeStop {
   fillStops?: FillStop[]
   fillGradientType?: FillGradientType
   fillKeyframes?: FillKeyframe[]
+  pathOverrides?: PathOverride[]
   easing: EasingType
   transitionType: "none" | "wipe"
   wipeDirection: { x: number; y: number }
@@ -97,7 +105,7 @@ export const interpolateKeyframes = (
   time: number,
   track: TimelineTrack
 ): number => {
-  const keyframes = [...track.keyframes].sort((a, b) => a.time - b.time)
+  const keyframes = track.keyframes
 
   if (keyframes.length === 0) return track.defaultValue
   if (time <= keyframes[0].time) return keyframes[0].value
@@ -105,7 +113,7 @@ export const interpolateKeyframes = (
     return keyframes[keyframes.length - 1].value
 
   let prev = keyframes[0]
-  let next = keyframes[0]
+  let next = keyframes[keyframes.length - 1]
   for (let i = 0; i < keyframes.length - 1; i++) {
     if (time >= keyframes[i].time && time <= keyframes[i + 1].time) {
       prev = keyframes[i]

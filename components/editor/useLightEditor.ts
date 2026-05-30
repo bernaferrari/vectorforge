@@ -4,13 +4,12 @@ import { useMemo, useState } from "react"
 import {
   LightPosition,
   LightPositionKeyframe,
-  TimeKeyframe,
   clampNumber,
   createEditorId,
   interpolateLightPositionKeyframes,
   quantizeTimeToFrame,
 } from "./EditorModel"
-import type { FillKeyframe } from "./TimelineModel"
+import { previousEasingFor } from "./EditorKeyframeModel"
 
 export const STATIC_STUDIO_LIGHTING = {
   ambientColor: "#ffffff",
@@ -18,17 +17,6 @@ export const STATIC_STUDIO_LIGHTING = {
   rimLightColor: "#a48bff",
   rimLightIntensity: 0.8,
 }
-
-const previousEasingFor = <
-  T extends TimeKeyframe & { easing?: FillKeyframe["easing"] },
->(
-  keyframes: T[],
-  time: number
-): FillKeyframe["easing"] =>
-  [...keyframes]
-    .sort((a, b) => a.time - b.time)
-    .filter((keyframe) => keyframe.time <= time)
-    .pop()?.easing ?? ("ease-in-out" as const)
 
 export function useLightEditor({
   currentTime,

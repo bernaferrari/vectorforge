@@ -339,3 +339,48 @@ export const applyInnerElementScale = (
     mesh.updateMatrix()
   })
 }
+
+export const applyMeshSetScale = (
+  meshes: THREE.Mesh[],
+  scale: { x: number; y: number; z: number }
+) => {
+  if (meshes.length === 0) return
+
+  const normalizedScale = {
+    x: Math.max(0.05, Math.min(3, finiteNumber(scale.x, 1))),
+    y: Math.max(0.05, Math.min(3, finiteNumber(scale.y, 1))),
+    z: Math.max(0.05, Math.min(3, finiteNumber(scale.z, 1))),
+  }
+  const bounds = new THREE.Box3()
+
+  meshes.forEach((mesh) => {
+    mesh.geometry?.computeBoundingBox()
+    const box = mesh.geometry?.boundingBox
+    if (!box || box.isEmpty()) return
+    if (!mesh.userData.layerScaleBasePosition) {
+      mesh.userData.layerScaleBasePosition = mesh.position.clone()
+    }
+    const basePosition = mesh.userData.layerScaleBasePosition as THREE.Vector3
+    const min = box.min.clone().add(basePosition)
+    const max = box.max.clone().add(basePosition)
+    bounds.expandByPoint(min)
+    bounds.expandByPoint(max)
+  })
+
+  if (bounds.isEmpty()) return
+  const center = bounds.getCenter(new THREE.Vector3())
+
+  meshes.forEach((mesh) => {
+    if (!mesh.userData.layerScaleBasePosition) {
+      mesh.userData.layerScaleBasePosition = mesh.position.clone()
+    }
+    const basePosition = mesh.userData.layerScaleBasePosition as THREE.Vector3
+    mesh.scale.set(normalizedScale.x, normalizedScale.y, normalizedScale.z)
+    mesh.position.set(
+      center.x + (basePosition.x - center.x) * normalizedScale.x,
+      center.y + (basePosition.y - center.y) * normalizedScale.y,
+      center.z + (basePosition.z - center.z) * normalizedScale.z
+    )
+    mesh.updateMatrix()
+  })
+}

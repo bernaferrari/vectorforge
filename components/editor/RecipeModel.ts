@@ -5,8 +5,6 @@ import {
   LIGHT_MAX,
   MOTION_TRACK_NAMES,
   MotionTrackId,
-  ROTATION_MAX,
-  ROTATION_MIN,
   SCALE_DEFAULT,
   SCALE_MAX,
   googleMeshFillStops,
@@ -33,8 +31,7 @@ export const recolorShapesForRecipe = (
   }))
 
 export const normalizeRecipeTracks = (
-  recipe: MotionRecipe,
-  timelineDuration = 5
+  recipe: MotionRecipe
 ): TimelineTrack[] => {
   const normalized: TimelineTrack[] = recipe.tracks
     .filter((track) => track.id !== "transition")
@@ -48,29 +45,6 @@ export const normalizeRecipeTracks = (
           max: EXTRUDE_MAX,
           defaultValue: recipe.extrusionDepth,
           keyframes: [],
-        }
-      }
-      if (track.id === "rotation") {
-        return {
-          ...track,
-          name: trackName,
-          min: ROTATION_MIN,
-          max: ROTATION_MAX,
-          defaultValue: DEFAULT_ROTATION_START,
-          keyframes: [
-            {
-              id: `${track.id}-start`,
-              time: 0,
-              value: DEFAULT_ROTATION_START,
-              easing: "ease-in-out" as const,
-            },
-            {
-              id: `${track.id}-end`,
-              time: timelineDuration,
-              value: DEFAULT_ROTATION_END,
-              easing: "ease-in-out" as const,
-            },
-          ],
         }
       }
       if (track.id === "lighting") {
@@ -98,4 +72,26 @@ export const normalizeRecipeTracks = (
   }
 
   return normalized
+}
+
+export const normalizeRecipeRotationKeyframes = (
+  recipe: MotionRecipe,
+  timelineDuration = 5
+) => {
+  if (recipe.rotationKeyframes?.length) return recipe.rotationKeyframes
+
+  return [
+    {
+      id: "rotation-start",
+      time: 0,
+      value: { x: 0, y: DEFAULT_ROTATION_START, z: 0 },
+      easing: "ease-in-out" as const,
+    },
+    {
+      id: "rotation-end",
+      time: timelineDuration,
+      value: { x: 0, y: DEFAULT_ROTATION_END, z: 0 },
+      easing: "ease-in-out" as const,
+    },
+  ]
 }
