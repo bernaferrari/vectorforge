@@ -39,6 +39,14 @@ export function useAnimatedTimeSeek({
 
   useEffect(() => cancelAnimatedSeek, [cancelAnimatedSeek])
 
+  const updateAnimatedSeekEnabled = useCallback(
+    (enabled: boolean) => {
+      setAnimatedSeekEnabled(enabled)
+      if (!enabled) cancelAnimatedSeek()
+    },
+    [cancelAnimatedSeek]
+  )
+
   const seekToTime = useCallback(
     (time: number, options?: { animated?: boolean }) => {
       stopPlayback()
@@ -87,7 +95,7 @@ export function useAnimatedTimeSeek({
 
   return {
     animatedSeekEnabled,
-    setAnimatedSeekEnabled,
+    setAnimatedSeekEnabled: updateAnimatedSeekEnabled,
     cancelAnimatedSeek,
     seekToTime,
   }

@@ -27,7 +27,6 @@ import type {
 
 export function useTimelineDockController({
   currentTime,
-  setCurrentTime,
   seekToTime,
   duration,
   setDuration,
@@ -49,7 +48,6 @@ export function useTimelineDockController({
   markCustom,
 }: {
   currentTime: number
-  setCurrentTime: React.Dispatch<React.SetStateAction<number>>
   seekToTime: (time: number, options?: { animated?: boolean }) => void
   duration: number
   setDuration: React.Dispatch<React.SetStateAction<number>>
@@ -132,7 +130,7 @@ export function useTimelineDockController({
   const handleDurationChange = (value: number) => {
     const next = clampNumber(value, 0.5, 30)
     setDuration(next)
-    setCurrentTime((time) => clampNumber(time, 0, next))
+    seekToTime(clampNumber(currentTime, 0, next), { animated: false })
     markCustom()
   }
 

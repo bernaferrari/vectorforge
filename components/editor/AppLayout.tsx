@@ -518,7 +518,6 @@ export default function AppLayout() {
     setShapeBlend,
   } = useTimelineDockController({
     currentTime,
-    setCurrentTime,
     duration,
     setDuration,
     seekToTime,
