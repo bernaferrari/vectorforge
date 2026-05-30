@@ -1,13 +1,8 @@
 "use client"
 
-import { ExportModal } from "./ExportModal"
 import { isInspectorInputDragActive } from "./InspectorControlModel"
-import { AppTopBar } from "./AppTopBar"
-import { ViewportStage } from "./ViewportStage"
-import { TimelineDock } from "./TimelineDock"
 import { useLightEditor } from "./useLightEditor"
 import { useMaterialEditor } from "./useMaterialEditor"
-import { InspectorSidebar } from "./InspectorSidebar"
 import { useFillEditor } from "./useFillEditor"
 import { useThemeControls } from "./useThemeControls"
 import { useShapeSequenceEditor } from "./useShapeSequenceEditor"
@@ -25,6 +20,7 @@ import { useEditorHistorySurface } from "./useEditorHistorySurface"
 import { useEditorRenderState } from "./useEditorRenderState"
 import { useEditorMotionSurface } from "./useEditorMotionSurface"
 import { useEditorRecipeSurface } from "./useEditorRecipeSurface"
+import { AppLayoutView } from "./AppLayoutView"
 
 export default function AppLayout() {
   const { themeMounted, isLightTheme, themeToggleLabel, setTheme } =
@@ -687,52 +683,37 @@ export default function AppLayout() {
     })
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-background font-sans text-foreground antialiased select-none">
-      <AppTopBar
-        zenMode={zenMode}
-        themeMounted={themeMounted}
-        isLightTheme={isLightTheme}
-        themeToggleLabel={themeToggleLabel}
-        onZenModeChange={setZenMode}
-        onThemeChange={setTheme}
-        onExportOpen={openExport}
-      />
-
-      <div className="flex min-h-0 flex-1 bg-muted/40">
-        <ViewportStage
-          ref={canvas3DRef}
-          zenMode={zenMode}
-          isDragging={isDragging}
-          onDragStateChange={setIsDragging}
-          onDropSvg={handleDropSvg}
-          canvasProps={canvasProps}
-          viewOptionsProps={viewOptionsProps}
-          playbackProps={playbackProps}
-        />
-
-        <InspectorSidebar
-          zenMode={zenMode}
-          styleProps={styleProps}
-          geometryProps={geometryProps}
-          transformProps={transformProps}
-          lightProps={lightProps}
-        />
-      </div>
-
-      <TimelineDock zenMode={zenMode} timelineProps={timelineProps} />
-
-      <input
-        ref={uploadFileRef}
-        type="file"
-        accept=".svg"
-        className="hidden"
-        onChange={handleUploadInputChange}
-      />
-
-      {/* =========================================================================
-          4. EXPORT STUDIO MODAL
-          ========================================================================= */}
-      <ExportModal {...exportModalProps} />
-    </div>
+    <AppLayoutView
+      topBarProps={{
+        zenMode,
+        themeMounted,
+        isLightTheme,
+        themeToggleLabel,
+        onZenModeChange: setZenMode,
+        onThemeChange: setTheme,
+        onExportOpen: openExport,
+      }}
+      viewportProps={{
+        zenMode,
+        isDragging,
+        onDragStateChange: setIsDragging,
+        onDropSvg: handleDropSvg,
+        canvasProps,
+        viewOptionsProps,
+        playbackProps,
+      }}
+      inspectorProps={{
+        zenMode,
+        styleProps,
+        geometryProps,
+        transformProps,
+        lightProps,
+      }}
+      timelineProps={{ zenMode, timelineProps }}
+      exportModalProps={exportModalProps}
+      uploadFileRef={uploadFileRef}
+      canvas3DRef={canvas3DRef}
+      onUploadInputChange={handleUploadInputChange}
+    />
   )
 }
