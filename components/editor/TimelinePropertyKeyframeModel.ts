@@ -108,17 +108,30 @@ export const clearPropertyRowKeyframes = (
   rowId: string,
   setters: TimelinePropertyKeyframeSetters
 ) => {
-  if (rowId === "style") {
-    setters.setFillKeyframes([])
-    setters.setMaterialKeyframes([])
-    return
+  switch (rowId) {
+    case "style":
+      setters.setFillKeyframes([])
+      setters.setMaterialKeyframes([])
+      break
+    case "fill":
+      setters.setFillKeyframes([])
+      break
+    case "light-position":
+      setters.setKeyLightPositionKeyframes([])
+      break
+    case "rotation":
+      setters.setRotationAxisKeyframes([])
+      break
+    case "move":
+      setters.setMoveKeyframes([])
+      break
+    case "material":
+      setters.setMaterialKeyframes([])
+      break
+    case "quality":
+      setters.setQualityKeyframes([])
+      break
   }
-  if (rowId === "fill") setters.setFillKeyframes([])
-  if (rowId === "light-position") setters.setKeyLightPositionKeyframes([])
-  if (rowId === "rotation") setters.setRotationAxisKeyframes([])
-  if (rowId === "move") setters.setMoveKeyframes([])
-  if (rowId === "material") setters.setMaterialKeyframes([])
-  if (rowId === "quality") setters.setQualityKeyframes([])
 }
 
 export const removePropertyRowKeyframe = (
@@ -126,36 +139,41 @@ export const removePropertyRowKeyframe = (
   keyframeId: string,
   setters: TimelinePropertyKeyframeSetters
 ) => {
-  if (rowId === "style") {
-    setters.setFillKeyframes((prev) =>
-      removeStyleKeyframesAtIdTime(prev, keyframeId)
-    )
-    setters.setMaterialKeyframes((prev) =>
-      removeStyleKeyframesAtIdTime(prev, keyframeId)
-    )
-    return
-  }
-  if (rowId === "fill") {
-    setters.setFillKeyframes((prev) => removeKeyframeById(prev, keyframeId))
-  }
-  if (rowId === "light-position") {
-    setters.setKeyLightPositionKeyframes((prev) =>
-      removeKeyframeById(prev, keyframeId)
-    )
-  }
-  if (rowId === "rotation") {
-    setters.setRotationAxisKeyframes((prev) =>
-      removeKeyframeById(prev, keyframeId)
-    )
-  }
-  if (rowId === "move") {
-    setters.setMoveKeyframes((prev) => removeKeyframeById(prev, keyframeId))
-  }
-  if (rowId === "material") {
-    setters.setMaterialKeyframes((prev) => removeKeyframeById(prev, keyframeId))
-  }
-  if (rowId === "quality") {
-    setters.setQualityKeyframes((prev) => removeKeyframeById(prev, keyframeId))
+  switch (rowId) {
+    case "style":
+      setters.setFillKeyframes((prev) =>
+        removeStyleKeyframesAtIdTime(prev, keyframeId)
+      )
+      setters.setMaterialKeyframes((prev) =>
+        removeStyleKeyframesAtIdTime(prev, keyframeId)
+      )
+      break
+    case "fill":
+      setters.setFillKeyframes((prev) => removeKeyframeById(prev, keyframeId))
+      break
+    case "light-position":
+      setters.setKeyLightPositionKeyframes((prev) =>
+        removeKeyframeById(prev, keyframeId)
+      )
+      break
+    case "rotation":
+      setters.setRotationAxisKeyframes((prev) =>
+        removeKeyframeById(prev, keyframeId)
+      )
+      break
+    case "move":
+      setters.setMoveKeyframes((prev) => removeKeyframeById(prev, keyframeId))
+      break
+    case "material":
+      setters.setMaterialKeyframes((prev) =>
+        removeKeyframeById(prev, keyframeId)
+      )
+      break
+    case "quality":
+      setters.setQualityKeyframes((prev) =>
+        removeKeyframeById(prev, keyframeId)
+      )
+      break
   }
 }
 
@@ -203,61 +221,57 @@ export const addPropertyRowKeyframe = (
   values: TimelinePropertyKeyframeValues,
   setters: TimelinePropertyKeyframeSetters
 ) => {
-  if (rowId === "style") {
-    setters.setFillKeyframes((prev) => addFillKeyframe(prev, time, values))
-    setters.setMaterialKeyframes((prev) =>
-      addMaterialKeyframe(prev, time, values)
-    )
-    return
-  }
-
-  if (rowId === "fill") {
-    setters.setFillKeyframes((prev) => addFillKeyframe(prev, time, values))
-  }
-
-  if (rowId === "material") {
-    setters.setMaterialKeyframes((prev) =>
-      addMaterialKeyframe(prev, time, values)
-    )
-  }
-
-  if (rowId === "light-position") {
-    setters.setKeyLightPositionKeyframes((prev) =>
-      upsertVectorKeyframeAtTime({
-        keyframes: prev,
-        idPrefix: "light-position",
-        value: values.activeKeyLightPosition,
-        time,
-        duration: values.duration,
-        createIfMissing: true,
-      })
-    )
-  }
-
-  if (rowId === "rotation") {
-    setters.setRotationAxisKeyframes((prev) =>
-      upsertVectorKeyframeAtTime({
-        keyframes: prev,
-        idPrefix: "rotation",
-        value: values.activeRotationOffset,
-        time,
-        duration: values.duration,
-        createIfMissing: true,
-      })
-    )
-  }
-
-  if (rowId === "move") {
-    setters.setMoveKeyframes((prev) =>
-      upsertVectorKeyframeAtTime({
-        keyframes: prev,
-        idPrefix: "move",
-        value: values.activeMoveOffset,
-        time,
-        duration: values.duration,
-        createIfMissing: true,
-      })
-    )
+  switch (rowId) {
+    case "style":
+      setters.setFillKeyframes((prev) => addFillKeyframe(prev, time, values))
+      setters.setMaterialKeyframes((prev) =>
+        addMaterialKeyframe(prev, time, values)
+      )
+      break
+    case "fill":
+      setters.setFillKeyframes((prev) => addFillKeyframe(prev, time, values))
+      break
+    case "material":
+      setters.setMaterialKeyframes((prev) =>
+        addMaterialKeyframe(prev, time, values)
+      )
+      break
+    case "light-position":
+      setters.setKeyLightPositionKeyframes((prev) =>
+        upsertVectorKeyframeAtTime({
+          keyframes: prev,
+          idPrefix: "light-position",
+          value: values.activeKeyLightPosition,
+          time,
+          duration: values.duration,
+          createIfMissing: true,
+        })
+      )
+      break
+    case "rotation":
+      setters.setRotationAxisKeyframes((prev) =>
+        upsertVectorKeyframeAtTime({
+          keyframes: prev,
+          idPrefix: "rotation",
+          value: values.activeRotationOffset,
+          time,
+          duration: values.duration,
+          createIfMissing: true,
+        })
+      )
+      break
+    case "move":
+      setters.setMoveKeyframes((prev) =>
+        upsertVectorKeyframeAtTime({
+          keyframes: prev,
+          idPrefix: "move",
+          value: values.activeMoveOffset,
+          time,
+          duration: values.duration,
+          createIfMissing: true,
+        })
+      )
+      break
   }
 }
 
@@ -267,40 +281,45 @@ export const movePropertyRowKeyframe = (
   time: number,
   setters: TimelinePropertyKeyframeSetters
 ) => {
-  if (rowId === "style") {
-    setters.setFillKeyframes((prev) =>
-      moveStyleKeyframesAtIdTime(prev, keyframeId, time)
-    )
-    setters.setMaterialKeyframes((prev) =>
-      moveStyleKeyframesAtIdTime(prev, keyframeId, time)
-    )
-    return
-  }
-  if (rowId === "fill") {
-    setters.setFillKeyframes((prev) => moveKeyframeById(prev, keyframeId, time))
-  }
-  if (rowId === "light-position") {
-    setters.setKeyLightPositionKeyframes((prev) =>
-      moveKeyframeById(prev, keyframeId, time)
-    )
-  }
-  if (rowId === "rotation") {
-    setters.setRotationAxisKeyframes((prev) =>
-      moveKeyframeById(prev, keyframeId, time)
-    )
-  }
-  if (rowId === "move") {
-    setters.setMoveKeyframes((prev) => moveKeyframeById(prev, keyframeId, time))
-  }
-  if (rowId === "material") {
-    setters.setMaterialKeyframes((prev) =>
-      moveKeyframeById(prev, keyframeId, time)
-    )
-  }
-  if (rowId === "quality") {
-    setters.setQualityKeyframes((prev) =>
-      moveKeyframeById(prev, keyframeId, time)
-    )
+  switch (rowId) {
+    case "style":
+      setters.setFillKeyframes((prev) =>
+        moveStyleKeyframesAtIdTime(prev, keyframeId, time)
+      )
+      setters.setMaterialKeyframes((prev) =>
+        moveStyleKeyframesAtIdTime(prev, keyframeId, time)
+      )
+      break
+    case "fill":
+      setters.setFillKeyframes((prev) =>
+        moveKeyframeById(prev, keyframeId, time)
+      )
+      break
+    case "light-position":
+      setters.setKeyLightPositionKeyframes((prev) =>
+        moveKeyframeById(prev, keyframeId, time)
+      )
+      break
+    case "rotation":
+      setters.setRotationAxisKeyframes((prev) =>
+        moveKeyframeById(prev, keyframeId, time)
+      )
+      break
+    case "move":
+      setters.setMoveKeyframes((prev) =>
+        moveKeyframeById(prev, keyframeId, time)
+      )
+      break
+    case "material":
+      setters.setMaterialKeyframes((prev) =>
+        moveKeyframeById(prev, keyframeId, time)
+      )
+      break
+    case "quality":
+      setters.setQualityKeyframes((prev) =>
+        moveKeyframeById(prev, keyframeId, time)
+      )
+      break
   }
 }
 
@@ -310,43 +329,44 @@ export const setPropertyRowKeyframeEasing = (
   easing: EasingType,
   setters: TimelinePropertyKeyframeSetters
 ) => {
-  if (rowId === "style") {
-    setters.setFillKeyframes((prev) =>
-      setStyleKeyframesEasingAtIdTime(prev, keyframeId, easing)
-    )
-    setters.setMaterialKeyframes((prev) =>
-      setStyleKeyframesEasingAtIdTime(prev, keyframeId, easing)
-    )
-    return
-  }
-  if (rowId === "fill") {
-    setters.setFillKeyframes((prev) =>
-      setKeyframeEasingById(prev, keyframeId, easing)
-    )
-  }
-  if (rowId === "light-position") {
-    setters.setKeyLightPositionKeyframes((prev) =>
-      setKeyframeEasingById(prev, keyframeId, easing)
-    )
-  }
-  if (rowId === "rotation") {
-    setters.setRotationAxisKeyframes((prev) =>
-      setKeyframeEasingById(prev, keyframeId, easing)
-    )
-  }
-  if (rowId === "move") {
-    setters.setMoveKeyframes((prev) =>
-      setKeyframeEasingById(prev, keyframeId, easing)
-    )
-  }
-  if (rowId === "material") {
-    setters.setMaterialKeyframes((prev) =>
-      setKeyframeEasingById(prev, keyframeId, easing)
-    )
-  }
-  if (rowId === "quality") {
-    setters.setQualityKeyframes((prev) =>
-      setKeyframeEasingById(prev, keyframeId, easing)
-    )
+  switch (rowId) {
+    case "style":
+      setters.setFillKeyframes((prev) =>
+        setStyleKeyframesEasingAtIdTime(prev, keyframeId, easing)
+      )
+      setters.setMaterialKeyframes((prev) =>
+        setStyleKeyframesEasingAtIdTime(prev, keyframeId, easing)
+      )
+      break
+    case "fill":
+      setters.setFillKeyframes((prev) =>
+        setKeyframeEasingById(prev, keyframeId, easing)
+      )
+      break
+    case "light-position":
+      setters.setKeyLightPositionKeyframes((prev) =>
+        setKeyframeEasingById(prev, keyframeId, easing)
+      )
+      break
+    case "rotation":
+      setters.setRotationAxisKeyframes((prev) =>
+        setKeyframeEasingById(prev, keyframeId, easing)
+      )
+      break
+    case "move":
+      setters.setMoveKeyframes((prev) =>
+        setKeyframeEasingById(prev, keyframeId, easing)
+      )
+      break
+    case "material":
+      setters.setMaterialKeyframes((prev) =>
+        setKeyframeEasingById(prev, keyframeId, easing)
+      )
+      break
+    case "quality":
+      setters.setQualityKeyframes((prev) =>
+        setKeyframeEasingById(prev, keyframeId, easing)
+      )
+      break
   }
 }
