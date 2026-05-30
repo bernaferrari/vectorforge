@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect } from "react"
+import { useLatestRef } from "@/lib/use-latest-ref"
 import type { ShapeStop } from "./TimelineModel"
 import { createDefaultShapeSequence } from "./ShapeSequenceModel"
 
@@ -11,11 +12,7 @@ interface InitialShapeSequenceOptions {
 export function useInitialShapeSequence({
   onInitialShapes,
 }: InitialShapeSequenceOptions) {
-  const onInitialShapesRef = useRef(onInitialShapes)
-
-  useEffect(() => {
-    onInitialShapesRef.current = onInitialShapes
-  }, [onInitialShapes])
+  const onInitialShapesRef = useLatestRef(onInitialShapes)
 
   useEffect(() => {
     let cancelled = false

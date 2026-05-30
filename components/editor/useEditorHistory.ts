@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef } from "react"
+import { useLatestRef } from "@/lib/use-latest-ref"
 import type { EditorSnapshot } from "./EditorModel"
 import {
   pushEditorSnapshot,
@@ -28,12 +29,10 @@ export const useEditorHistory = ({
   const isRestoringUndoRef = useRef(false)
   const pendingDragSnapshotRef = useRef(false)
   const snapshotRef = useRef(snapshot)
-  const onRestoreRef = useRef(onRestore)
-  const isInputDragActiveRef = useRef(isInputDragActive)
+  const onRestoreRef = useLatestRef(onRestore)
+  const isInputDragActiveRef = useLatestRef(isInputDragActive)
 
   snapshotRef.current = snapshot
-  onRestoreRef.current = onRestore
-  isInputDragActiveRef.current = isInputDragActive
 
   const restoreSnapshot = useCallback((nextSnapshot: EditorSnapshot) => {
     isRestoringUndoRef.current = true

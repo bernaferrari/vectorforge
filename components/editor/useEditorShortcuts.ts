@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react"
+import { useEffect } from "react"
+import { useLatestRef } from "@/lib/use-latest-ref"
 import { isEditableShortcutTarget } from "./EditorModel"
 
 export const useEditorShortcuts = ({
@@ -10,8 +11,7 @@ export const useEditorShortcuts = ({
   onRedo: () => void
   onPlayPause: () => void
 }) => {
-  const callbacksRef = useRef({ onUndo, onRedo, onPlayPause })
-  callbacksRef.current = { onUndo, onRedo, onPlayPause }
+  const callbacksRef = useLatestRef({ onUndo, onRedo, onPlayPause })
 
   useEffect(() => {
     const handleEditorShortcut = (event: KeyboardEvent) => {

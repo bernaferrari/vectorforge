@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef } from "react"
+import { useLatestRef } from "@/lib/use-latest-ref"
 
 export const clampInspectorValue = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value))
@@ -14,13 +15,9 @@ export const setInspectorInputDragActive = (active: boolean) => {
 }
 
 export const useRafNumberChange = (onChange: (value: number) => void) => {
-  const onChangeRef = useRef(onChange)
+  const onChangeRef = useLatestRef(onChange)
   const frameRef = useRef<number | null>(null)
   const pendingValueRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    onChangeRef.current = onChange
-  }, [onChange])
 
   const flush = useCallback(() => {
     if (frameRef.current !== null) {

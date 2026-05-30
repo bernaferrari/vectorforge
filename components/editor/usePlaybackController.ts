@@ -50,26 +50,28 @@ export const usePlaybackController = ({
       const delta = (now - lastTimeRef.current) / 1000
       lastTimeRef.current = now
 
-      setCurrentTime((previousTime) => {
-        let nextTime = playbackTimeRef.current + delta
-        if (nextTime >= duration) {
-          if (loop) {
-            nextTime %= duration
-          } else {
-            nextTime = duration
-            setIsPlaying(false)
-            if (isVideoExportPendingRef.current) {
-              window.requestAnimationFrame(stopVideoExportRecording)
-            }
+      let shouldContinue = true
+      let nextTime = playbackTimeRef.current + delta
+      if (nextTime >= duration) {
+        if (loop) {
+          nextTime %= duration
+        } else {
+          nextTime = duration
+          shouldContinue = false
+          setIsPlaying(false)
+          if (isVideoExportPendingRef.current) {
+            window.requestAnimationFrame(stopVideoExportRecording)
           }
         }
+      }
 
-        playbackTimeRef.current = nextTime
-        const quantized = quantizeTimeToFrame(nextTime)
-        return quantized === previousTime ? previousTime : quantized
-      })
+      playbackTimeRef.current = nextTime
+      const quantized = quantizeTimeToFrame(nextTime)
+      setCurrentTime((previousTime) =>
+        quantized === previousTime ? previousTime : quantized
+      )
 
-      playheadRef.current = requestAnimationFrame(tick)
+      playheadRef.current = shouldContinue ? requestAnimationFrame(tick) : null
     }
 
     playheadRef.current = requestAnimationFrame(tick)
