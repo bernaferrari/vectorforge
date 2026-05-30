@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import type { EditorSnapshot } from "./EditorModel"
 import {
   pushEditorSnapshot,
@@ -35,11 +35,11 @@ export const useEditorHistory = ({
   onRestoreRef.current = onRestore
   isInputDragActiveRef.current = isInputDragActive
 
-  const restoreSnapshot = (nextSnapshot: EditorSnapshot) => {
+  const restoreSnapshot = useCallback((nextSnapshot: EditorSnapshot) => {
     isRestoringUndoRef.current = true
     rememberRestoredSnapshot(nextSnapshot, lastUndoSnapshotKeyRef)
     onRestoreRef.current(nextSnapshot)
-  }
+  }, [])
 
   useEffect(() => {
     if (!canRecord) return
@@ -82,17 +82,17 @@ export const useEditorHistory = ({
   }, [maxSize])
 
   return {
-    undo: () => {
+    undo: useCallback(() => {
       const previous = stepEditorHistoryBack(
         undoStackRef,
         redoStackRef,
         maxSize
       )
       if (previous) restoreSnapshot(previous)
-    },
-    redo: () => {
+    }, [maxSize, restoreSnapshot]),
+    redo: useCallback(() => {
       const next = stepEditorHistoryForward(undoStackRef, redoStackRef, maxSize)
       if (next) restoreSnapshot(next)
-    },
+    }, [maxSize, restoreSnapshot]),
   }
 }

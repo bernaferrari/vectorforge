@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { isEditableShortcutTarget } from "./EditorModel"
 
 export const useEditorShortcuts = ({
@@ -10,6 +10,9 @@ export const useEditorShortcuts = ({
   onRedo: () => void
   onPlayPause: () => void
 }) => {
+  const callbacksRef = useRef({ onUndo, onRedo, onPlayPause })
+  callbacksRef.current = { onUndo, onRedo, onPlayPause }
+
   useEffect(() => {
     const handleEditorShortcut = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat) return
@@ -21,7 +24,7 @@ export const useEditorShortcuts = ({
         commandOrControl && event.shiftKey && !event.altKey && key === "z"
       if (isRedoShortcut) {
         event.preventDefault()
-        onRedo()
+        callbacksRef.current.onRedo()
         return
       }
 
@@ -29,18 +32,18 @@ export const useEditorShortcuts = ({
         commandOrControl && !event.shiftKey && !event.altKey && key === "z"
       if (isUndoShortcut) {
         event.preventDefault()
-        onUndo()
+        callbacksRef.current.onUndo()
         return
       }
 
       if (event.metaKey || event.ctrlKey || event.altKey) return
       if (event.code === "Space") {
         event.preventDefault()
-        onPlayPause()
+        callbacksRef.current.onPlayPause()
       }
     }
 
     window.addEventListener("keydown", handleEditorShortcut)
     return () => window.removeEventListener("keydown", handleEditorShortcut)
-  }, [onPlayPause, onRedo, onUndo])
+  }, [])
 }
