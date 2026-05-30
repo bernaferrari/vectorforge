@@ -56,6 +56,10 @@ export default function AppLayout() {
     stopPlayback,
     togglePlayback: handlePlayToggle,
     resetPlayback: handleReset,
+    animatedSeekEnabled,
+    setAnimatedSeekEnabled,
+    cancelAnimatedSeek,
+    seekToTime,
   } = useEditorPlaybackState()
 
   const {
@@ -517,7 +521,7 @@ export default function AppLayout() {
     setCurrentTime,
     duration,
     setDuration,
-    stopPlayback,
+    seekToTime,
     tracks,
     setTracks,
     sortedShapes,
@@ -536,7 +540,10 @@ export default function AppLayout() {
     markCustom,
   })
 
-  const handleScrubStart = stopPlayback
+  const handleScrubStart = () => {
+    cancelAnimatedSeek()
+    stopPlayback()
+  }
 
   const {
     isExportOpen,
@@ -651,6 +658,8 @@ export default function AppLayout() {
       onViewInertiaChange: setViewInertiaEnabled,
       onShowCenterPointChange: setShowCenterPoint,
       onShowTransformGizmoChange: setShowTransformGizmo,
+      animatedSeekEnabled,
+      onAnimatedSeekChange: setAnimatedSeekEnabled,
       onResetPlayback: handleReset,
       onPreviousBreakpoint: goToPreviousBreakpoint,
       onPlayToggle: handlePlayToggle,

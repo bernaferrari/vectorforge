@@ -28,9 +28,9 @@ import type {
 export function useTimelineDockController({
   currentTime,
   setCurrentTime,
+  seekToTime,
   duration,
   setDuration,
-  stopPlayback,
   tracks,
   setTracks,
   sortedShapes,
@@ -50,9 +50,9 @@ export function useTimelineDockController({
 }: {
   currentTime: number
   setCurrentTime: React.Dispatch<React.SetStateAction<number>>
+  seekToTime: (time: number, options?: { animated?: boolean }) => void
   duration: number
   setDuration: React.Dispatch<React.SetStateAction<number>>
-  stopPlayback: () => void
   tracks: TimelineTrack[]
   setTracks: React.Dispatch<React.SetStateAction<TimelineTrack[]>>
   sortedShapes: ShapeStop[]
@@ -126,8 +126,7 @@ export function useTimelineDockController({
   )
 
   const goToTime = (time: number) => {
-    stopPlayback()
-    setCurrentTime(quantizeTimeToFrame(clampNumber(time, 0, duration)))
+    seekToTime(quantizeTimeToFrame(clampNumber(time, 0, duration)))
   }
 
   const handleDurationChange = (value: number) => {

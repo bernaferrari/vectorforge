@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react"
 import type { SvgCanvasRef } from "../3d/SvgCanvas"
+import { useAnimatedTimeSeek } from "./useAnimatedTimeSeek"
 import { usePlaybackController } from "./usePlaybackController"
 import { useVideoExport } from "./useVideoExport"
 
@@ -25,20 +26,37 @@ export function useEditorPlaybackState() {
     setCurrentTime,
   })
 
-  const { stopPlayback, togglePlayback } = usePlaybackController({
+  const { stopPlayback, togglePlayback: togglePlaybackNow } =
+    usePlaybackController({
+      currentTime,
+      setCurrentTime,
+      isPlaying,
+      setIsPlaying,
+      duration,
+      loop,
+      isVideoExportPendingRef,
+      stopVideoExportRecording,
+    })
+
+  const {
+    animatedSeekEnabled,
+    setAnimatedSeekEnabled,
+    cancelAnimatedSeek,
+    seekToTime,
+  } = useAnimatedTimeSeek({
     currentTime,
-    setCurrentTime,
-    isPlaying,
-    setIsPlaying,
     duration,
-    loop,
-    isVideoExportPendingRef,
-    stopVideoExportRecording,
+    setCurrentTime,
+    stopPlayback,
   })
 
   const resetPlayback = () => {
-    stopPlayback()
-    setCurrentTime(0)
+    seekToTime(0)
+  }
+
+  const togglePlayback = () => {
+    cancelAnimatedSeek()
+    togglePlaybackNow()
   }
 
   return {
@@ -57,5 +75,9 @@ export function useEditorPlaybackState() {
     stopPlayback,
     togglePlayback,
     resetPlayback,
+    animatedSeekEnabled,
+    setAnimatedSeekEnabled,
+    cancelAnimatedSeek,
+    seekToTime,
   }
 }

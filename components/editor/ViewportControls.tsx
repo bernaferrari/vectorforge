@@ -21,20 +21,24 @@ export type ViewOptionsPopoverProps = {
   viewInertiaEnabled: boolean
   showCenterPoint: boolean
   showTransformGizmo: boolean
+  animatedSeekEnabled: boolean
   onResetView: () => void
   onViewInertiaChange: (enabled: boolean) => void
   onShowCenterPointChange: (visible: boolean) => void
   onShowTransformGizmoChange: (visible: boolean) => void
+  onAnimatedSeekChange: (enabled: boolean) => void
 }
 
 export function ViewOptionsPopover({
   viewInertiaEnabled,
   showCenterPoint,
   showTransformGizmo,
+  animatedSeekEnabled,
   onResetView,
   onViewInertiaChange,
   onShowCenterPointChange,
   onShowTransformGizmoChange,
+  onAnimatedSeekChange,
 }: ViewOptionsPopoverProps) {
   return (
     <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
@@ -73,6 +77,11 @@ export function ViewOptionsPopover({
             label="Transform gizmo"
             checked={showTransformGizmo}
             onCheckedChange={onShowTransformGizmoChange}
+          />
+          <ViewportToggleRow
+            label="Animated seek"
+            checked={animatedSeekEnabled}
+            onCheckedChange={onAnimatedSeekChange}
           />
         </PopoverContent>
       </Popover>
