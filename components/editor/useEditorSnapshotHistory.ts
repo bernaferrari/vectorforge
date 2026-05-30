@@ -34,14 +34,7 @@ interface EditorSnapshotHistoryOptions {
   setCurrentTime: Dispatch<SetStateAction<number>>
   materialPreset: MaterialPresetId
   setMaterialPreset: Dispatch<SetStateAction<MaterialPresetId>>
-  roughness: number
-  metalness: number
-  reflectance: number
-  clearcoat: number
-  clearcoatRoughness: number
-  transmission: number
-  thickness: number
-  emissiveIntensity: number
+  materialSettings: MaterialSettings
   materialKeyframes: MaterialKeyframe[]
   setMaterialKeyframes: Dispatch<SetStateAction<MaterialKeyframe[]>>
   setMaterialBaseSettings: (settings: MaterialSettings) => void
@@ -114,14 +107,7 @@ export function useEditorSnapshotHistory({
   setCurrentTime,
   materialPreset,
   setMaterialPreset,
-  roughness,
-  metalness,
-  reflectance,
-  clearcoat,
-  clearcoatRoughness,
-  transmission,
-  thickness,
-  emissiveIntensity,
+  materialSettings,
   materialKeyframes,
   setMaterialKeyframes,
   setMaterialBaseSettings,
@@ -187,14 +173,7 @@ export function useEditorSnapshotHistory({
       shapes,
       duration,
       materialPreset,
-      roughness,
-      metalness,
-      reflectance,
-      clearcoat,
-      clearcoatRoughness,
-      transmission,
-      thickness,
-      emissiveIntensity,
+      materialSettings,
       materialKeyframes,
       extrusionDepth,
       bevelEnabled,
@@ -231,14 +210,7 @@ export function useEditorSnapshotHistory({
       shapes,
       duration,
       materialPreset,
-      roughness,
-      metalness,
-      reflectance,
-      clearcoat,
-      clearcoatRoughness,
-      transmission,
-      thickness,
-      emissiveIntensity,
+      materialSettings,
       materialKeyframes,
       extrusionDepth,
       bevelEnabled,
@@ -284,16 +256,7 @@ export function useEditorSnapshotHistory({
     setDuration(nextSnapshot.duration)
     setCurrentTime((time) => clampNumber(time, 0, nextSnapshot.duration))
     setMaterialPreset(nextSnapshot.materialPreset)
-    setMaterialBaseSettings({
-      roughness: nextSnapshot.roughness,
-      metalness: nextSnapshot.metalness,
-      reflectance: nextSnapshot.reflectance,
-      clearcoat: nextSnapshot.clearcoat,
-      clearcoatRoughness: nextSnapshot.clearcoatRoughness,
-      transmission: nextSnapshot.transmission,
-      thickness: nextSnapshot.thickness,
-      emissiveIntensity: nextSnapshot.emissiveIntensity,
-    })
+    setMaterialBaseSettings(nextSnapshot.materialSettings)
     setMaterialKeyframes(nextSnapshot.materialKeyframes)
     setExtrusionDepth(nextSnapshot.extrusionDepth)
     setBevelEnabled(nextSnapshot.bevelEnabled)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import {
   LightPosition,
   LightPositionKeyframe,
@@ -49,14 +49,14 @@ export function useLightEditor({
     [currentTime, keyLightPosition, keyLightPositionKeyframes]
   )
 
-  const lightPositionKeyframeAtPlayhead = () => {
+  const lightPositionKeyframeAtPlayhead = useCallback(() => {
     const playheadTime = quantizeTimeToFrame(currentTime)
     return keyLightPositionKeyframes.find(
       (keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04
     )
-  }
+  }, [currentTime, keyLightPositionKeyframes])
 
-  const toggleLightPositionKeyframeAtPlayhead = () => {
+  const toggleLightPositionKeyframeAtPlayhead = useCallback(() => {
     const playheadTime = clampNumber(
       quantizeTimeToFrame(currentTime),
       0,
@@ -80,43 +80,50 @@ export function useLightEditor({
         },
       ].sort((a, b) => a.time - b.time)
     })
-  }
+  }, [activeKeyLightPosition, currentTime, duration, onEdit])
 
-  const updateLightPositionXY = (x: number, y: number) => {
-    const clampedX = clampNumber(x, -12, 12)
-    const clampedY = clampNumber(y, -12, 12)
-    const playheadTime = clampNumber(
-      quantizeTimeToFrame(currentTime),
-      0,
-      duration
-    )
-    const nextPosition = { ...activeKeyLightPosition, x: clampedX, y: clampedY }
-    onEdit()
-    setKeyLightPosition(nextPosition)
-    setKeyLightPositionKeyframes((prev) => {
-      if (prev.length === 0) return prev
-      const existing = prev.find(
-        (keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04
+  const updateLightPositionXY = useCallback(
+    (x: number, y: number) => {
+      const clampedX = clampNumber(x, -12, 12)
+      const clampedY = clampNumber(y, -12, 12)
+      const playheadTime = clampNumber(
+        quantizeTimeToFrame(currentTime),
+        0,
+        duration
       )
-      if (existing) {
-        return prev.map((keyframe) =>
-          keyframe.id === existing.id
-            ? { ...keyframe, value: nextPosition }
-            : keyframe
-        )
+      const nextPosition = {
+        ...activeKeyLightPosition,
+        x: clampedX,
+        y: clampedY,
       }
+      onEdit()
+      setKeyLightPosition(nextPosition)
+      setKeyLightPositionKeyframes((prev) => {
+        if (prev.length === 0) return prev
+        const existing = prev.find(
+          (keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04
+        )
+        if (existing) {
+          return prev.map((keyframe) =>
+            keyframe.id === existing.id
+              ? { ...keyframe, value: nextPosition }
+              : keyframe
+          )
+        }
 
-      return [
-        ...prev,
-        {
-          id: createEditorId("light-position"),
-          time: playheadTime,
-          value: nextPosition,
-          easing: previousEasingFor(prev, playheadTime),
-        },
-      ].sort((a, b) => a.time - b.time)
-    })
-  }
+        return [
+          ...prev,
+          {
+            id: createEditorId("light-position"),
+            time: playheadTime,
+            value: nextPosition,
+            easing: previousEasingFor(prev, playheadTime),
+          },
+        ].sort((a, b) => a.time - b.time)
+      })
+    },
+    [activeKeyLightPosition, currentTime, duration, onEdit]
+  )
 
   return {
     ...STATIC_STUDIO_LIGHTING,

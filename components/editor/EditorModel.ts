@@ -92,14 +92,7 @@ export type EditorSnapshot = {
   shapes: ShapeStop[]
   duration: number
   materialPreset: MaterialPresetId
-  roughness: number
-  metalness: number
-  reflectance: number
-  clearcoat: number
-  clearcoatRoughness: number
-  transmission: number
-  thickness: number
-  emissiveIntensity: number
+  materialSettings: MaterialSettings
   materialKeyframes: MaterialKeyframe[]
   extrusionDepth: number
   bevelEnabled: boolean
