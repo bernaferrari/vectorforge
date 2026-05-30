@@ -1,4 +1,5 @@
 import { useEffect } from "react"
+import { useLatestRef } from "@/lib/use-latest-ref"
 import type {
   ShapeStop,
   TimelinePropertyRow,
@@ -30,11 +31,35 @@ export const useTimelineDeletion = ({
   onRemoveTrackKeyframe,
   onRemovePropertyKeyframe,
 }: TimelineDeletionOptions) => {
+  const optionsRef = useLatestRef({
+    selectedKeyframe,
+    selectedShapeId,
+    shapes,
+    tracks,
+    propertyRows,
+    onClearSelection,
+    onRemoveShape,
+    onRemoveTrackKeyframe,
+    onRemovePropertyKeyframe,
+  })
+
   useEffect(() => {
     const handleDeleteSelectedKeyframe = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
       if (event.key !== "Delete" && event.key !== "Backspace") return
       if (isEditableTarget(event.target)) return
+
+      const {
+        selectedKeyframe,
+        selectedShapeId,
+        shapes,
+        tracks,
+        propertyRows,
+        onClearSelection,
+        onRemoveShape,
+        onRemoveTrackKeyframe,
+        onRemovePropertyKeyframe,
+      } = optionsRef.current
 
       if (!selectedKeyframe) {
         if (!selectedShapeId || shapes.length <= 1) return
@@ -75,15 +100,5 @@ export const useTimelineDeletion = ({
     window.addEventListener("keydown", handleDeleteSelectedKeyframe)
     return () =>
       window.removeEventListener("keydown", handleDeleteSelectedKeyframe)
-  }, [
-    onClearSelection,
-    onRemovePropertyKeyframe,
-    onRemoveShape,
-    onRemoveTrackKeyframe,
-    propertyRows,
-    selectedKeyframe,
-    selectedShapeId,
-    shapes,
-    tracks,
-  ])
+  }, [])
 }
