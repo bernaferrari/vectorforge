@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import type { MaterialPresetId } from "../3d/MaterialPresets"
 import {
   MaterialKeyframe,
@@ -48,59 +48,69 @@ export function useMaterialEditor({
     [baseMaterialSettings, currentTime, materialKeyframes]
   )
 
-  const setMaterialBaseSettings = (settings: MaterialSettings) => {
+  const setMaterialBaseSettings = useCallback((settings: MaterialSettings) => {
     setBaseMaterialSettings(settings)
-  }
+  }, [])
 
-  const setMaterialBaseSetting = (key: MaterialSettingKey, value: number) => {
-    setBaseMaterialSettings((settings) => ({ ...settings, [key]: value }))
-  }
+  const setMaterialBaseSetting = useCallback(
+    (key: MaterialSettingKey, value: number) => {
+      setBaseMaterialSettings((settings) => ({ ...settings, [key]: value }))
+    },
+    []
+  )
 
-  const updateMaterialSetting = (
-    key: MaterialSettingKey,
-    value: number,
-    min: number,
-    max: number
-  ) => {
-    const clamped = clampNumber(value, min, max)
-    const playheadTime = materialPlayheadTime(currentTime, duration)
-    onEdit()
-    setMaterialBaseSetting(key, clamped)
-    setMaterialKeyframes((prev) => {
-      if (prev.length === 0) return prev
-      const nextValue = { ...activeMaterialSettings, [key]: clamped }
-      return upsertMaterialKeyframe({
-        keyframes: prev,
-        time: playheadTime,
-        value: nextValue,
+  const updateMaterialSetting = useCallback(
+    (key: MaterialSettingKey, value: number, min: number, max: number) => {
+      const clamped = clampNumber(value, min, max)
+      const playheadTime = materialPlayheadTime(currentTime, duration)
+      onEdit()
+      setMaterialBaseSetting(key, clamped)
+      setMaterialKeyframes((prev) => {
+        if (prev.length === 0) return prev
+        const nextValue = { ...activeMaterialSettings, [key]: clamped }
+        return upsertMaterialKeyframe({
+          keyframes: prev,
+          time: playheadTime,
+          value: nextValue,
+        })
       })
-    })
-  }
+    },
+    [
+      activeMaterialSettings,
+      currentTime,
+      duration,
+      onEdit,
+      setMaterialBaseSetting,
+    ]
+  )
 
-  const applyMaterialPreset = (preset: MaterialPresetId) => {
-    const settings = materialDefaultSettings(preset)
-    setMaterialPreset(preset)
-    onEdit()
-    if (!settings) return
+  const applyMaterialPreset = useCallback(
+    (preset: MaterialPresetId) => {
+      const settings = materialDefaultSettings(preset)
+      setMaterialPreset(preset)
+      onEdit()
+      if (!settings) return
 
-    setMaterialBaseSettings(settings)
-    setMaterialKeyframes((prev) => {
-      if (prev.length === 0) return prev
+      setMaterialBaseSettings(settings)
+      setMaterialKeyframes((prev) => {
+        if (prev.length === 0) return prev
 
-      return upsertMaterialKeyframe({
-        keyframes: prev,
-        time: materialPlayheadTime(currentTime, duration),
-        value: settings,
+        return upsertMaterialKeyframe({
+          keyframes: prev,
+          time: materialPlayheadTime(currentTime, duration),
+          value: settings,
+        })
       })
-    })
-  }
+    },
+    [currentTime, duration, onEdit, setMaterialBaseSettings]
+  )
 
-  const materialKeyframeAtPlayhead = () => {
+  const materialKeyframeAtPlayhead = useCallback(() => {
     return findMaterialKeyframeAtTime(
       materialKeyframes,
       materialPlayheadTime(currentTime, duration)
     )
-  }
+  }, [currentTime, duration, materialKeyframes])
 
   return {
     materialPreset,

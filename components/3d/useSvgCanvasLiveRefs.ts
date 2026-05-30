@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef } from "react"
+import { useLatestRef } from "@/lib/use-latest-ref"
 import type { SvgCanvasProps } from "./SvgTypes"
 
 export type SvgCanvasLiveRenderProps = {
@@ -38,22 +39,16 @@ const getLiveRenderProps = (
 })
 
 export function useSvgCanvasLiveRefs(props: SvgCanvasProps) {
-  const onViewRotationCommitRef = useRef(props.onViewRotationCommit)
-  const onViewRotationSetRef = useRef(props.onViewRotationSet)
-  const onObjectScaleChangeRef = useRef(props.onObjectScaleChange)
-  const onObjectScaleAxisChangeRef = useRef(props.onObjectScaleAxisChange)
-  const onMoveOffsetChangeRef = useRef(props.onMoveOffsetChange)
-  const onRotationAxisChangeRef = useRef(props.onRotationAxisChange)
+  const onViewRotationCommitRef = useLatestRef(props.onViewRotationCommit)
+  const onViewRotationSetRef = useLatestRef(props.onViewRotationSet)
+  const onObjectScaleChangeRef = useLatestRef(props.onObjectScaleChange)
+  const onObjectScaleAxisChangeRef = useLatestRef(props.onObjectScaleAxisChange)
+  const onMoveOffsetChangeRef = useLatestRef(props.onMoveOffsetChange)
+  const onRotationAxisChangeRef = useLatestRef(props.onRotationAxisChange)
   const liveRenderPropsRef = useRef(getLiveRenderProps(props))
   const viewInertiaEnabledRef = useRef(props.viewInertiaEnabled ?? true)
 
   liveRenderPropsRef.current = getLiveRenderProps(props)
-  onViewRotationCommitRef.current = props.onViewRotationCommit
-  onViewRotationSetRef.current = props.onViewRotationSet
-  onObjectScaleChangeRef.current = props.onObjectScaleChange
-  onObjectScaleAxisChangeRef.current = props.onObjectScaleAxisChange
-  onMoveOffsetChangeRef.current = props.onMoveOffsetChange
-  onRotationAxisChangeRef.current = props.onRotationAxisChange
   viewInertiaEnabledRef.current = props.viewInertiaEnabled ?? true
 
   return {
