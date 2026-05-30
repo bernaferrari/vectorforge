@@ -70,11 +70,16 @@ export function LightDirectionPicker({
 
   const triggerSphere = `radial-gradient(circle at ${hx}% ${hy}%, #f8fafc 0%, ${color} 32%, #3f3f46 72%, #18181b 100%)`
 
+  const horizontal = nx < -0.15 ? "Left" : nx > 0.15 ? "Right" : ""
+  const vertical = ny > 0.15 ? "Top" : ny < -0.15 ? "Bottom" : ""
+  const directionLabel =
+    [vertical, horizontal].filter(Boolean).join(" ") || "Center"
+
   return (
     <Popover>
       <PopoverTrigger
         title="Light direction & color"
-        className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-muted/45 pr-1.5 pl-1 transition-colors hover:border-ring/50 hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-lg border-0 bg-foreground/[0.06] pr-2 pl-1.5 text-left text-foreground transition-colors hover:bg-foreground/[0.09] focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30"
       >
         <span className="relative size-5 shrink-0 overflow-hidden rounded-full border border-border bg-background/50 dark:bg-background/30">
           <span
@@ -82,7 +87,10 @@ export function LightDirectionPicker({
             style={{ background: triggerSphere }}
           />
         </span>
-        <ChevronDown className="size-3 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate text-[12px]">
+          {directionLabel}
+        </span>
+        <ChevronDown className="size-3 shrink-0 text-muted-foreground/70" />
       </PopoverTrigger>
       <PopoverContent
         align="end"

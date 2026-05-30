@@ -33,6 +33,8 @@ const KeyframeButton = ({
     type="button"
     aria-label={`${isKeyedHere ? "Remove" : "Add"} ${label} keyframe at current time`}
     title={`${isKeyedHere ? "Remove" : "Add"} ${label} keyframe`}
+    onPointerDown={(event) => event.stopPropagation()}
+    onMouseDown={(event) => event.stopPropagation()}
     onClick={(event) => {
       event.stopPropagation()
       onToggle()

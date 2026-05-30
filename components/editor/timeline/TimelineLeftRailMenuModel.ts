@@ -31,6 +31,15 @@ export const isTrackKeyedAtPlayhead = (
       Math.abs(keyframe.time - quantizeTimeToFrame(currentTime)) < 0.05
   )
 
+export const propertyRowKeyframeAtPlayhead = (
+  row: TimelinePropertyRow,
+  currentTime: number
+) =>
+  row.keyframes.find(
+    (keyframe) =>
+      Math.abs(keyframe.time - quantizeTimeToFrame(currentTime)) < 0.05
+  ) ?? null
+
 export const createPropertyRailMenuItems = ({
   event,
   row,

@@ -112,6 +112,7 @@ export const renderSvgScene = ({
   iconA,
   iconB,
   marker,
+  transformGizmo,
 }: {
   isCrossfade: boolean
   scene: THREE.Scene
@@ -120,17 +121,42 @@ export const renderSvgScene = ({
   iconA: THREE.Group | null
   iconB: THREE.Group | null
   marker: THREE.Group | null
+  transformGizmo: THREE.Group | null
 }) => {
+  const markerVisible = marker?.visible ?? false
+  const transformGizmoVisible = transformGizmo?.visible ?? false
+
+  const renderCenterOverlay = () => {
+    if (!markerVisible && !transformGizmoVisible) return
+
+    const iconAVisible = iconA?.visible ?? false
+    const iconBVisible = iconB?.visible ?? false
+    const previousAutoClear = renderer.autoClear
+    renderer.clearDepth()
+    renderer.autoClear = false
+    if (iconA) iconA.visible = false
+    if (iconB) iconB.visible = false
+    if (marker) marker.visible = markerVisible
+    if (transformGizmo) transformGizmo.visible = transformGizmoVisible
+    renderer.render(scene, camera)
+    renderer.autoClear = previousAutoClear
+    if (iconA) iconA.visible = iconAVisible
+    if (iconB) iconB.visible = iconBVisible
+  }
+
+  if (marker) marker.visible = false
+  if (transformGizmo) transformGizmo.visible = false
+
   if (!isCrossfade || !iconA || !iconB) {
     renderer.render(scene, camera)
+    renderCenterOverlay()
+    if (marker) marker.visible = markerVisible
+    if (transformGizmo) transformGizmo.visible = transformGizmoVisible
     return
   }
 
   const iconAVisible = iconA.visible
   const iconBVisible = iconB.visible
-  const markerVisible = marker?.visible ?? false
-
-  if (marker) marker.visible = false
 
   renderer.autoClear = true
   iconA.visible = true
@@ -143,16 +169,11 @@ export const renderSvgScene = ({
   iconB.visible = true
   renderer.render(scene, camera)
 
-  if (marker && markerVisible) {
-    renderer.clearDepth()
-    iconA.visible = false
-    iconB.visible = false
-    marker.visible = true
-    renderer.render(scene, camera)
-  }
+  renderCenterOverlay()
 
   iconA.visible = iconAVisible
   iconB.visible = iconBVisible
   if (marker) marker.visible = markerVisible
+  if (transformGizmo) transformGizmo.visible = transformGizmoVisible
   renderer.autoClear = true
 }

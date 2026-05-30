@@ -5,9 +5,9 @@ import type { TimelinePropertyRow, TimelineTrack } from "../TimelineModel"
 import type { EasingType } from "../TimelineModel"
 import {
   TimelinePropertyRailRow,
-  TimelineShapeHeaderRow,
   TimelineTrackRailRow,
 } from "./TimelineLeftRailRows"
+import { TimelineShapeHeaderRow } from "./TimelineShapeHeaderRow"
 import type { TimelineMenuItem } from "./TimelineMenuModel"
 
 type TimelineLeftRailProps = {
@@ -22,6 +22,7 @@ type TimelineLeftRailProps = {
   onSelectTrack: (trackId: string) => void
   onActivePropertyRowChange?: (rowId: string) => void
   onClearPropertyRow?: (rowId: string) => void
+  onTogglePropertyKeyframe?: (rowId: string, keyframeId?: string | null) => void
   onClearTrackKeyframes?: (trackId: string) => void
   onSetPropertyEasing?: (
     rowId: string,
@@ -62,6 +63,7 @@ export const TimelineLeftRail = React.forwardRef<
       onSelectTrack,
       onActivePropertyRowChange,
       onClearPropertyRow,
+      onTogglePropertyKeyframe,
       onClearTrackKeyframes,
       onSetPropertyEasing,
       onToggleTrackKeyframe,
@@ -93,6 +95,7 @@ export const TimelineLeftRail = React.forwardRef<
             onClearSelection={onClearSelection}
             onActivePropertyRowChange={onActivePropertyRowChange}
             onClearPropertyRow={onClearPropertyRow}
+            onTogglePropertyKeyframe={onTogglePropertyKeyframe}
             onSetPropertyEasing={onSetPropertyEasing}
           />
         ))}

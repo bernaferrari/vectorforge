@@ -6,12 +6,10 @@ import type { MaterialPresetId } from "../3d/MaterialPresets"
 import { FillMode, MaterialSettingKey, MaterialSettings } from "./EditorModel"
 import { AdvancedMaterialControls } from "./AdvancedMaterialControls"
 import { FinishPresetPicker } from "./FinishPresetPicker"
-import { InspectorSectionHeader } from "./InspectorSectionHeader"
+import { InspectorRow, InspectorSection } from "./InspectorPrimitives"
 import type { FillGradientType, FillStop } from "./TimelineModel"
 
 export type StyleInspectorSectionProps = {
-  labelWidthClass: string
-  propertyRowClassName: (isActive?: boolean) => string
   fillRef: RefObject<HTMLDivElement | null>
   materialRef: RefObject<HTMLDivElement | null>
   materialPreset: MaterialPresetId
@@ -41,8 +39,6 @@ export type StyleInspectorSectionProps = {
 }
 
 export function StyleInspectorSection({
-  labelWidthClass,
-  propertyRowClassName,
   fillRef,
   materialRef,
   materialPreset,
@@ -64,15 +60,8 @@ export function StyleInspectorSection({
   onMaterialSettingChange,
 }: StyleInspectorSectionProps) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <InspectorSectionHeader title="STYLE" action={styleKeyframeControl} />
-
-      <div ref={fillRef} className={propertyRowClassName()}>
-        <span
-          className={`${labelWidthClass} shrink-0 text-[11px] text-muted-foreground`}
-        >
-          Fill
-        </span>
+    <InspectorSection title="STYLE" action={styleKeyframeControl}>
+      <InspectorRow label="Fill" rowRef={fillRef}>
         <div className="min-w-0 flex-1">
           <ColorPicker
             value={selectedShapeFill}
@@ -85,26 +74,27 @@ export function StyleInspectorSection({
             onStopsChange={onStopsChange}
             secondaryValue={selectedShapeFillSecondary}
             onSecondaryChange={(value) => onFillColorChange(value, true)}
-            className="h-7 w-full rounded-[5px] border-0 bg-foreground/[0.06] px-2 py-0 text-foreground hover:bg-foreground/[0.09]"
+            className="h-7 w-full rounded-lg border-0 bg-foreground/[0.06] px-2 py-0 text-foreground hover:bg-foreground/[0.09]"
           />
         </div>
-      </div>
+      </InspectorRow>
 
-      <FinishPresetPicker
-        value={materialPreset}
-        onChange={onMaterialPresetChange}
-      />
+      <InspectorRow label="Finish">
+        <FinishPresetPicker
+          value={materialPreset}
+          onChange={onMaterialPresetChange}
+        />
+      </InspectorRow>
 
       <div ref={materialRef}>
         <AdvancedMaterialControls
           isOpen={isAdvancedMaterialOpen}
           keyframeCount={materialKeyframeCount}
           settings={activeMaterialSettings}
-          propertyRowClassName={propertyRowClassName}
           onOpenChange={onAdvancedMaterialOpenChange}
           onSettingChange={onMaterialSettingChange}
         />
       </div>
-    </div>
+    </InspectorSection>
   )
 }

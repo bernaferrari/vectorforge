@@ -2,14 +2,12 @@
 
 import { ReactNode, RefObject } from "react"
 import { EXTRUDE_DEFAULT, EXTRUDE_MAX, finiteNumber } from "./EditorModel"
+import { InspectorRow, InspectorSection } from "./InspectorPrimitives"
 import { InspectorSlider } from "./InspectorSlider"
 import { MAX_BEVEL_SEGMENTS } from "./EditorModel"
-import { InspectorSectionHeader } from "./InspectorSectionHeader"
 import type { TimelineTrack } from "./TimelineModel"
 
 export type GeometryInspectorSectionProps = {
-  labelWidthClass: string
-  propertyRowClassName: (isActive?: boolean) => string
   extrusionRef: RefObject<HTMLDivElement | null>
   isActive: boolean
   extrusionTrack: TimelineTrack
@@ -28,8 +26,6 @@ export type GeometryInspectorSectionProps = {
 }
 
 export function GeometryInspectorSection({
-  labelWidthClass,
-  propertyRowClassName,
   extrusionRef,
   isActive,
   extrusionTrack,
@@ -52,81 +48,60 @@ export function GeometryInspectorSection({
   )
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <InspectorSectionHeader title="SHAPE" action={keyframeControl} />
-
-      <div
-        className={`-mx-1 rounded-xl p-1 transition-colors duration-100 ${
-          isActive ? "bg-muted/50" : ""
-        }`}
+    <InspectorSection title="SHAPE" action={keyframeControl}>
+      <InspectorRow
+        label="Extrude"
+        rowRef={extrusionRef}
+        dot={extrusionTrack.keyframes.length > 0 ? extrusionTrack.color : null}
+        active={isActive}
+        onClick={onActivate}
       >
-        <div
-          ref={extrusionRef}
-          className={propertyRowClassName(false)}
-          onClick={onActivate}
-        >
-          <span
-            className={`${labelWidthClass} shrink-0 text-[11px] text-muted-foreground`}
-          >
-            Extrude
-          </span>
-          <InspectorSlider
-            value={depthValue}
-            min={0.2}
-            max={EXTRUDE_MAX}
-            sliderMax={40}
-            step={0.25}
-            scrubStep={1}
-            precision={2}
-            onChange={(value) => {
-              onDepthChange(value)
-              onCustomEdit()
-            }}
-          />
-        </div>
+        <InspectorSlider
+          value={depthValue}
+          min={0.2}
+          max={EXTRUDE_MAX}
+          sliderMax={40}
+          step={0.25}
+          scrubStep={1}
+          precision={2}
+          onChange={(value) => {
+            onDepthChange(value)
+            onCustomEdit()
+          }}
+        />
+      </InspectorRow>
 
-        <div className={propertyRowClassName(false)} onClick={onActivate}>
-          <span
-            className={`${labelWidthClass} shrink-0 text-[11px] text-muted-foreground`}
-          >
-            Bevel
-          </span>
-          <InspectorSlider
-            value={bevelEnabled ? bevelSegments : 0}
-            min={0}
-            max={MAX_BEVEL_SEGMENTS}
-            sliderMax={12}
-            step={1}
-            precision={0}
-            onChange={(value) => {
-              const nextSegments = Math.max(0, Math.round(value))
-              onBevelEnabledChange(nextSegments > 0)
-              if (nextSegments > 0) {
-                onBevelSegmentsChange(nextSegments)
-              }
-              onCustomEdit()
-            }}
-          />
-        </div>
+      <InspectorRow label="Bevel">
+        <InspectorSlider
+          value={bevelEnabled ? bevelSegments : 0}
+          min={0}
+          max={MAX_BEVEL_SEGMENTS}
+          sliderMax={12}
+          step={1}
+          precision={0}
+          onChange={(value) => {
+            const nextSegments = Math.max(0, Math.round(value))
+            onBevelEnabledChange(nextSegments > 0)
+            if (nextSegments > 0) {
+              onBevelSegmentsChange(nextSegments)
+            }
+            onCustomEdit()
+          }}
+        />
+      </InspectorRow>
 
-        <div className={propertyRowClassName(false)} onClick={onActivate}>
-          <span
-            className={`${labelWidthClass} shrink-0 text-[11px] text-muted-foreground`}
-          >
-            Quality
-          </span>
-          <InspectorSlider
-            value={activeGeometryQuality}
-            min={0.015}
-            max={0.12}
-            sliderMin={0.015}
-            sliderMax={0.08}
-            step={0.005}
-            precision={3}
-            onChange={onQualityChange}
-          />
-        </div>
-      </div>
-    </div>
+      <InspectorRow label="Quality">
+        <InspectorSlider
+          value={activeGeometryQuality}
+          min={0.015}
+          max={0.12}
+          sliderMin={0.015}
+          sliderMax={0.08}
+          step={0.005}
+          precision={3}
+          onChange={onQualityChange}
+        />
+      </InspectorRow>
+    </InspectorSection>
   )
 }

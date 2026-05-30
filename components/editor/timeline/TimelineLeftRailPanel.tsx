@@ -27,6 +27,7 @@ type TimelineLeftRailPanelProps = {
   onAddShape: () => void
   onApplyDuration: (value: number) => void
   onClearPropertyRow?: (rowId: string) => void
+  onTogglePropertyKeyframe?: (rowId: string, keyframeId?: string | null) => void
   onClearSelection: () => void
   onClearTrackKeyframes?: (trackId: string) => void
   onCommitDurationEditor: () => void
@@ -71,6 +72,7 @@ export function TimelineLeftRailPanel({
   onAddShape,
   onApplyDuration,
   onClearPropertyRow,
+  onTogglePropertyKeyframe,
   onClearSelection,
   onClearTrackKeyframes,
   onCommitDurationEditor,
@@ -105,7 +107,7 @@ export function TimelineLeftRailPanel({
         onLoopChange={onLoopChange}
       />
       <div
-        className="relative min-h-0 flex-1 overflow-hidden"
+        className="relative min-h-0 flex-1 overflow-clip"
         onWheel={onLeftRailWheel}
       >
         <TimelineLeftRail
@@ -121,6 +123,7 @@ export function TimelineLeftRailPanel({
           onSelectTrack={onSelectTrack}
           onActivePropertyRowChange={onActivePropertyRowChange}
           onClearPropertyRow={onClearPropertyRow}
+          onTogglePropertyKeyframe={onTogglePropertyKeyframe}
           onClearTrackKeyframes={onClearTrackKeyframes}
           onSetPropertyEasing={onSetPropertyEasing}
           onToggleTrackKeyframe={onToggleTrackKeyframe}

@@ -59,6 +59,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   propertyRows = [],
   onClearTrackKeyframes,
   onClearPropertyRow,
+  onTogglePropertyKeyframe,
   onRemovePropertyKeyframe,
   onMovePropertyKeyframe,
   onSetPropertyEasing,
@@ -271,6 +272,7 @@ export const Timeline: React.FC<TimelineProps> = ({
               onAddShape={onAddShape}
               onApplyDuration={applyDuration}
               onClearPropertyRow={onClearPropertyRow}
+              onTogglePropertyKeyframe={onTogglePropertyKeyframe}
               onClearSelection={() => setSelectedKeyframe(null)}
               onClearTrackKeyframes={onClearTrackKeyframes}
               onCommitDurationEditor={commitDurationEditor}

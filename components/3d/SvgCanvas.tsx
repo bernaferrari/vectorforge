@@ -361,6 +361,7 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>(
       clipPlaneARef,
       clipPlaneBRef,
       centerMarkerRef,
+      transformGizmoGroupRef,
       updateTransformGizmo,
     })
 

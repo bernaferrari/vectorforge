@@ -93,11 +93,11 @@ export function NumberField({
         document.body.style.cursor = ""
       }}
       title="Drag to adjust · click to type"
-      className={`flex h-7 cursor-ew-resize items-center rounded-[8px] bg-muted/70 px-2 text-foreground transition-colors focus-within:bg-muted focus-within:ring-1 focus-within:ring-ring/25 hover:bg-muted ${className}`}
+      className={`flex h-7 cursor-ew-resize items-center rounded-[7px] bg-foreground/[0.05] px-2 text-foreground transition-colors focus-within:bg-foreground/[0.07] focus-within:ring-1 focus-within:ring-ring/25 hover:bg-foreground/[0.08] ${className}`}
     >
       {prefix && (
         <span
-          className={`mr-1 text-[11px] leading-none ${prefixColor ? "font-medium" : "font-medium text-muted-foreground"}`}
+          className={`mr-1 text-[10px] leading-none ${prefixColor ? "font-medium" : "font-medium text-muted-foreground/70"}`}
           style={prefixColor ? { color: prefixColor } : undefined}
         >
           {prefix}

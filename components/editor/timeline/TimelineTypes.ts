@@ -39,6 +39,7 @@ export type TimelineTrackProps = {
   propertyRows?: TimelinePropertyRow[]
   onClearTrackKeyframes?: (trackId: string) => void
   onClearPropertyRow?: (rowId: string) => void
+  onTogglePropertyKeyframe?: (rowId: string, keyframeId?: string | null) => void
   onRemovePropertyKeyframe?: (rowId: string, keyframeId: string) => void
   onMovePropertyKeyframe?: (
     rowId: string,

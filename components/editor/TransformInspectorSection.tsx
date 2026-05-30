@@ -15,8 +15,8 @@ import {
   finiteNumber,
 } from "./EditorModel"
 import { AxisLockButton } from "./AxisLockButton"
+import { InspectorRow, InspectorSection } from "./InspectorPrimitives"
 import { InspectorSlider } from "./InspectorSlider"
-import { InspectorSectionHeader } from "./InspectorSectionHeader"
 import { LayerControls } from "./LayerControls"
 import type { SvgLayer } from "./SvgLayerModel"
 import type { TimelineTrack } from "./TimelineModel"
@@ -25,8 +25,6 @@ import { Vector3NumberFields } from "./Vector3NumberFields"
 type Axis = keyof LightPosition
 
 export type TransformInspectorSectionProps = {
-  labelWidthClass: string
-  propertyRowClassName: (isActive?: boolean) => string
   scaleRef: RefObject<HTMLDivElement | null>
   rotationRef: RefObject<HTMLDivElement | null>
   moveRef: RefObject<HTMLDivElement | null>
@@ -66,8 +64,6 @@ export type TransformInspectorSectionProps = {
 }
 
 export function TransformInspectorSection({
-  labelWidthClass,
-  propertyRowClassName,
   scaleRef,
   rotationRef,
   moveRef,
@@ -85,7 +81,6 @@ export function TransformInspectorSection({
   selectedLayer,
   selectedLayerId,
   selectedLayerOverride,
-  shapeNavigation,
   transformKeyframeControl,
   onActivateTrack,
   onScaleLockChange,
@@ -105,35 +100,21 @@ export function TransformInspectorSection({
   )
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <InspectorSectionHeader
-        title="TRANSFORM"
-        action={transformKeyframeControl}
-      />
-
-      <div
-        ref={scaleRef}
-        className={propertyRowClassName(activeTrackId === "scale")}
+    <InspectorSection title="TRANSFORM" action={transformKeyframeControl}>
+      <InspectorRow
+        label="Scale"
+        rowRef={scaleRef}
+        dot={scaleTrack.keyframes.length > 0 ? scaleTrack.color : null}
+        active={activeTrackId === "scale"}
         onClick={() => onActivateTrack("scale")}
-      >
-        <span
-          className={`${labelWidthClass} flex shrink-0 items-center text-[11px] text-muted-foreground`}
-        >
-          <span>
-            Scale
-            {scaleTrack.keyframes.length > 0 && (
-              <span
-                className="ml-1 inline-block size-1 rounded-full align-middle"
-                style={{ backgroundColor: scaleTrack.color }}
-              />
-            )}
-          </span>
+        labelAction={
           <AxisLockButton
             locked={isScaleLocked}
             label="Scale"
             onToggle={() => onScaleLockChange(!isScaleLocked)}
           />
-        </span>
+        }
+      >
         {isScaleLocked ? (
           <InspectorSlider
             value={scaleValue}
@@ -157,36 +138,15 @@ export function TransformInspectorSection({
             onChange={onScaleAxisChange}
           />
         )}
-      </div>
+      </InspectorRow>
 
-      <LayerControls
-        layers={selectedShapeLayers}
-        selectedLayer={selectedLayer}
-        selectedLayerId={selectedLayerId}
-        selectedLayerOverride={selectedLayerOverride}
-        shapeNavigation={shapeNavigation}
-        onSelectLayer={onSelectLayer}
-        onToggleVisibility={onToggleLayerVisibility}
-        onScaleChange={onLayerScaleChange}
-        onDepthChange={onLayerDepthChange}
-      />
-
-      <div
-        ref={rotationRef}
-        className={propertyRowClassName(activeTrackId === "rotation")}
+      <InspectorRow
+        label="Rotation"
+        rowRef={rotationRef}
+        dot={rotationAxisKeyframes.length > 0 ? ROTATION_COLOR : null}
+        active={activeTrackId === "rotation"}
         onClick={() => onActivateTrack("rotation")}
       >
-        <span
-          className={`${labelWidthClass} shrink-0 text-[11px] text-muted-foreground`}
-        >
-          Rotation
-          {rotationAxisKeyframes.length > 0 && (
-            <span
-              className="ml-1 inline-block size-1 rounded-full align-middle"
-              style={{ backgroundColor: ROTATION_COLOR }}
-            />
-          )}
-        </span>
         <Vector3NumberFields
           values={rotationOffset}
           min={ROTATION_MIN}
@@ -202,24 +162,15 @@ export function TransformInspectorSection({
             )
           }
         />
-      </div>
+      </InspectorRow>
 
-      <div
-        ref={moveRef}
-        className={propertyRowClassName(activeTrackId === "move")}
+      <InspectorRow
+        label="Position"
+        rowRef={moveRef}
+        dot={moveKeyframesLength > 0 ? MOVE_COLOR : null}
+        active={activeTrackId === "move"}
         onClick={() => onActivateTrack("move")}
       >
-        <span
-          className={`${labelWidthClass} shrink-0 text-[11px] text-muted-foreground`}
-        >
-          Position
-          {moveKeyframesLength > 0 && (
-            <span
-              className="ml-1 inline-block size-1 rounded-full align-middle"
-              style={{ backgroundColor: MOVE_COLOR }}
-            />
-          )}
-        </span>
         <Vector3NumberFields
           values={activeMoveOffset}
           min={-100}
@@ -228,7 +179,18 @@ export function TransformInspectorSection({
           precision={0}
           onChange={onMoveAxisChange}
         />
-      </div>
-    </div>
+      </InspectorRow>
+
+      <LayerControls
+        layers={selectedShapeLayers}
+        selectedLayer={selectedLayer}
+        selectedLayerId={selectedLayerId}
+        selectedLayerOverride={selectedLayerOverride}
+        onSelectLayer={onSelectLayer}
+        onToggleVisibility={onToggleLayerVisibility}
+        onScaleChange={onLayerScaleChange}
+        onDepthChange={onLayerDepthChange}
+      />
+    </InspectorSection>
   )
 }

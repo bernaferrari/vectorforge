@@ -1,7 +1,6 @@
 "use client"
 
 import React from "react"
-import { Diamond, Loader2, Plus } from "lucide-react"
 import type {
   EasingType,
   TimelinePropertyRow,
@@ -12,45 +11,10 @@ import {
   createPropertyRailMenuItems,
   createTrackRailMenuItems,
   isTrackKeyedAtPlayhead,
+  propertyRowKeyframeAtPlayhead,
   type TimelineLeftRailMenuProps,
 } from "./TimelineLeftRailMenuModel"
-
-export function TimelineShapeHeaderRow({
-  selectedShapeId,
-  isPreviewLoading,
-  onAddShape,
-}: {
-  selectedShapeId: string | null
-  isPreviewLoading: boolean
-  onAddShape: () => void
-}) {
-  return (
-    <div
-      className={`group flex h-9 items-center gap-2 border-b border-border px-3 transition-colors ${
-        selectedShapeId ? "bg-muted/25" : "hover:bg-muted/40"
-      }`}
-    >
-      <span className="flex-1 truncate text-[11px] font-semibold text-foreground">
-        Shape
-      </span>
-      {isPreviewLoading && (
-        <Loader2
-          aria-label="Preparing 3D icon"
-          className="size-3.5 shrink-0 animate-spin text-muted-foreground"
-        />
-      )}
-      <button
-        type="button"
-        aria-label="Add shape"
-        title="Add shape at playhead"
-        onClick={onAddShape}
-        className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-      >
-        <Plus className="size-3.5" />
-      </button>
-    </div>
-  )
-}
+import { TimelineRailKeyframeButton } from "./TimelineRailKeyframeButton"
 
 export function TimelinePropertyRailRow({
   row,
@@ -58,6 +22,7 @@ export function TimelinePropertyRailRow({
   onClearSelection,
   onActivePropertyRowChange,
   onClearPropertyRow,
+  onTogglePropertyKeyframe,
   onSetPropertyEasing,
 }: {
   row: TimelinePropertyRow
@@ -65,12 +30,18 @@ export function TimelinePropertyRailRow({
   onClearSelection: () => void
   onActivePropertyRowChange?: (rowId: string) => void
   onClearPropertyRow?: (rowId: string) => void
+  onTogglePropertyKeyframe?: (rowId: string, keyframeId?: string | null) => void
   onSetPropertyEasing?: (
     rowId: string,
     keyframeId: string | null,
     easing: EasingType
   ) => void
 }) {
+  const keyframeAtPlayhead = propertyRowKeyframeAtPlayhead(
+    row,
+    menu.currentTime
+  )
+
   const selectRow = () => {
     onClearSelection()
     onActivePropertyRowChange?.(row.id)
@@ -111,7 +82,7 @@ export function TimelinePropertyRailRow({
         {row.name}
       </span>
       <span
-        className="flex h-5 shrink-0 items-center justify-center gap-0.5"
+        className="flex h-5 shrink-0 items-center justify-center gap-1.5"
         aria-label={`${row.keyframes.length} keyframes`}
       >
         {row.keyframes.length > 0 && onSetPropertyEasing && (
@@ -121,10 +92,18 @@ export function TimelinePropertyRailRow({
             color={row.color}
           />
         )}
-        <span
-          className="size-[7px] rotate-45 rounded-[1px] border border-transparent"
-          style={{ backgroundColor: row.color }}
-        />
+        {onTogglePropertyKeyframe && (
+          <TimelineRailKeyframeButton
+            color={row.color}
+            isKeyedAtPlayhead={Boolean(keyframeAtPlayhead)}
+            isAnimated={false}
+            addLabel={`Add ${row.name} keyframe`}
+            removeLabel={`Remove ${row.name} keyframe`}
+            onToggle={() =>
+              onTogglePropertyKeyframe(row.id, keyframeAtPlayhead?.id)
+            }
+          />
+        )}
       </span>
     </div>
   )
@@ -201,45 +180,23 @@ export function TimelineTrackRailRow({
       >
         {track.name}
       </span>
-      {animated && (
-        <EasingPicker
-          value={track.keyframes[0]?.easing ?? "ease-in-out"}
-          onChange={(easing) => onSetTrackEasing(track.id, easing)}
+      <span className="flex h-5 shrink-0 items-center justify-center gap-1.5">
+        {animated && (
+          <EasingPicker
+            value={track.keyframes[0]?.easing ?? "ease-in-out"}
+            onChange={(easing) => onSetTrackEasing(track.id, easing)}
+            color={track.color}
+          />
+        )}
+        <TimelineRailKeyframeButton
           color={track.color}
+          isKeyedAtPlayhead={keyedAtPlayhead}
+          isAnimated={animated}
+          addLabel={`Add ${track.name} keyframe`}
+          removeLabel={`Remove ${track.name} keyframe`}
+          onToggle={() => onToggleTrackKeyframe(track.id)}
         />
-      )}
-      <button
-        type="button"
-        aria-label={
-          keyedAtPlayhead
-            ? `Remove ${track.name} keyframe`
-            : `Add ${track.name} keyframe`
-        }
-        title={
-          keyedAtPlayhead
-            ? "Remove keyframe at playhead"
-            : "Add keyframe at playhead"
-        }
-        onClick={(event) => {
-          event.stopPropagation()
-          onToggleTrackKeyframe(track.id)
-        }}
-        className={`flex size-5 shrink-0 items-center justify-center rounded transition-colors ${
-          keyedAtPlayhead
-            ? "text-foreground opacity-100"
-            : animated
-              ? "text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground"
-              : "text-muted-foreground hover:text-foreground"
-        }`}
-      >
-        <Diamond
-          className="size-3"
-          style={{
-            fill: keyedAtPlayhead ? track.color : "transparent",
-            color: keyedAtPlayhead ? track.color : undefined,
-          }}
-        />
-      </button>
+      </span>
     </div>
   )
 }

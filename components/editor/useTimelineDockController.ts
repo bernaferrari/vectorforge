@@ -1,6 +1,8 @@
 import React, { useMemo } from "react"
 import {
+  LightPosition,
   MaterialKeyframe,
+  MaterialSettings,
   ScalarKeyframe,
   Vector3Keyframe,
   clampNumber,
@@ -10,13 +12,15 @@ import {
   createTimelineBreakpoints,
   getAdjacentTimelineBreakpoints,
 } from "./TimelineNavigationModel"
+import { clearTrackKeyframes } from "./TimelineDockKeyframeModel"
 import {
-  clearTrackKeyframes,
+  addPropertyRowKeyframe,
   clearPropertyRowKeyframes,
   movePropertyRowKeyframe,
   removePropertyRowKeyframe,
   setPropertyRowKeyframeEasing,
-} from "./TimelineDockKeyframeModel"
+} from "./TimelinePropertyKeyframeModel"
+import type { TimelinePropertyKeyframeSetters } from "./TimelinePropertyKeyframeModel"
 import { createTimelinePropertyRows } from "./TimelinePropertyRowsModel"
 import type {
   EasingType,
@@ -45,6 +49,12 @@ export function useTimelineDockController({
   moveKeyframes,
   setMoveKeyframes,
   setQualityKeyframes,
+  selectedShapeFillStops,
+  selectedShapeGradientType,
+  activeMaterialSettings,
+  activeKeyLightPosition,
+  activeRotationOffset,
+  activeMoveOffset,
   markCustom,
 }: {
   currentTime: number
@@ -70,6 +80,12 @@ export function useTimelineDockController({
   moveKeyframes: Vector3Keyframe[]
   setMoveKeyframes: React.Dispatch<React.SetStateAction<Vector3Keyframe[]>>
   setQualityKeyframes: React.Dispatch<React.SetStateAction<ScalarKeyframe[]>>
+  selectedShapeFillStops: FillKeyframe["stops"]
+  selectedShapeGradientType: FillKeyframe["gradientType"]
+  activeMaterialSettings: MaterialSettings
+  activeKeyLightPosition: LightPosition
+  activeRotationOffset: LightPosition
+  activeMoveOffset: LightPosition
   markCustom: () => void
 }) {
   const timelineBreakpoints = useMemo(
@@ -123,6 +139,25 @@ export function useTimelineDockController({
     }
   )
 
+  const propertyKeyframeSetters = useMemo<TimelinePropertyKeyframeSetters>(
+    () => ({
+      setFillKeyframes,
+      setMaterialKeyframes,
+      setKeyLightPositionKeyframes,
+      setRotationAxisKeyframes,
+      setMoveKeyframes,
+      setQualityKeyframes,
+    }),
+    [
+      setFillKeyframes,
+      setMaterialKeyframes,
+      setKeyLightPositionKeyframes,
+      setRotationAxisKeyframes,
+      setMoveKeyframes,
+      setQualityKeyframes,
+    ]
+  )
+
   const goToTime = (time: number) => {
     seekToTime(quantizeTimeToFrame(clampNumber(time, 0, duration)))
   }
@@ -140,14 +175,7 @@ export function useTimelineDockController({
   }
 
   const clearTimelinePropertyRow = (rowId: string) => {
-    clearPropertyRowKeyframes(rowId, {
-      setFillKeyframes,
-      setMaterialKeyframes,
-      setKeyLightPositionKeyframes,
-      setRotationAxisKeyframes,
-      setMoveKeyframes,
-      setQualityKeyframes,
-    })
+    clearPropertyRowKeyframes(rowId, propertyKeyframeSetters)
     markCustom()
   }
 
@@ -155,15 +183,40 @@ export function useTimelineDockController({
     rowId: string,
     keyframeId: string
   ) => {
-    removePropertyRowKeyframe(rowId, keyframeId, {
-      setFillKeyframes,
-      setMaterialKeyframes,
-      setKeyLightPositionKeyframes,
-      setRotationAxisKeyframes,
-      setMoveKeyframes,
-      setQualityKeyframes,
-    })
+    removePropertyRowKeyframe(rowId, keyframeId, propertyKeyframeSetters)
     markCustom()
+  }
+
+  const addTimelinePropertyKeyframe = (rowId: string) => {
+    const playheadTime = quantizeTimeToFrame(
+      clampNumber(currentTime, 0, duration)
+    )
+    markCustom()
+    addPropertyRowKeyframe(
+      rowId,
+      playheadTime,
+      {
+        duration,
+        selectedShapeFillStops,
+        selectedShapeGradientType,
+        activeMaterialSettings,
+        activeKeyLightPosition,
+        activeRotationOffset,
+        activeMoveOffset,
+      },
+      propertyKeyframeSetters
+    )
+  }
+
+  const toggleTimelinePropertyKeyframe = (
+    rowId: string,
+    keyframeId?: string | null
+  ) => {
+    if (keyframeId) {
+      removeTimelinePropertyKeyframe(rowId, keyframeId)
+      return
+    }
+    addTimelinePropertyKeyframe(rowId)
   }
 
   const moveTimelinePropertyKeyframe = (
@@ -172,14 +225,12 @@ export function useTimelineDockController({
     time: number
   ) => {
     const nextTime = quantizeTimeToFrame(clampNumber(time, 0, duration))
-    movePropertyRowKeyframe(rowId, keyframeId, nextTime, {
-      setFillKeyframes,
-      setMaterialKeyframes,
-      setKeyLightPositionKeyframes,
-      setRotationAxisKeyframes,
-      setMoveKeyframes,
-      setQualityKeyframes,
-    })
+    movePropertyRowKeyframe(
+      rowId,
+      keyframeId,
+      nextTime,
+      propertyKeyframeSetters
+    )
     markCustom()
   }
 
@@ -188,14 +239,12 @@ export function useTimelineDockController({
     keyframeId: string | null,
     easing: EasingType
   ) => {
-    setPropertyRowKeyframeEasing(rowId, keyframeId, easing, {
-      setFillKeyframes,
-      setMaterialKeyframes,
-      setKeyLightPositionKeyframes,
-      setRotationAxisKeyframes,
-      setMoveKeyframes,
-      setQualityKeyframes,
-    })
+    setPropertyRowKeyframeEasing(
+      rowId,
+      keyframeId,
+      easing,
+      propertyKeyframeSetters
+    )
     markCustom()
   }
 
@@ -233,6 +282,7 @@ export function useTimelineDockController({
     },
     clearTimelineTrackRow,
     clearTimelinePropertyRow,
+    toggleTimelinePropertyKeyframe,
     removeTimelinePropertyKeyframe,
     moveTimelinePropertyKeyframe,
     setTimelinePropertyEasing,

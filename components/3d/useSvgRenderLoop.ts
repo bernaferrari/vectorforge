@@ -44,6 +44,7 @@ type UseSvgRenderLoopOptions = {
   clipPlaneARef: NullableRef<THREE.Plane>
   clipPlaneBRef: NullableRef<THREE.Plane>
   centerMarkerRef: NullableRef<THREE.Group>
+  transformGizmoGroupRef: NullableRef<THREE.Group>
   updateTransformGizmo: (
     center: THREE.Vector3 | null,
     camera: THREE.PerspectiveCamera
@@ -71,6 +72,7 @@ export function useSvgRenderLoop({
   clipPlaneARef,
   clipPlaneBRef,
   centerMarkerRef,
+  transformGizmoGroupRef,
   updateTransformGizmo,
 }: UseSvgRenderLoopOptions) {
   const applyViewRotationDeltaRef = useRef(applyViewRotationDelta)
@@ -173,6 +175,7 @@ export function useSvgRenderLoop({
         iconA: iconAGroupRef.current,
         iconB: iconBGroupRef.current,
         marker: centerMarkerRef.current,
+        transformGizmo: transformGizmoGroupRef.current,
       })
       animFrameId = requestAnimationFrame(renderLoop)
     }
@@ -198,5 +201,6 @@ export function useSvgRenderLoop({
     rotationVelocityRef,
     sceneRef,
     targetZoomRef,
+    transformGizmoGroupRef,
   ])
 }

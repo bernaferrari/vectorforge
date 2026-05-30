@@ -1,5 +1,7 @@
 "use client"
 
+import { ChevronLeft, ChevronRight } from "lucide-react"
+import { LayerSwitcher } from "./LayerSwitcher"
 import {
   GeometryInspectorSection,
   type GeometryInspectorSectionProps,
@@ -17,32 +19,10 @@ import {
   type TransformInspectorSectionProps,
 } from "./TransformInspectorSection"
 
-const INSPECTOR_LABEL_WIDTH = "w-[58px]"
-
-const inspectorPropertyRowClass = (isActive?: boolean) =>
-  `flex min-h-8 items-center gap-1 rounded-[8px] -mx-1 px-1 py-0.5 transition-colors duration-100 ${
-    isActive ? "bg-muted/50" : "hover:bg-muted/25"
-  }`
-
-export type SidebarStyleProps = Omit<
-  StyleInspectorSectionProps,
-  "labelWidthClass" | "propertyRowClassName"
->
-
-export type SidebarGeometryProps = Omit<
-  GeometryInspectorSectionProps,
-  "labelWidthClass" | "propertyRowClassName"
->
-
-export type SidebarTransformProps = Omit<
-  TransformInspectorSectionProps,
-  "labelWidthClass" | "propertyRowClassName"
->
-
-export type SidebarLightProps = Omit<
-  LightInspectorSectionProps,
-  "labelWidthClass" | "propertyRowClassName"
->
+export type SidebarStyleProps = StyleInspectorSectionProps
+export type SidebarGeometryProps = GeometryInspectorSectionProps
+export type SidebarTransformProps = TransformInspectorSectionProps
+export type SidebarLightProps = LightInspectorSectionProps
 
 export type InspectorSidebarProps = {
   zenMode: boolean
@@ -50,6 +30,48 @@ export type InspectorSidebarProps = {
   geometryProps: SidebarGeometryProps
   transformProps: SidebarTransformProps
   lightProps: SidebarLightProps
+}
+
+function ShapeHeader({
+  shapeNavigation,
+}: {
+  shapeNavigation: SidebarTransformProps["shapeNavigation"]
+}) {
+  if (!shapeNavigation || shapeNavigation.total <= 1) return null
+
+  return (
+    <div className="-mx-3 mb-2.5 flex items-center justify-between gap-2 border-b border-border/40 px-3 pb-2.5">
+      <span
+        className="min-w-0 truncate text-[13px] font-semibold text-foreground"
+        title={shapeNavigation.label}
+      >
+        {shapeNavigation.label}
+      </span>
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          aria-label="Previous shape"
+          title="Previous shape"
+          onClick={shapeNavigation.onPrevious}
+          className="flex size-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none"
+        >
+          <ChevronLeft className="size-4" />
+        </button>
+        <span className="min-w-[28px] text-center font-mono text-[10px] text-muted-foreground/70 tabular-nums">
+          {shapeNavigation.index + 1}/{shapeNavigation.total}
+        </span>
+        <button
+          type="button"
+          aria-label="Next shape"
+          title="Next shape"
+          onClick={shapeNavigation.onNext}
+          className="flex size-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none"
+        >
+          <ChevronRight className="size-4" />
+        </button>
+      </div>
+    </div>
+  )
 }
 
 export function InspectorSidebar({
@@ -64,36 +86,26 @@ export function InspectorSidebar({
       className={`flex shrink-0 flex-col overflow-y-auto bg-background transition-[width,padding,border-color,opacity] duration-300 ease-out ${
         zenMode
           ? "pointer-events-none w-0 border-l-0 p-0 opacity-0"
-          : "w-[328px] gap-3 border-l border-border/40 px-3 py-3"
+          : "w-[328px] border-l border-border/40 px-3 py-3"
       }`}
     >
-      <StyleInspectorSection
-        labelWidthClass={INSPECTOR_LABEL_WIDTH}
-        propertyRowClassName={inspectorPropertyRowClass}
-        {...styleProps}
+      <ShapeHeader shapeNavigation={transformProps.shapeNavigation} />
+
+      <LayerSwitcher
+        layers={transformProps.selectedShapeLayers}
+        selectedLayer={transformProps.selectedLayer}
+        selectedLayerId={transformProps.selectedLayerId}
+        selectedLayerOverride={transformProps.selectedLayerOverride}
+        onSelectLayer={transformProps.onSelectLayer}
+        onToggleVisibility={transformProps.onToggleLayerVisibility}
       />
 
-      <GeometryInspectorSection
-        labelWidthClass={INSPECTOR_LABEL_WIDTH}
-        propertyRowClassName={inspectorPropertyRowClass}
-        {...geometryProps}
-      />
-
-      <div className="h-px bg-border/40" />
-
-      <TransformInspectorSection
-        labelWidthClass={INSPECTOR_LABEL_WIDTH}
-        propertyRowClassName={inspectorPropertyRowClass}
-        {...transformProps}
-      />
-
-      <div className="h-px bg-border/40" />
-
-      <LightInspectorSection
-        labelWidthClass={INSPECTOR_LABEL_WIDTH}
-        propertyRowClassName={inspectorPropertyRowClass}
-        {...lightProps}
-      />
+      <div className="flex flex-col divide-y divide-border/30">
+        <StyleInspectorSection {...styleProps} />
+        <GeometryInspectorSection {...geometryProps} />
+        <TransformInspectorSection {...transformProps} />
+        <LightInspectorSection {...lightProps} />
+      </div>
     </div>
   )
 }

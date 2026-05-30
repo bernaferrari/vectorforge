@@ -2,14 +2,12 @@
 
 import { ReactNode, RefObject } from "react"
 import { LIGHT_MAX, LightPosition, finiteNumber } from "./EditorModel"
+import { InspectorRow, InspectorSection } from "./InspectorPrimitives"
 import { InspectorSlider } from "./InspectorSlider"
-import { InspectorSectionHeader } from "./InspectorSectionHeader"
 import { LightDirectionPicker } from "./LightDirectionPicker"
 import type { TimelineTrack } from "./TimelineModel"
 
 export type LightInspectorSectionProps = {
-  labelWidthClass: string
-  propertyRowClassName: (isActive?: boolean) => string
   lightingRef: RefObject<HTMLDivElement | null>
   isActive: boolean
   lightingTrack: TimelineTrack
@@ -31,8 +29,6 @@ export type LightInspectorSectionProps = {
 }
 
 export function LightInspectorSection({
-  labelWidthClass,
-  propertyRowClassName,
   lightingRef,
   isActive,
   lightingTrack,
@@ -60,46 +56,14 @@ export function LightInspectorSection({
   )
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <InspectorSectionHeader
-        title="LIGHT"
-        action={brightnessKeyframeControl}
-      />
-
-      <div
-        ref={lightingRef}
-        className={propertyRowClassName(isActive)}
+    <InspectorSection title="LIGHT" action={brightnessKeyframeControl}>
+      <InspectorRow
+        label="Brightness"
+        rowRef={lightingRef}
+        dot={lightingTrack.keyframes.length > 0 ? lightingTrack.color : null}
+        active={isActive}
         onClick={onActivate}
       >
-        <span
-          className={`${labelWidthClass} flex shrink-0 items-center text-[11px] text-muted-foreground`}
-        >
-          <span onClick={(event) => event.stopPropagation()}>
-            <LightDirectionPicker
-              position={activeKeyLightPosition}
-              color={keyLightColor}
-              softness={keyLightSoftness}
-              onDirectionChange={onLightPositionChange}
-              onColorChange={(color) => {
-                onLightColorChange(color)
-                onCustomEdit()
-              }}
-              onSoftnessChange={(value) => {
-                onLightSoftnessChange(value)
-                onCustomEdit()
-              }}
-              isKeyed={lightPositionIsKeyed}
-              onToggleKeyframe={onToggleLightPositionKeyframe}
-              keyframeControls={lightPositionKeyframeControl}
-            />
-          </span>
-          {lightingTrack.keyframes.length > 0 && (
-            <span
-              className="ml-1.5 inline-block size-1 rounded-full"
-              style={{ backgroundColor: lightingTrack.color }}
-            />
-          )}
-        </span>
         <InspectorSlider
           value={brightnessValue}
           min={0}
@@ -112,7 +76,27 @@ export function LightInspectorSection({
             onCustomEdit()
           }}
         />
-      </div>
-    </div>
+      </InspectorRow>
+
+      <InspectorRow label="Direction">
+        <LightDirectionPicker
+          position={activeKeyLightPosition}
+          color={keyLightColor}
+          softness={keyLightSoftness}
+          onDirectionChange={onLightPositionChange}
+          onColorChange={(color) => {
+            onLightColorChange(color)
+            onCustomEdit()
+          }}
+          onSoftnessChange={(value) => {
+            onLightSoftnessChange(value)
+            onCustomEdit()
+          }}
+          isKeyed={lightPositionIsKeyed}
+          onToggleKeyframe={onToggleLightPositionKeyframe}
+          keyframeControls={lightPositionKeyframeControl}
+        />
+      </InspectorRow>
+    </InspectorSection>
   )
 }
