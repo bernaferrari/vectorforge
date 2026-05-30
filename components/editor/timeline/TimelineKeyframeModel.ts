@@ -1,4 +1,5 @@
 import { createEditorId } from "../EditorModel"
+import { keyframeTimeMatches, previousEasingFor } from "../EditorKeyframeModel"
 import {
   EasingType,
   Keyframe,
@@ -26,8 +27,8 @@ export const toggleTrackKeyframeAtTime = ({
   let selected: SelectedTimelineKeyframe = null
   const nextTracks = tracks.map((track) => {
     if (track.id !== trackId) return track
-    const existing = track.keyframes.find(
-      (keyframe) => Math.abs(keyframe.time - time) < 0.05
+    const existing = track.keyframes.find((keyframe) =>
+      keyframeTimeMatches(keyframe.time, time, 0.05)
     )
     if (existing) {
       return {
@@ -39,15 +40,11 @@ export const toggleTrackKeyframeAtTime = ({
     }
 
     const value = interpolateKeyframes(time, track)
-    const previous = [...track.keyframes]
-      .sort((a, b) => a.time - b.time)
-      .filter((keyframe) => keyframe.time <= time)
-      .pop()
     const keyframe: Keyframe = {
       id: createEditorId(trackId),
       time,
       value,
-      easing: previous?.easing ?? "ease-in-out",
+      easing: previousEasingFor(track.keyframes, time),
     }
     selected = { type: "track", trackId, kfId: keyframe.id }
 
@@ -77,23 +74,19 @@ export const addTrackKeyframeAtTime = ({
   let selected: SelectedTimelineKeyframe = null
   const nextTracks = tracks.map((track) => {
     if (track.id !== trackId) return track
-    const existing = track.keyframes.find(
-      (keyframe) => Math.abs(keyframe.time - nextTime) < 0.05
+    const existing = track.keyframes.find((keyframe) =>
+      keyframeTimeMatches(keyframe.time, nextTime, 0.05)
     )
     if (existing) {
       selected = { type: "track", trackId, kfId: existing.id }
       return track
     }
 
-    const previous = [...track.keyframes]
-      .sort((a, b) => a.time - b.time)
-      .filter((keyframe) => keyframe.time <= nextTime)
-      .pop()
     const keyframe: Keyframe = {
       id: createEditorId(trackId),
       time: nextTime,
       value: interpolateKeyframes(nextTime, track),
-      easing: previous?.easing ?? "ease-in-out",
+      easing: previousEasingFor(track.keyframes, nextTime),
     }
     selected = { type: "track", trackId, kfId: keyframe.id }
 
