@@ -1,7 +1,6 @@
 "use client"
 
 import React, {
-  useRef,
   useEffect,
   useState,
   forwardRef,
@@ -17,7 +16,6 @@ import {
   createSvgSceneResources,
   disposeSvgSceneResources,
 } from "./SvgSceneLifecycle"
-import type { OrientationGizmoRefs } from "./OrientationGizmo"
 import { SvgCanvasOverlays } from "./SvgCanvasOverlays"
 import type { SvgCanvasProps, SvgCanvasRef } from "./SvgTypes"
 import { bindSvgCanvasPointerInteractions } from "./SvgCanvasInteractions"
@@ -28,6 +26,7 @@ import { useSvgModelGroups } from "./useSvgModelGroups"
 import { useSvgRenderLoop } from "./useSvgRenderLoop"
 import { useSvgViewNudge } from "./useSvgViewNudge"
 import { useTransformGizmoInteractions } from "./useTransformGizmoInteractions"
+import { useSvgCanvasSceneRefs } from "./useSvgCanvasSceneRefs"
 export type {
   GradientStop,
   PathOverride,
@@ -37,8 +36,39 @@ export type {
 
 export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>(
   (props, ref) => {
-    const containerRef = useRef<HTMLDivElement>(null)
-    const canvasRef = useRef<HTMLCanvasElement>(null)
+    const {
+      containerRef,
+      canvasRef,
+      rotationDragTooltipRef,
+      sceneRef,
+      rendererRef,
+      cameraRef,
+      animationStartRef,
+      ambientLightRef,
+      keyLightRef,
+      softboxLightRef,
+      rimLightRef,
+      pivotGroupRef,
+      iconAGroupRef,
+      iconBGroupRef,
+      centerMarkerRef,
+      isDraggingRef,
+      isInertiaActiveRef,
+      hasViewDragMovedRef,
+      pointerStartPositionRef,
+      previousPointerPositionRef,
+      rotationVelocityRef,
+      activePointerIdRef,
+      targetZoomRef,
+      currentZoomRef,
+      clipPlaneARef,
+      clipPlaneBRef,
+      orientationGizmoRefs,
+      transformGizmoGroupRef,
+      transformGizmoHitObjectsRef,
+      rotationDragOverlayRef,
+      resetViewFrameRef,
+    } = useSvgCanvasSceneRefs(props.zoom)
     const pathOverridesASignature = useMemo(
       () => pathRebuildSignature(props.pathOverridesA),
       [props.pathOverridesA]
@@ -47,7 +77,6 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>(
       () => pathRebuildSignature(props.pathOverridesB),
       [props.pathOverridesB]
     )
-    const rotationDragTooltipRef = useRef<HTMLDivElement>(null)
     const [modelReady, setModelReady] = useState(false)
     const colorAStopsKey = useMemo(
       () => gradientStopsSignature(props.colorAStops),
@@ -58,32 +87,6 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>(
       [props.colorBStops]
     )
 
-    // Three.js instances refs
-    const sceneRef = useRef<THREE.Scene | null>(null)
-    const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
-    const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
-    const animationStartRef = useRef<number>(performance.now())
-
-    // Lighting refs
-    const ambientLightRef = useRef<THREE.AmbientLight | null>(null)
-    const keyLightRef = useRef<THREE.DirectionalLight | null>(null)
-    const softboxLightRef = useRef<THREE.RectAreaLight | null>(null)
-    const rimLightRef = useRef<THREE.DirectionalLight | null>(null)
-
-    // Pivot and Mesh group refs
-    const pivotGroupRef = useRef<THREE.Group | null>(null)
-    const iconAGroupRef = useRef<THREE.Group | null>(null)
-    const iconBGroupRef = useRef<THREE.Group | null>(null)
-    const centerMarkerRef = useRef<THREE.Group | null>(null)
-
-    // Drag interaction states with inertia
-    const isDraggingRef = useRef(false)
-    const isInertiaActiveRef = useRef(false)
-    const hasViewDragMovedRef = useRef(false)
-    const pointerStartPositionRef = useRef({ x: 0, y: 0 })
-    const previousPointerPositionRef = useRef({ x: 0, y: 0 })
-    const rotationVelocityRef = useRef({ x: 0, y: 0 })
-    const activePointerIdRef = useRef<number | null>(null)
     const {
       liveRenderPropsRef,
       viewInertiaEnabledRef,
@@ -95,37 +98,8 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>(
       onRotationAxisChangeRef,
     } = useSvgCanvasLiveRefs(props)
 
-    // Camera Zoom Refs (with damping)
-    const targetZoomRef = useRef<number>(props.zoom)
-    const currentZoomRef = useRef<number>(props.zoom)
-
-    // Clipping Plane refs
-    const clipPlaneARef = useRef<THREE.Plane | null>(null)
-    const clipPlaneBRef = useRef<THREE.Plane | null>(null)
-
     const canvasRecorder = useCanvasRecorder()
 
-    // SVG Orientation Gizmo Elements Refs
-    const lineXRef = useRef<SVGLineElement>(null)
-    const lineYRef = useRef<SVGLineElement>(null)
-    const lineZRef = useRef<SVGLineElement>(null)
-    const markerXRef = useRef<SVGGElement>(null)
-    const markerYRef = useRef<SVGGElement>(null)
-    const markerZRef = useRef<SVGGElement>(null)
-    const orientationGizmoRefs = useMemo<OrientationGizmoRefs>(
-      () => ({
-        lineXRef,
-        lineYRef,
-        lineZRef,
-        markerXRef,
-        markerYRef,
-        markerZRef,
-      }),
-      []
-    )
-    const transformGizmoGroupRef = useRef<THREE.Group | null>(null)
-    const transformGizmoHitObjectsRef = useRef<THREE.Object3D[]>([])
-    const rotationDragOverlayRef = useRef<THREE.Group | null>(null)
     const {
       beginTransformMove,
       beginTransformScale,
@@ -147,7 +121,6 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>(
       onMoveOffsetChangeRef,
       onRotationAxisChangeRef,
     })
-    const resetViewFrameRef = useRef<number | null>(null)
     const { viewNudgeFrameRef, cancelViewNudge, nudgeViewRotation } =
       useSvgViewNudge({
         liveRenderPropsRef,
