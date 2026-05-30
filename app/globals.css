@@ -76,7 +76,7 @@
   --slider-thumb-border: #d4d4d8;
   --slider-glow: rgba(0, 0, 0, 0.06);
   --inspector-slider-track: oklch(0.9 0 0);
-  --inspector-slider-active: oklch(0.72 0 0);
+  --inspector-slider-active: oklch(0.58 0 0);
   --inspector-slider-thumb: oklch(0.62 0 0);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);

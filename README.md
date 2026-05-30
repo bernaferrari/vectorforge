@@ -142,7 +142,8 @@ pnpm dev        # Start the Next.js development server
 pnpm build      # Build the app
 pnpm start      # Run the production build
 pnpm typecheck  # Run TypeScript checks
-pnpm format     # Format TypeScript/React files with Prettier
+pnpm format     # Format the codebase with oxfmt
+pnpm lint       # Lint the codebase with oxlint
 ```
 
 ## Status
