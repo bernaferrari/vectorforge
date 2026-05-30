@@ -6,6 +6,7 @@ import {
   TIMELINE_ZOOM_MIN,
   TIMELINE_ZOOM_STEP,
 } from "./TimelineGeometry"
+import { TIMELINE_LAYER } from "./TimelineLayering"
 
 type TimelineZoomControlsProps = {
   zoom: number
@@ -19,7 +20,10 @@ export function TimelineZoomControls({
   onFitTimeline,
 }: TimelineZoomControlsProps) {
   return (
-    <div className="pointer-events-auto fixed right-2 bottom-2 z-[70] flex h-auto w-max items-center gap-px rounded-full border border-border bg-background/85 p-0.5 shadow-md backdrop-blur-xl">
+    <div
+      className="pointer-events-auto fixed right-2 bottom-2 flex h-auto w-max items-center gap-px rounded-full border border-border bg-background/85 p-0.5 shadow-md backdrop-blur-xl"
+      style={{ zIndex: TIMELINE_LAYER.zoomControls }}
+    >
       <button
         type="button"
         aria-label="Zoom timeline out"

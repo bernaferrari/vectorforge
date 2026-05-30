@@ -10,6 +10,7 @@ import type { EasingType, TimelineTrack } from "../TimelineModel"
 import type { SelectedTimelineKeyframe, TrackTimeEditor } from "./TimelineTypes"
 import { easingMenuItems } from "./TimelineEasingControls"
 import { xForFrac } from "./TimelineGeometry"
+import { TIMELINE_LAYER } from "./TimelineLayering"
 import type { TimelineMenuItem } from "./TimelineMenuModel"
 import { formatValueLabel, TimelineDiamond } from "./TimelinePrimitives"
 
@@ -100,7 +101,9 @@ export function TimelineTrackKeyframeButton({
         className={`absolute top-1/2 flex size-4 -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center transition-transform hover:scale-110 focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:outline-none active:cursor-grabbing ${selected ? "scale-110" : ""}`}
         style={{
           left: xForFrac(keyframe.time / duration),
-          zIndex: selected ? 30 : 15,
+          zIndex: selected
+            ? TIMELINE_LAYER.selectedKeyframe
+            : TIMELINE_LAYER.trackKeyframe,
         }}
         onMouseDown={(event) => {
           event.stopPropagation()

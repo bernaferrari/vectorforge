@@ -5,6 +5,7 @@ import { bindWindowMouseDrag } from "@/lib/drag-events"
 import type { EasingType, TimelinePropertyRow } from "../TimelineModel"
 import { easingMenuItems } from "./TimelineEasingControls"
 import { widthForSpan, xForFrac } from "./TimelineGeometry"
+import { TIMELINE_LAYER } from "./TimelineLayering"
 import type { TimelineMenuItem } from "./TimelineMenuModel"
 import { TimelineDiamond } from "./TimelinePrimitives"
 import type { SelectedTimelineKeyframe } from "./TimelineTypes"
@@ -124,7 +125,7 @@ export function TimelinePropertyRowLane({
             className="absolute top-1/2 flex size-4 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center transition-transform hover:scale-110 focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:outline-none"
             style={{
               left: xForFrac(keyframe.time / duration),
-              zIndex: 14,
+              zIndex: TIMELINE_LAYER.propertyKeyframe,
             }}
             onMouseDown={(event) => {
               event.stopPropagation()

@@ -4,6 +4,7 @@ import { ArrowRight, Blend, SquareSplitHorizontal } from "lucide-react"
 import type { EasingType, ShapeStop } from "../TimelineModel"
 import type { WipeDirectionOption } from "./TimelineTypes"
 import { EasingPicker } from "./TimelineEasingControls"
+import { TIMELINE_LAYER } from "./TimelineLayering"
 import type { TransitionMode } from "./TimelineTransitionModel"
 
 type TimelineTransitionEditorProps = {
@@ -138,12 +139,12 @@ function WipeDirectionPicker({
                   wipeDirection: { x: dir.x, y: dir.y },
                 })
               }
-              className={`absolute z-10 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-[11px] transition-colors ${
+              className={`absolute flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-[11px] transition-colors ${
                 active
                   ? "border-foreground bg-foreground text-background"
                   : "border-border bg-muted/50 text-muted-foreground hover:border-ring/50 hover:text-foreground"
               }`}
-              style={{ left, top }}
+              style={{ left, top, zIndex: TIMELINE_LAYER.transitionHandle }}
             >
               {dir.label}
             </button>

@@ -1,6 +1,7 @@
 "use client"
 
 import { EDGE_INSET, xForFrac } from "./TimelineGeometry"
+import { TIMELINE_LAYER } from "./TimelineLayering"
 
 export function TimelineLaneBackground({
   duration,
@@ -20,13 +21,13 @@ export function TimelineLaneBackground({
         />
       ))}
       <div
-        className="pointer-events-none absolute inset-y-0 left-0 z-[1] bg-muted/60 dark:bg-muted/25"
-        style={{ width: EDGE_INSET }}
+        className="pointer-events-none absolute inset-y-0 left-0 bg-muted/60 dark:bg-muted/25"
+        style={{ width: EDGE_INSET, zIndex: TIMELINE_LAYER.rangeGutter }}
         aria-hidden="true"
       />
       <div
-        className="pointer-events-none absolute inset-y-0 right-0 z-[1] bg-muted/60 dark:bg-muted/25"
-        style={{ width: EDGE_INSET }}
+        className="pointer-events-none absolute inset-y-0 right-0 bg-muted/60 dark:bg-muted/25"
+        style={{ width: EDGE_INSET, zIndex: TIMELINE_LAYER.rangeGutter }}
         aria-hidden="true"
       />
     </>
