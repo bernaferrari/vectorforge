@@ -28,58 +28,15 @@ export function useMaterialEditor({
 }) {
   const [materialPreset, setMaterialPreset] =
     useState<MaterialPresetId>("chrome")
-  const [roughness, setRoughness] = useState<number>(
-    DEFAULT_MATERIAL_SETTINGS.roughness
-  )
-  const [metalness, setMetalness] = useState<number>(
-    DEFAULT_MATERIAL_SETTINGS.metalness
-  )
-  const [reflectance, setReflectance] = useState<number>(
-    DEFAULT_MATERIAL_SETTINGS.reflectance
-  )
-  const [clearcoat, setClearcoat] = useState<number>(
-    DEFAULT_MATERIAL_SETTINGS.clearcoat
-  )
-  const [clearcoatRoughness, setClearcoatRoughness] = useState<number>(
-    DEFAULT_MATERIAL_SETTINGS.clearcoatRoughness
-  )
-  const [transmission, setTransmission] = useState<number>(
-    DEFAULT_MATERIAL_SETTINGS.transmission
-  )
-  const [thickness, setThickness] = useState<number>(
-    DEFAULT_MATERIAL_SETTINGS.thickness
-  )
-  const [emissiveIntensity, setEmissiveIntensity] = useState<number>(
-    DEFAULT_MATERIAL_SETTINGS.emissiveIntensity
-  )
+  const [baseMaterialSettings, setBaseMaterialSettings] =
+    useState<MaterialSettings>(() => ({
+      ...DEFAULT_MATERIAL_SETTINGS,
+    }))
   const [materialKeyframes, setMaterialKeyframes] = useState<
     MaterialKeyframe[]
   >([])
   const [isAdvancedMaterialOpen, setIsAdvancedMaterialOpen] =
     useState<boolean>(false)
-
-  const baseMaterialSettings = useMemo<MaterialSettings>(
-    () => ({
-      roughness,
-      metalness,
-      reflectance,
-      clearcoat,
-      clearcoatRoughness,
-      transmission,
-      thickness,
-      emissiveIntensity,
-    }),
-    [
-      roughness,
-      metalness,
-      reflectance,
-      clearcoat,
-      clearcoatRoughness,
-      transmission,
-      thickness,
-      emissiveIntensity,
-    ]
-  )
 
   const activeMaterialSettings = useMemo(
     () =>
@@ -92,18 +49,11 @@ export function useMaterialEditor({
   )
 
   const setMaterialBaseSettings = (settings: MaterialSettings) => {
-    setRoughness(settings.roughness)
-    setMetalness(settings.metalness)
-    setReflectance(settings.reflectance)
-    setClearcoat(settings.clearcoat)
-    setClearcoatRoughness(settings.clearcoatRoughness)
-    setTransmission(settings.transmission)
-    setThickness(settings.thickness)
-    setEmissiveIntensity(settings.emissiveIntensity)
+    setBaseMaterialSettings(settings)
   }
 
   const setMaterialBaseSetting = (key: MaterialSettingKey, value: number) => {
-    setMaterialBaseSettings({ ...baseMaterialSettings, [key]: value })
+    setBaseMaterialSettings((settings) => ({ ...settings, [key]: value }))
   }
 
   const updateMaterialSetting = (
@@ -155,14 +105,14 @@ export function useMaterialEditor({
   return {
     materialPreset,
     setMaterialPreset,
-    roughness,
-    metalness,
-    reflectance,
-    clearcoat,
-    clearcoatRoughness,
-    transmission,
-    thickness,
-    emissiveIntensity,
+    roughness: baseMaterialSettings.roughness,
+    metalness: baseMaterialSettings.metalness,
+    reflectance: baseMaterialSettings.reflectance,
+    clearcoat: baseMaterialSettings.clearcoat,
+    clearcoatRoughness: baseMaterialSettings.clearcoatRoughness,
+    transmission: baseMaterialSettings.transmission,
+    thickness: baseMaterialSettings.thickness,
+    emissiveIntensity: baseMaterialSettings.emissiveIntensity,
     materialKeyframes,
     setMaterialKeyframes,
     isAdvancedMaterialOpen,
