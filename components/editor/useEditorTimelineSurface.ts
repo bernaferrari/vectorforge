@@ -1,6 +1,6 @@
 "use client"
 
-import type { Dispatch, SetStateAction } from "react"
+import { useCallback, type Dispatch, type SetStateAction } from "react"
 import type {
   LightPosition,
   MaterialKeyframe,
@@ -163,10 +163,10 @@ export function useEditorTimelineSurface({
     markCustom,
   })
 
-  const handleScrubStart = () => {
+  const handleScrubStart = useCallback(() => {
     cancelAnimatedSeek()
     stopPlayback()
-  }
+  }, [cancelAnimatedSeek, stopPlayback])
 
   const timelineProps = useTimelineProps({
     duration,

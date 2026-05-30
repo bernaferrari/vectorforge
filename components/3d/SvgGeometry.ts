@@ -352,17 +352,19 @@ export const applyMeshSetScale = (
     z: Math.max(0.05, Math.min(3, finiteNumber(scale.z, 1))),
   }
   const bounds = new THREE.Box3()
+  const min = new THREE.Vector3()
+  const max = new THREE.Vector3()
 
   meshes.forEach((mesh) => {
-    mesh.geometry?.computeBoundingBox()
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox()
     const box = mesh.geometry?.boundingBox
     if (!box || box.isEmpty()) return
     if (!mesh.userData.layerScaleBasePosition) {
       mesh.userData.layerScaleBasePosition = mesh.position.clone()
     }
     const basePosition = mesh.userData.layerScaleBasePosition as THREE.Vector3
-    const min = box.min.clone().add(basePosition)
-    const max = box.max.clone().add(basePosition)
+    min.copy(box.min).add(basePosition)
+    max.copy(box.max).add(basePosition)
     bounds.expandByPoint(min)
     bounds.expandByPoint(max)
   })

@@ -7,19 +7,15 @@ import { ViewportStage } from "./ViewportStage"
 import { TimelineDock } from "./TimelineDock"
 import { useLightEditor } from "./useLightEditor"
 import { useMaterialEditor } from "./useMaterialEditor"
-import { useLinkedQualityKeyframes } from "./useLinkedQualityKeyframes"
 import { InspectorSidebar } from "./InspectorSidebar"
 import { useFillEditor } from "./useFillEditor"
-import { useMotionPropertyControls } from "./useMotionPropertyControls"
 import { useThemeControls } from "./useThemeControls"
-import { useRecipeApplication } from "./useRecipeApplication"
 import { useShapeSequenceEditor } from "./useShapeSequenceEditor"
 import { useGeometryEditor } from "./useGeometryEditor"
 import { useViewportOptions } from "./useViewportOptions"
 import { useTransformEditor } from "./useTransformEditor"
 import { useTimelineTracks } from "./useTimelineTracks"
 import { useEditorPlaybackState } from "./useEditorPlaybackState"
-import { useInitialRecipeBoot } from "./useInitialRecipeBoot"
 import { useEditorSelectionNavigation } from "./useEditorSelectionNavigation"
 import { useEditorTimelineSurface } from "./useEditorTimelineSurface"
 import { useEditorViewportSurface } from "./useEditorViewportSurface"
@@ -27,6 +23,8 @@ import { useEditorExportSurface } from "./useEditorExportSurface"
 import { useEditorInspectorSurface } from "./useEditorInspectorSurface"
 import { useEditorHistorySurface } from "./useEditorHistorySurface"
 import { useEditorRenderState } from "./useEditorRenderState"
+import { useEditorMotionSurface } from "./useEditorMotionSurface"
+import { useEditorRecipeSurface } from "./useEditorRecipeSurface"
 
 export default function AppLayout() {
   const { themeMounted, isLightTheme, themeToggleLabel, setTheme } =
@@ -209,12 +207,13 @@ export default function AppLayout() {
   const { tracks, setTracks, extrusionTrack, scaleTrack, lightingTrack } =
     useTimelineTracks()
 
-  const applyRecipe = useRecipeApplication({
+  useEditorRecipeSurface({
     duration,
     setActiveRecipeId,
     setMaterialPreset,
     applyRecipeFill,
     setShapes,
+    setSelectedShapeId,
     setMaterialBaseSettings,
     setExtrusionDepth,
     setBevelEnabled,
@@ -239,12 +238,6 @@ export default function AppLayout() {
     setSelectedMotionTrackId,
     setCurrentTime,
     setIsPlaying,
-  })
-
-  useInitialRecipeBoot({
-    applyRecipe,
-    setShapes,
-    setSelectedShapeId,
   })
 
   useEditorHistorySurface({
@@ -406,7 +399,7 @@ export default function AppLayout() {
     updateMoveAxis,
     updateQuality,
     resetView,
-  } = useMotionPropertyControls({
+  } = useEditorMotionSurface({
     currentTime,
     duration,
     tracks,
@@ -427,13 +420,8 @@ export default function AppLayout() {
     setKeyLightIntensity,
     setGeometryQuality,
     setQualityKeyframes,
-    canvas3DRef,
-  })
-
-  useLinkedQualityKeyframes({
-    tracks,
     geometryQuality,
-    setQualityKeyframes,
+    canvas3DRef,
   })
 
   const {
