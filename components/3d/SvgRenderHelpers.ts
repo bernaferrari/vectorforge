@@ -1,5 +1,5 @@
 import * as THREE from "three"
-import { getVisiblePivotBounds } from "./SvgGeometry"
+import { getVisiblePivotBounds } from "./SvgGeometryAnalysis"
 
 const LAYER_OUTLINE_NAME = "selected-layer-outline"
 

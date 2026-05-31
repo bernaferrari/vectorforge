@@ -14,15 +14,17 @@ import {
   VECTORFORGE_SLASH_FORWARD_RATIO,
   applySvgModelScale,
 } from "./SvgSceneUtils"
+import { cacheGroupGeometryAnalysis } from "./SvgGeometryAnalysis"
 import {
-  applyInnerElementScale,
-  applyMeshSetScale,
-  cacheGroupGeometryAnalysis,
-  cacheInnerGeometryElements,
   containsInvalidPositions,
   finiteNumber,
   minContourDimension,
 } from "./SvgGeometry"
+import {
+  applyInnerElementScale,
+  applyMeshSetScale,
+  cacheInnerGeometryElements,
+} from "./SvgGeometryScale"
 import { parseSvgShapes, type ParsedSvgShapes } from "./SvgParsing"
 import type { SvgCanvasProps } from "./SvgTypes"
 

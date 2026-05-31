@@ -6,7 +6,7 @@ import {
   OrientationGizmoRefs,
   updateOrientationGizmo,
 } from "./OrientationGizmo"
-import { getVisibleIconCenter } from "./SvgGeometry"
+import { getVisibleIconCenter } from "./SvgGeometryAnalysis"
 import {
   applySvgPivotTransform,
   svgDisplayRotationFromDegrees,

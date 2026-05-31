@@ -1,6 +1,7 @@
 import * as THREE from "three"
 import type { SvgCanvasLiveRenderProps } from "./useSvgCanvasLiveRefs"
-import { applyInnerElementScale, finiteNumber } from "./SvgGeometry"
+import { finiteNumber } from "./SvgGeometry"
+import { applyInnerElementScale } from "./SvgGeometryScale"
 
 export const svgDisplayRotationFromDegrees = (
   rotationOffset: SvgCanvasLiveRenderProps["rotationOffset"]
