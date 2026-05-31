@@ -7,9 +7,9 @@ import {
   MaterialSettingKey,
   MaterialSettings,
   clampNumber,
-  interpolateMaterialKeyframes,
 } from "./EditorModel"
 import { materialDefaultSettings } from "./FinishRegistry"
+import { interpolateMaterialKeyframes } from "./KeyframeInterpolationModel"
 import {
   DEFAULT_MATERIAL_SETTINGS,
   findMaterialKeyframeAtTime,

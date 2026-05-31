@@ -6,16 +6,14 @@ import {
   type FillStop,
   interpolateFillKeyframes,
 } from "./TimelineModel"
+import { upsertFillKeyframe } from "./FillEditorModel"
 import {
-  type FillMode,
-  clampNumber,
   googleMeshFillStops,
   makeFillStops,
   normalizeFillStops,
-  quantizeTimeToFrame,
   stopsForGradientType,
-} from "./EditorModel"
-import { upsertFillKeyframe } from "./FillEditorModel"
+} from "./FillStopModel"
+import { type FillMode, clampNumber, quantizeTimeToFrame } from "./EditorModel"
 
 type FillRecipe = (typeof MOTION_RECIPES)[number]
 

@@ -1,6 +1,7 @@
 import { useMemo } from "react"
 import { GradientType } from "../3d/SvgTypes"
-import { FillMode, clampNumber, makeFillStops } from "./EditorModel"
+import { FillMode, clampNumber } from "./EditorModel"
+import { makeFillStops } from "./FillStopModel"
 import {
   DEFAULT_TRANSITION_END,
   DEFAULT_TRANSITION_START,

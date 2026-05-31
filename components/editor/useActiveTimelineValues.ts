@@ -1,11 +1,9 @@
 import { useMemo } from "react"
+import { LightPosition, ScalarKeyframe, Vector3Keyframe } from "./EditorModel"
 import {
-  LightPosition,
-  ScalarKeyframe,
-  Vector3Keyframe,
   interpolateLightPositionKeyframes,
   interpolateScalarKeyframes,
-} from "./EditorModel"
+} from "./KeyframeInterpolationModel"
 import { TimelineTrack, interpolateKeyframes } from "./TimelineModel"
 
 type ActiveTimelineValuesInput = {

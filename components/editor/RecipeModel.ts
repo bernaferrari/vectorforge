@@ -10,12 +10,12 @@ import {
   MotionTrackId,
   SCALE_DEFAULT,
   SCALE_MAX,
-  googleMeshFillStops,
   type GeometrySettings,
   type LightSettings,
   type MaterialSettings,
   type TransformSettings,
 } from "./EditorModel"
+import { googleMeshFillStops } from "./FillStopModel"
 import { DEFAULT_MATERIAL_SETTINGS } from "./MaterialEditorModel"
 import type { ShapeStop, TimelineTrack } from "./TimelineModel"
 import type { MOTION_RECIPES } from "./MotionRecipes"

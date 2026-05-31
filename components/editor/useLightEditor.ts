@@ -7,10 +7,10 @@ import {
   LightPositionKeyframe,
   clampNumber,
   createEditorId,
-  interpolateLightPositionKeyframes,
   quantizeTimeToFrame,
 } from "./EditorModel"
 import { previousEasingFor } from "./EditorKeyframeModel"
+import { interpolateLightPositionKeyframes } from "./KeyframeInterpolationModel"
 import { useGroupedSettings } from "./useGroupedSettings"
 
 export const STATIC_STUDIO_LIGHTING = {
