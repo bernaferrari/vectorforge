@@ -16,14 +16,14 @@ import {
   updateCenterMarker,
   updateLayerSelectionOutline,
 } from "./SvgRenderHelpers"
+import {
+  ZOOM_DAMPING,
+  advanceInertiaVelocity,
+  type RotationVelocity,
+} from "./SvgRenderLoopModel"
 import { framedCameraDistance } from "./SvgSceneUtils"
 import { applySvgTransitionState } from "./SvgTransitionState"
 import type { SvgCanvasLiveRenderProps } from "./useSvgCanvasLiveRefs"
-
-type RotationVelocity = {
-  x: number
-  y: number
-}
 
 type NullableRef<T> = MutableRefObject<T | null>
 
@@ -50,10 +50,6 @@ type UseSvgRenderLoopOptions = {
     camera: THREE.PerspectiveCamera
   ) => void
 }
-
-const ZOOM_DAMPING = 0.08
-const INERTIA_DECAY = 0.92
-const INERTIA_STOP_THRESHOLD = 0.0007
 
 export function useSvgRenderLoop({
   sceneRef,
@@ -101,19 +97,9 @@ export function useSvgRenderLoop({
 
       if (isInertiaActiveRef.current) {
         applyViewRotationDeltaRef.current(rotationVelocityRef.current)
-        rotationVelocityRef.current = {
-          x: rotationVelocityRef.current.x * INERTIA_DECAY,
-          y: rotationVelocityRef.current.y * INERTIA_DECAY,
-        }
-        if (
-          Math.hypot(
-            rotationVelocityRef.current.x,
-            rotationVelocityRef.current.y
-          ) < INERTIA_STOP_THRESHOLD
-        ) {
-          isInertiaActiveRef.current = false
-          rotationVelocityRef.current = { x: 0, y: 0 }
-        }
+        const inertia = advanceInertiaVelocity(rotationVelocityRef.current)
+        rotationVelocityRef.current = inertia.velocity
+        isInertiaActiveRef.current = inertia.active
       }
 
       const displayRotation = svgDisplayRotationFromDegrees(
