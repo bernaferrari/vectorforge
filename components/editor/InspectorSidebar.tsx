@@ -96,7 +96,7 @@ function InspectorContextHeader({
 }) {
   const { shapeNavigation } = transformProps
   const showShapeNav = !!shapeNavigation
-  const showLayers = transformProps.selectedShapeLayers.length >= 2
+  const showLayers = transformProps.selectedShapeLayers.length > 0
   if (!showShapeNav && !showLayers) return null
 
   return (

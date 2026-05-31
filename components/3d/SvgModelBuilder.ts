@@ -1,5 +1,4 @@
 import * as THREE from "three"
-import { createThreeMaterial } from "./MaterialPresets"
 import {
   applyGradientVertexColors,
   fallbackGoogleMeshStops,
@@ -24,6 +23,7 @@ import {
   safeShapeExtrudeSettings,
   svgExtrudeBaseSettings,
 } from "./SvgExtrudeSettings"
+import { createSvgPathMaterial } from "./SvgPathMaterial"
 import { parseSvgShapes, type ParsedSvgShapes } from "./SvgParsing"
 import type { SvgCanvasProps } from "./SvgTypes"
 
@@ -144,45 +144,16 @@ export const buildSvgIconGroup = ({
         0.02,
         finiteNumber(override ? override.depthMultiplier : 1.0, 1.0)
       )
-      const pathMaterial = createThreeMaterial(props.materialPreset, {
-        color: props.enableGradient ? "#ffffff" : customColor,
-        roughness: props.roughness,
-        metalness: props.metalness,
-        reflectance: props.reflectance,
-        clearcoat: props.clearcoat,
-        clearcoatRoughness: props.clearcoatRoughness,
-        transmission: props.transmission,
-        thickness: props.thickness,
-        emissiveIntensity: props.emissiveIntensity,
-        wireframe: props.wireframe,
-        opacity: isIconA
-          ? isCrossfade
-            ? 1.0 - props.transitionProgress
-            : 1.0
-          : isCrossfade
-            ? props.transitionProgress
-            : 1.0,
-        vertexColors: useGradientVertexColors,
-      }) as THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial
-
-      if (
-        props.emissiveIntensity &&
-        props.emissiveIntensity > 0 &&
-        !props.enableGradient
-      ) {
-        pathMaterial.emissive = new THREE.Color(customColor)
-      }
-
-      if (layerOrder > 0 || isSlashOverlay) {
-        pathMaterial.polygonOffset = true
-        pathMaterial.polygonOffsetFactor = -layerOrder * 2
-        pathMaterial.polygonOffsetUnits = -layerOrder * 2
-      }
-
-      if (clippingPlanes.length > 0) {
-        pathMaterial.clippingPlanes = clippingPlanes
-        pathMaterial.clipShadows = true
-      }
+      const pathMaterial = createSvgPathMaterial({
+        props,
+        color: customColor,
+        isIconA,
+        isCrossfade,
+        useGradientVertexColors,
+        layerOrder,
+        isSlashOverlay,
+        clippingPlanes,
+      })
 
       const shapePts = shape.getPoints(12)
       if (

@@ -37,12 +37,28 @@ function LayerSwitcherComponent({
   onScaleChange,
   onDepthChange,
 }: LayerSwitcherProps) {
-  // Single-layer shapes have nothing to switch between — hide the bar entirely.
-  if (layers.length < 2) return null
-
   const isAllLayers = selectedLayerId === ALL_LAYERS_ID
   const visible = selectedLayerOverride?.visible ?? true
   const showLayerControls = !isAllLayers && selectedLayerOverride
+  const onlyLayer = layers.length === 1 ? layers[0] : null
+
+  if (onlyLayer) {
+    return (
+      <div className="flex min-h-9 items-center gap-2 px-2.5 py-1.5">
+        <span className="flex h-6 shrink-0 items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+          <Layers className="size-3.5" />
+          Layer
+        </span>
+        <span className="ml-auto flex h-6 items-center gap-1.5 rounded-[6px] px-2 text-[11px] font-medium text-muted-foreground">
+          <span
+            className="size-2 shrink-0 rounded-full ring-1 ring-black/25 ring-inset"
+            style={{ backgroundColor: onlyLayer.color }}
+          />
+          1
+        </span>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col">
