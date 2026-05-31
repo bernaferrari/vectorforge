@@ -35,32 +35,30 @@ export type InspectorSidebarProps = {
   lightProps: SidebarLightProps
 }
 
-function ShapeHeader({
+function ShapeNavRow({
   shapeNavigation,
 }: {
-  shapeNavigation: SidebarTransformProps["shapeNavigation"]
+  shapeNavigation: NonNullable<SidebarTransformProps["shapeNavigation"]>
 }) {
-  if (!shapeNavigation || shapeNavigation.total <= 1) return null
-
   return (
-    <div className="-mx-3 mb-2.5 flex items-center justify-between gap-2 border-b border-border/40 px-3 pb-2.5">
+    <div className="flex h-9 items-center justify-between gap-2 pr-1 pl-2.5">
       <span
-        className="min-w-0 truncate text-[13px] font-semibold text-foreground"
+        className="min-w-0 truncate text-[12px] font-semibold text-foreground"
         title={shapeNavigation.label}
       >
         {shapeNavigation.label}
       </span>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-0.5">
         <button
           type="button"
           aria-label="Previous shape"
           title="Previous shape"
           onClick={shapeNavigation.onPrevious}
-          className="flex size-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none"
+          className="flex size-7 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none"
         >
-          <ChevronLeft className="size-4" />
+          <ChevronLeft className="size-3.5" />
         </button>
-        <span className="min-w-[28px] text-center font-mono text-[10px] text-muted-foreground/70 tabular-nums">
+        <span className="min-w-[30px] text-center font-mono text-[10px] text-muted-foreground/70 tabular-nums">
           {shapeNavigation.index + 1}/{shapeNavigation.total}
         </span>
         <button
@@ -68,11 +66,46 @@ function ShapeHeader({
           aria-label="Next shape"
           title="Next shape"
           onClick={shapeNavigation.onNext}
-          className="flex size-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none"
+          className="flex size-7 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none"
         >
-          <ChevronRight className="size-4" />
+          <ChevronRight className="size-3.5" />
         </button>
       </div>
+    </div>
+  )
+}
+
+// One "what am I editing" card grouping the two selection controls — shape
+// navigation (which shape in the sequence) on top, layer switcher (which path
+// within it) below — separated from the property editors by the card boundary
+// itself rather than a floating divider line.
+function InspectorContextHeader({
+  transformProps,
+}: {
+  transformProps: SidebarTransformProps
+}) {
+  const { shapeNavigation } = transformProps
+  const showShapeNav = !!shapeNavigation && shapeNavigation.total > 1
+  const showLayers = transformProps.selectedShapeLayers.length >= 2
+  if (!showShapeNav && !showLayers) return null
+
+  return (
+    <div className="mb-3 flex flex-col overflow-hidden rounded-xl border border-border/40 bg-foreground/[0.02]">
+      {showShapeNav ? <ShapeNavRow shapeNavigation={shapeNavigation} /> : null}
+      {showShapeNav && showLayers ? (
+        <div className="h-px bg-border/40" />
+      ) : null}
+      {showLayers ? (
+        <LayerSwitcher
+          layers={transformProps.selectedShapeLayers}
+          selectedLayerId={transformProps.selectedLayerId}
+          selectedLayerOverride={transformProps.selectedLayerOverride}
+          onSelectLayer={transformProps.onSelectLayer}
+          onToggleVisibility={transformProps.onToggleLayerVisibility}
+          onScaleChange={transformProps.onLayerScaleChange}
+          onDepthChange={transformProps.onLayerDepthChange}
+        />
+      ) : null}
     </div>
   )
 }
@@ -92,17 +125,7 @@ export function InspectorSidebar({
           : "w-[328px] border-l border-border/40 px-3 py-3"
       }`}
     >
-      <ShapeHeader shapeNavigation={transformProps.shapeNavigation} />
-
-      <LayerSwitcher
-        layers={transformProps.selectedShapeLayers}
-        selectedLayerId={transformProps.selectedLayerId}
-        selectedLayerOverride={transformProps.selectedLayerOverride}
-        onSelectLayer={transformProps.onSelectLayer}
-        onToggleVisibility={transformProps.onToggleLayerVisibility}
-        onScaleChange={transformProps.onLayerScaleChange}
-        onDepthChange={transformProps.onLayerDepthChange}
-      />
+      <InspectorContextHeader transformProps={transformProps} />
 
       <div className="flex flex-col divide-y divide-border/30">
         <StyleInspectorSection {...styleProps} />

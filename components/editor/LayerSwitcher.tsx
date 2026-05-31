@@ -23,6 +23,10 @@ type LayerSwitcherProps = {
 // it OWNS everything per-layer: visibility + the layer's Scale/Depth overrides
 // appear right here when a single layer is targeted, so the controls live next
 // to the thing they affect instead of being stranded at the bottom of TRANSFORM.
+//
+// Rendered BORDERLESS — the parent InspectorContextHeader provides the card so
+// the shape navigation and the layer switcher read as one "what am I editing"
+// unit, separated from the property editors below.
 function LayerSwitcherComponent({
   layers,
   selectedLayerId,
@@ -57,7 +61,7 @@ function LayerSwitcherComponent({
   )
 
   return (
-    <div className="mb-2 overflow-hidden rounded-lg border border-border/40 bg-foreground/[0.02]">
+    <div className="flex flex-col">
       <div className="flex h-9 items-center gap-2 pr-1 pl-2.5">
         <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
           <Layers className="size-3.5" />
@@ -108,7 +112,7 @@ function LayerSwitcherComponent({
       </div>
 
       {showLayerControls ? (
-        <div className="flex flex-col gap-0.5 border-t border-border/40 bg-foreground/[0.02] p-1">
+        <div className="flex flex-col gap-0.5 border-t border-border/40 p-1">
           <InspectorRow label="Scale">
             <InspectorSlider
               value={selectedLayerOverride.scale?.x ?? 1}
