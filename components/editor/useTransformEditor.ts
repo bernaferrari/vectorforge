@@ -9,19 +9,15 @@ import {
 import {
   DEFAULT_TRANSFORM_SETTINGS,
   type LightPosition,
-  type TransformSettings,
   type Vector3Keyframe,
   DEFAULT_ROTATION_END,
   DEFAULT_ROTATION_START,
 } from "./EditorModel"
-
-const applyTransformSettingValue = <T>(value: SetStateAction<T>, previous: T) =>
-  typeof value === "function" ? (value as (current: T) => T)(previous) : value
+import { useGroupedSettings } from "./useGroupedSettings"
 
 export function useTransformEditor() {
-  const [baseTransformSettings, setTransformBaseSettings] = useState(
-    DEFAULT_TRANSFORM_SETTINGS
-  )
+  const [baseTransformSettings, setTransformBaseSettings, setTransformSetting] =
+    useGroupedSettings(DEFAULT_TRANSFORM_SETTINGS)
   const [moveKeyframes, setMoveKeyframes] = useState<Vector3Keyframe[]>([])
   const [rotationAxisKeyframes, setRotationAxisKeyframes] = useState<
     Vector3Keyframe[]
@@ -39,19 +35,6 @@ export function useTransformEditor() {
       easing: "ease-in-out",
     },
   ])
-
-  const setTransformSetting = useCallback(
-    <Key extends keyof TransformSettings>(
-      key: Key,
-      value: SetStateAction<TransformSettings[Key]>
-    ) => {
-      setTransformBaseSettings((settings) => ({
-        ...settings,
-        [key]: applyTransformSettingValue(value, settings[key]),
-      }))
-    },
-    []
-  )
 
   const setObjectScale: Dispatch<SetStateAction<number>> = useCallback(
     (value) => setTransformSetting("objectScale", value),

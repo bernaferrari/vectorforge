@@ -12,32 +12,16 @@ import {
   type ScalarKeyframe,
   type Vector3Keyframe,
 } from "./EditorModel"
-
-const applySettingValue = <T>(value: SetStateAction<T>, previous: T) =>
-  typeof value === "function" ? (value as (current: T) => T)(previous) : value
+import { useGroupedSettings } from "./useGroupedSettings"
 
 export function useGeometryEditor() {
   const [wireframe] = useState(false)
-  const [baseGeometrySettings, setGeometryBaseSettings] = useState(
-    DEFAULT_GEOMETRY_SETTINGS
-  )
+  const [baseGeometrySettings, setGeometryBaseSettings, setGeometrySetting] =
+    useGroupedSettings(DEFAULT_GEOMETRY_SETTINGS)
   const [qualityKeyframes, setQualityKeyframes] = useState<ScalarKeyframe[]>([])
   const [innerScaleKeyframes, setInnerScaleKeyframes] = useState<
     Vector3Keyframe[]
   >([])
-
-  const setGeometrySetting = useCallback(
-    <Key extends keyof GeometrySettings>(
-      key: Key,
-      value: SetStateAction<GeometrySettings[Key]>
-    ) => {
-      setGeometryBaseSettings((settings) => ({
-        ...settings,
-        [key]: applySettingValue(value, settings[key]),
-      }))
-    },
-    []
-  )
 
   const setExtrusionDepth: Dispatch<SetStateAction<number>> = useCallback(
     (value) => setGeometrySetting("extrusionDepth", value),

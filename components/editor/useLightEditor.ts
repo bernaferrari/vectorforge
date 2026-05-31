@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useState, type SetStateAction } from "react"
 import {
   DEFAULT_LIGHT_SETTINGS,
-  type LightSettings,
   LightPosition,
   LightPositionKeyframe,
   clampNumber,
@@ -12,6 +11,7 @@ import {
   quantizeTimeToFrame,
 } from "./EditorModel"
 import { previousEasingFor } from "./EditorKeyframeModel"
+import { useGroupedSettings } from "./useGroupedSettings"
 
 export const STATIC_STUDIO_LIGHTING = {
   ambientColor: "#ffffff",
@@ -19,9 +19,6 @@ export const STATIC_STUDIO_LIGHTING = {
   rimLightColor: "#a48bff",
   rimLightIntensity: 0.8,
 }
-
-const applyLightSettingValue = <T>(value: SetStateAction<T>, previous: T) =>
-  typeof value === "function" ? (value as (current: T) => T)(previous) : value
 
 export function useLightEditor({
   currentTime,
@@ -32,25 +29,11 @@ export function useLightEditor({
   duration: number
   onEdit: () => void
 }) {
-  const [baseLightSettings, setLightBaseSettings] = useState(
-    DEFAULT_LIGHT_SETTINGS
-  )
+  const [baseLightSettings, setLightBaseSettings, setLightSetting] =
+    useGroupedSettings(DEFAULT_LIGHT_SETTINGS)
   const [keyLightPositionKeyframes, setKeyLightPositionKeyframes] = useState<
     LightPositionKeyframe[]
   >([])
-
-  const setLightSetting = useCallback(
-    <Key extends keyof LightSettings>(
-      key: Key,
-      value: SetStateAction<LightSettings[Key]>
-    ) => {
-      setLightBaseSettings((settings) => ({
-        ...settings,
-        [key]: applyLightSettingValue(value, settings[key]),
-      }))
-    },
-    []
-  )
 
   const setKeyLightColor = useCallback(
     (value: SetStateAction<string>) => setLightSetting("keyLightColor", value),
