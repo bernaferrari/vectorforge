@@ -1,27 +1,67 @@
 "use client"
 
-import { useState } from "react"
+import type { Dispatch, SetStateAction } from "react"
+import { useCallback } from "react"
+import { useGroupedSettings } from "./useGroupedSettings"
+
+type ViewportOptions = {
+  zoom: number
+  viewInertiaEnabled: boolean
+  showCenterPoint: boolean
+  showTransformGizmo: boolean
+  zenMode: boolean
+  isDragging: boolean
+}
+
+const DEFAULT_VIEWPORT_OPTIONS: ViewportOptions = {
+  zoom: 1,
+  viewInertiaEnabled: true,
+  showCenterPoint: false,
+  showTransformGizmo: false,
+  zenMode: false,
+  isDragging: false,
+}
 
 export function useViewportOptions() {
-  const [zoom, setZoom] = useState(1.0)
-  const [viewInertiaEnabled, setViewInertiaEnabled] = useState(true)
-  const [showCenterPoint, setShowCenterPoint] = useState(false)
-  const [showTransformGizmo, setShowTransformGizmo] = useState(false)
-  const [zenMode, setZenMode] = useState(false)
-  const [isDragging, setIsDragging] = useState(false)
+  const [options, , setOption] = useGroupedSettings(DEFAULT_VIEWPORT_OPTIONS)
+
+  const setZoom: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => setOption("zoom", value),
+    [setOption]
+  )
+  const setViewInertiaEnabled: Dispatch<SetStateAction<boolean>> = useCallback(
+    (value) => setOption("viewInertiaEnabled", value),
+    [setOption]
+  )
+  const setShowCenterPoint: Dispatch<SetStateAction<boolean>> = useCallback(
+    (value) => setOption("showCenterPoint", value),
+    [setOption]
+  )
+  const setShowTransformGizmo: Dispatch<SetStateAction<boolean>> = useCallback(
+    (value) => setOption("showTransformGizmo", value),
+    [setOption]
+  )
+  const setZenMode: Dispatch<SetStateAction<boolean>> = useCallback(
+    (value) => setOption("zenMode", value),
+    [setOption]
+  )
+  const setIsDragging: Dispatch<SetStateAction<boolean>> = useCallback(
+    (value) => setOption("isDragging", value),
+    [setOption]
+  )
 
   return {
-    zoom,
+    zoom: options.zoom,
     setZoom,
-    viewInertiaEnabled,
+    viewInertiaEnabled: options.viewInertiaEnabled,
     setViewInertiaEnabled,
-    showCenterPoint,
+    showCenterPoint: options.showCenterPoint,
     setShowCenterPoint,
-    showTransformGizmo,
+    showTransformGizmo: options.showTransformGizmo,
     setShowTransformGizmo,
-    zenMode,
+    zenMode: options.zenMode,
     setZenMode,
-    isDragging,
+    isDragging: options.isDragging,
     setIsDragging,
   }
 }
