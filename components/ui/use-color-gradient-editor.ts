@@ -7,8 +7,13 @@ import {
   createGradientStopAtPoint,
   createGradientStopAtPosition,
   findInsertedGradientStopIndex,
+  gradientRailPointFromClient,
   gradientEditorPreviewCss,
   insertGradientStop,
+  normalizedGradientPosition,
+  parseGradientStopPositionInput,
+  updateGradientStopColorById,
+  updateGradientStopPositionById,
 } from "./color-gradient-editor-model"
 import {
   shuffledMeshColors,
@@ -177,15 +182,17 @@ export function useColorGradientEditor({
 
   const updateStopPosition = React.useCallback(
     (stopId: string, nextPosition: number) => {
-      const position = Number(Math.max(0, Math.min(1, nextPosition)).toFixed(3))
+      const position = normalizedGradientPosition(nextPosition)
       const previousIndex = normalizedStops.findIndex(
         (stop) => stop.id === stopId
       )
       if (previousIndex < 0) return
       if (onStopsChange) {
-        const nextStops = normalizedStops
-          .map((item) => (item.id === stopId ? { ...item, position } : item))
-          .sort((a, b) => a.position - b.position)
+        const nextStops = updateGradientStopPositionById(
+          normalizedStops,
+          stopId,
+          position
+        )
         updateStops(nextStops)
         const nextIndex = nextStops.findIndex((stop) => stop.id === stopId)
         setActiveStop(Math.max(0, nextIndex))
@@ -205,9 +212,7 @@ export function useColorGradientEditor({
       setActiveStop(stopIndex)
       if (onStopsChange) {
         updateStops(
-          normalizedStops.map((stop) =>
-            stop.id === stopId ? { ...stop, color: nextColor } : stop
-          )
+          updateGradientStopColorById(normalizedStops, stopId, nextColor)
         )
         return
       }
@@ -229,10 +234,7 @@ export function useColorGradientEditor({
     (stopId: string, clientX: number) => {
       if (!gradientRailRef.current) return
       const rect = gradientRailRef.current.getBoundingClientRect()
-      const position = Math.max(
-        0,
-        Math.min(1, (clientX - rect.left) / rect.width)
-      )
+      const { x: position } = gradientRailPointFromClient({ rect, clientX })
       updateStopPosition(stopId, position)
     },
     [updateStopPosition]
@@ -273,9 +275,9 @@ export function useColorGradientEditor({
 
   const commitStopPositionInput = React.useCallback(
     (stopId: string, rawValue: string) => {
-      const parsed = Number.parseFloat(rawValue.replace("%", ""))
-      if (!Number.isFinite(parsed)) return
-      updateStopPosition(stopId, parsed / 100)
+      const position = parseGradientStopPositionInput(rawValue)
+      if (position === null) return
+      updateStopPosition(stopId, position)
     },
     [updateStopPosition]
   )
@@ -301,16 +303,7 @@ export function useColorGradientEditor({
     (clientX: number, clientY?: number) => {
       if (!gradientRailRef.current || !onStopsChange) return
       const rect = gradientRailRef.current.getBoundingClientRect()
-      const position = Number(
-        Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)).toFixed(3)
-      )
-      const point = {
-        x: position,
-        y:
-          clientY === undefined
-            ? 0.5
-            : Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)),
-      }
+      const point = gradientRailPointFromClient({ rect, clientX, clientY })
       const nextStop = createGradientStopAtPoint({
         gradientType,
         stops: normalizedStops,

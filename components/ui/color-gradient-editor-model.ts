@@ -70,3 +70,51 @@ export const findInsertedGradientStopIndex = (
       Math.abs(item.position - stop.position) < 0.0005 &&
       item.color.toLowerCase() === stop.color.toLowerCase()
   )
+
+export const normalizedGradientPosition = (position: number) =>
+  Number(Math.max(0, Math.min(1, position)).toFixed(3))
+
+export const updateGradientStopPositionById = (
+  stops: NormalizedColorStop[],
+  stopId: string,
+  position: number
+) =>
+  stops
+    .map((stop) =>
+      stop.id === stopId
+        ? { ...stop, position: normalizedGradientPosition(position) }
+        : stop
+    )
+    .sort((a, b) => a.position - b.position)
+
+export const updateGradientStopColorById = (
+  stops: NormalizedColorStop[],
+  stopId: string,
+  color: string
+) => stops.map((stop) => (stop.id === stopId ? { ...stop, color } : stop))
+
+export const parseGradientStopPositionInput = (rawValue: string) => {
+  const parsed = Number.parseFloat(rawValue.replace("%", ""))
+  return Number.isFinite(parsed) ? parsed / 100 : null
+}
+
+export const gradientRailPointFromClient = ({
+  rect,
+  clientX,
+  clientY,
+}: {
+  rect: DOMRect
+  clientX: number
+  clientY?: number
+}) => {
+  const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+  const y =
+    clientY === undefined
+      ? 0.5
+      : Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+
+  return {
+    x: normalizedGradientPosition(x),
+    y,
+  }
+}
