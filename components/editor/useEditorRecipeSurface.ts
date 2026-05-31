@@ -5,10 +5,10 @@ import type { MaterialPresetId } from "../3d/MaterialPresets"
 import type {
   GeometrySettings,
   LightSettings,
-  LightPosition,
   MaterialSettings,
   MotionTrackId,
   ScalarKeyframe,
+  TransformSettings,
   Vector3Keyframe,
 } from "./EditorModel"
 import type { MotionRecipe } from "./MotionRecipes"
@@ -25,10 +25,8 @@ type EditorRecipeSurfaceOptions = {
   setSelectedShapeId: (shapeId: string | null) => void
   setMaterialBaseSettings: (settings: MaterialSettings) => void
   setGeometryBaseSettings: Dispatch<SetStateAction<GeometrySettings>>
-  setRotationOffset: Dispatch<SetStateAction<LightPosition>>
+  setTransformBaseSettings: Dispatch<SetStateAction<TransformSettings>>
   setRotationAxisKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
-  setObjectScale: Dispatch<SetStateAction<number>>
-  setMoveOffset: Dispatch<SetStateAction<LightPosition>>
   setMoveKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   setQualityKeyframes: Dispatch<SetStateAction<ScalarKeyframe[]>>
   setInnerScaleKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>

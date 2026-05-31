@@ -12,6 +12,7 @@ import {
   MaterialKeyframe,
   MaterialSettings,
   ScalarKeyframe,
+  TransformSettings,
   Vector3Keyframe,
 } from "./EditorModel"
 import type { MaterialPresetId } from "../3d/MaterialPresets"
@@ -54,11 +55,9 @@ interface EditorSnapshotHistoryOptions {
   innerScaleKeyframes: Vector3Keyframe[]
   setInnerScaleKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   objectScale: number
-  setObjectScale: Dispatch<SetStateAction<number>>
   objectScaleAxes: LightPosition
-  setObjectScaleAxes: Dispatch<SetStateAction<LightPosition>>
   moveOffset: LightPosition
-  setMoveOffset: Dispatch<SetStateAction<LightPosition>>
+  setTransformBaseSettings: Dispatch<SetStateAction<TransformSettings>>
   moveKeyframes: Vector3Keyframe[]
   setMoveKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   enableGradient: boolean
@@ -70,10 +69,8 @@ interface EditorSnapshotHistoryOptions {
   fillKeyframes: FillKeyframe[]
   restoreFillState: (snapshot: EditorSnapshot) => void
   rotationOffset: LightPosition
-  setRotationOffset: Dispatch<SetStateAction<LightPosition>>
   rotationAxisKeyframes: Vector3Keyframe[]
   setRotationAxisKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
-  setPreviewRotationY: Dispatch<SetStateAction<number | null>>
   keyLightColor: string
   keyLightIntensity: number
   keyLightPosition: LightPosition
@@ -117,11 +114,9 @@ export function useEditorSnapshotHistory({
   innerScaleKeyframes,
   setInnerScaleKeyframes,
   objectScale,
-  setObjectScale,
   objectScaleAxes,
-  setObjectScaleAxes,
   moveOffset,
-  setMoveOffset,
+  setTransformBaseSettings,
   moveKeyframes,
   setMoveKeyframes,
   enableGradient,
@@ -133,10 +128,8 @@ export function useEditorSnapshotHistory({
   fillKeyframes,
   restoreFillState,
   rotationOffset,
-  setRotationOffset,
   rotationAxisKeyframes,
   setRotationAxisKeyframes,
-  setPreviewRotationY,
   keyLightColor,
   keyLightIntensity,
   keyLightPosition,
@@ -252,14 +245,17 @@ export function useEditorSnapshotHistory({
     })
     setQualityKeyframes(nextSnapshot.qualityKeyframes)
     setInnerScaleKeyframes(nextSnapshot.innerScaleKeyframes)
-    setObjectScale(nextSnapshot.objectScale)
-    setObjectScaleAxes(nextSnapshot.objectScaleAxes ?? { x: 1, y: 1, z: 1 })
-    setMoveOffset(nextSnapshot.moveOffset)
+    setTransformBaseSettings({
+      objectScale: nextSnapshot.objectScale,
+      objectScaleAxes: nextSnapshot.objectScaleAxes ?? { x: 1, y: 1, z: 1 },
+      moveOffset: nextSnapshot.moveOffset,
+      rotationOffset: nextSnapshot.rotationOffset,
+      previewRotationY: null,
+      isScaleLocked: true,
+    })
     setMoveKeyframes(nextSnapshot.moveKeyframes)
     restoreFillState(nextSnapshot)
-    setRotationOffset(nextSnapshot.rotationOffset)
     setRotationAxisKeyframes(nextSnapshot.rotationAxisKeyframes)
-    setPreviewRotationY(null)
     setLightBaseSettings({
       keyLightColor: nextSnapshot.keyLightColor,
       keyLightIntensity: nextSnapshot.keyLightIntensity,

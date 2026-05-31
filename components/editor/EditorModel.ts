@@ -103,6 +103,15 @@ export type LightSettings = {
   keyLightSoftness: number
 }
 
+export type TransformSettings = {
+  objectScale: number
+  objectScaleAxes: LightPosition
+  moveOffset: LightPosition
+  rotationOffset: LightPosition
+  previewRotationY: number | null
+  isScaleLocked: boolean
+}
+
 export type TimeKeyframe = { time: number }
 
 export type EditorSnapshot = {

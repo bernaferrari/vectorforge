@@ -4,7 +4,6 @@ import { Dispatch, SetStateAction, useCallback } from "react"
 import type { MaterialPresetId } from "../3d/MaterialPresets"
 import {
   GEOMETRY_QUALITY_DEFAULT,
-  LightPosition,
   MaterialSettings,
   MotionTrackId,
   SCALE_DEFAULT,
@@ -12,6 +11,7 @@ import {
   Vector3Keyframe,
   type GeometrySettings,
   type LightSettings,
+  type TransformSettings,
 } from "./EditorModel"
 import type { MotionRecipe } from "./MotionRecipes"
 import {
@@ -29,10 +29,8 @@ interface RecipeApplicationOptions {
   setShapes: Dispatch<SetStateAction<ShapeStop[]>>
   setMaterialBaseSettings: (settings: MaterialSettings) => void
   setGeometryBaseSettings: Dispatch<SetStateAction<GeometrySettings>>
-  setRotationOffset: Dispatch<SetStateAction<LightPosition>>
+  setTransformBaseSettings: Dispatch<SetStateAction<TransformSettings>>
   setRotationAxisKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
-  setObjectScale: Dispatch<SetStateAction<number>>
-  setMoveOffset: Dispatch<SetStateAction<LightPosition>>
   setMoveKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   setQualityKeyframes: Dispatch<SetStateAction<ScalarKeyframe[]>>
   setInnerScaleKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
@@ -52,10 +50,8 @@ export function useRecipeApplication({
   setShapes,
   setMaterialBaseSettings,
   setGeometryBaseSettings,
-  setRotationOffset,
+  setTransformBaseSettings,
   setRotationAxisKeyframes,
-  setObjectScale,
-  setMoveOffset,
   setMoveKeyframes,
   setQualityKeyframes,
   setInnerScaleKeyframes,
@@ -95,16 +91,21 @@ export function useRecipeApplication({
         innerElementScale: { x: 1, y: 1, z: 1 },
       })
 
-      setRotationOffset({ x: 0, y: 0, z: 0 })
+      setTransformBaseSettings({
+        objectScale: SCALE_DEFAULT,
+        objectScaleAxes: { x: 1, y: 1, z: 1 },
+        moveOffset: {
+          x: recipe.translateX ?? 0,
+          y: recipe.translateY ?? 0,
+          z: recipe.translateZ ?? 0,
+        },
+        rotationOffset: { x: 0, y: 0, z: 0 },
+        previewRotationY: null,
+        isScaleLocked: true,
+      })
       setRotationAxisKeyframes(
         normalizeRecipeRotationKeyframes(recipe, duration)
       )
-      setObjectScale(SCALE_DEFAULT)
-      setMoveOffset({
-        x: recipe.translateX ?? 0,
-        y: recipe.translateY ?? 0,
-        z: recipe.translateZ ?? 0,
-      })
       setMoveKeyframes([])
       setQualityKeyframes([])
       setInnerScaleKeyframes([])
@@ -129,10 +130,8 @@ export function useRecipeApplication({
       setShapes,
       setMaterialBaseSettings,
       setGeometryBaseSettings,
-      setRotationOffset,
+      setTransformBaseSettings,
       setRotationAxisKeyframes,
-      setObjectScale,
-      setMoveOffset,
       setMoveKeyframes,
       setQualityKeyframes,
       setInnerScaleKeyframes,
