@@ -49,6 +49,24 @@ const setKeyframeEasing = <T extends { id: string; easing: EasingType }>(
     setKeyframeEasingById(prev, keyframeId, easing)
   )
 
+const addVectorKeyframe = (
+  setter: KeyframeArraySetter<Vector3Keyframe>,
+  idPrefix: string,
+  value: LightPosition,
+  time: number,
+  duration: number
+) =>
+  updateKeyframes(setter, (prev) =>
+    upsertVectorKeyframeAtTime({
+      keyframes: prev,
+      idPrefix,
+      value,
+      time,
+      duration,
+      createIfMissing: true,
+    })
+  )
+
 export const styleKeyframeTimeFromId = (keyframeId: string) =>
   Number(keyframeId.replace(STYLE_ROW_PREFIX, ""))
 
@@ -231,39 +249,30 @@ export const addPropertyRowKeyframe = (
       )
       break
     case "light-position":
-      setters.setKeyLightPositionKeyframes((prev) =>
-        upsertVectorKeyframeAtTime({
-          keyframes: prev,
-          idPrefix: "light-position",
-          value: values.activeKeyLightPosition,
-          time,
-          duration: values.duration,
-          createIfMissing: true,
-        })
+      addVectorKeyframe(
+        setters.setKeyLightPositionKeyframes,
+        "light-position",
+        values.activeKeyLightPosition,
+        time,
+        values.duration
       )
       break
     case "rotation":
-      setters.setRotationAxisKeyframes((prev) =>
-        upsertVectorKeyframeAtTime({
-          keyframes: prev,
-          idPrefix: "rotation",
-          value: values.activeRotationOffset,
-          time,
-          duration: values.duration,
-          createIfMissing: true,
-        })
+      addVectorKeyframe(
+        setters.setRotationAxisKeyframes,
+        "rotation",
+        values.activeRotationOffset,
+        time,
+        values.duration
       )
       break
     case "move":
-      setters.setMoveKeyframes((prev) =>
-        upsertVectorKeyframeAtTime({
-          keyframes: prev,
-          idPrefix: "move",
-          value: values.activeMoveOffset,
-          time,
-          duration: values.duration,
-          createIfMissing: true,
-        })
+      addVectorKeyframe(
+        setters.setMoveKeyframes,
+        "move",
+        values.activeMoveOffset,
+        time,
+        values.duration
       )
       break
   }
