@@ -15,17 +15,9 @@ export function useInitialShapeSequence({
   const onInitialShapesRef = useLatestRef(onInitialShapes)
 
   useEffect(() => {
-    let cancelled = false
-
-    void (async () => {
-      const initialShapes = await createDefaultShapeSequence()
-      if (!cancelled && initialShapes.length > 0) {
-        onInitialShapesRef.current(initialShapes)
-      }
-    })()
-
-    return () => {
-      cancelled = true
+    const initialShapes = createDefaultShapeSequence()
+    if (initialShapes.length > 0) {
+      onInitialShapesRef.current(initialShapes)
     }
   }, [])
 }

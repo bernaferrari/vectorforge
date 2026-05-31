@@ -1,9 +1,5 @@
-import {
-  fetchMaterialSymbolIcon,
-  PRESET_ICONS,
-  type PresetIcon,
-} from "./IconLibrary"
-import { MATERIAL_WIPE_READY_PAIRS } from "./MaterialWipePairs"
+import { PRESET_ICONS, type PresetIcon } from "./IconLibrary"
+import { appendVectorForgeSlash } from "../3d/SvgText"
 import {
   DEFAULT_TRANSITION_END,
   DEFAULT_TRANSITION_START,
@@ -11,8 +7,12 @@ import {
 } from "./TimelineModel"
 import { clampNumber, createEditorId, quantizeTimeToFrame } from "./EditorModel"
 
-export const createShapeStop = (icon: PresetIcon, time: number): ShapeStop => ({
-  id: createEditorId("shape"),
+export const createShapeStop = (
+  icon: PresetIcon,
+  time: number,
+  id = createEditorId("shape")
+): ShapeStop => ({
+  id,
   time,
   iconId: icon.id,
   iconName: icon.name,
@@ -29,6 +29,27 @@ export const createShapeStop = (icon: PresetIcon, time: number): ShapeStop => ({
   transitionStart: DEFAULT_TRANSITION_START,
   transitionEnd: DEFAULT_TRANSITION_END,
 })
+
+const ACCOUNT_CIRCLE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M234-276q51-39 114-61.5T480-360q69 0 132 22.5T726-276q35-41 54.5-93T800-480q0-133-93.5-226.5T480-800q-133 0-226.5 93.5T160-480q0 59 19.5 111t54.5 93Zm246-164q-59 0-99.5-40.5T340-580q0-59 40.5-99.5T480-720q59 0 99.5 40.5T620-580q0 59-40.5 99.5T480-440Zm0 360q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q53 0 100-15.5t86-44.5q-39-29-86-44.5T480-280q-53 0-100 15.5T294-220q39 29 86 44.5T480-160Zm0-360q26 0 43-17t17-43q0-26-17-43t-43-17q-26 0-43 17t-17 43q0 26 17 43t43 17Zm0-60Zm0 360Z"/></svg>`
+
+const DEFAULT_WIPE_PAIR: [PresetIcon, PresetIcon] = [
+  {
+    id: "material-symbol-outlined-account_circle-default",
+    name: "Account Circle",
+    defaultTint: "#4285F4",
+    category: "Material Symbols",
+    tags: ["account_circle", "outlined"],
+    svgContent: ACCOUNT_CIRCLE_SVG,
+  },
+  {
+    id: "material-symbol-outlined-account_circle_off-default",
+    name: "Account Circle Off",
+    defaultTint: "#4285F4",
+    category: "Material Symbols",
+    tags: ["account_circle_off", "account_circle", "outlined", "slash"],
+    svgContent: appendVectorForgeSlash(ACCOUNT_CIRCLE_SVG),
+  },
+]
 
 export const replaceShapeIcon = (
   shapes: ShapeStop[],
@@ -150,30 +171,12 @@ export const removeShapeStopById = (
   }
 }
 
-export const createDefaultShapeSequence = async () => {
-  const pair = MATERIAL_WIPE_READY_PAIRS[0]
-  try {
-    const [enabled, disabled] = await Promise.all([
-      fetchMaterialSymbolIcon(pair.enabled, "outlined"),
-      fetchMaterialSymbolIcon(pair.disabled, "outlined", {
-        syntheticOffSlash: true,
-      }),
-    ])
-
-    return [
-      {
-        ...createShapeStop(enabled, 1.0),
-        transitionType: "wipe" as const,
-        wipeDirection: { x: 0.707, y: -0.707 },
-        easing: "ease-in-out" as const,
-      },
-      createShapeStop(disabled, 4.0),
-    ]
-  } catch {
-    const heart = PRESET_ICONS.find((i) => i.id === "heart")
-    const star = PRESET_ICONS.find((i) => i.id === "star")
-    return heart && star
-      ? [createShapeStop(heart, 1.0), createShapeStop(star, 4.0)]
-      : []
-  }
-}
+export const createDefaultShapeSequence = () => [
+  {
+    ...createShapeStop(DEFAULT_WIPE_PAIR[0], 1.0, "shape-default-enabled"),
+    transitionType: "wipe" as const,
+    wipeDirection: { x: 0.707, y: -0.707 },
+    easing: "ease-in-out" as const,
+  },
+  createShapeStop(DEFAULT_WIPE_PAIR[1], 4.0, "shape-default-disabled"),
+]

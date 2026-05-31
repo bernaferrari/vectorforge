@@ -1,11 +1,12 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import type { PresetIcon } from "./IconLibrary"
 import type { ShapeStop } from "./TimelineModel"
 import {
   addShapeStopAtTime,
   applyShapeWipePair,
+  createDefaultShapeSequence,
   removeShapeStopById,
   replaceShapeIcon,
 } from "./ShapeSequenceModel"
@@ -19,8 +20,16 @@ export function useShapeSequenceEditor({
   currentTime,
   duration,
 }: ShapeSequenceEditorOptions) {
-  const [shapes, setShapes] = useState<ShapeStop[]>([])
-  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null)
+  const initialShapesRef = useRef<ShapeStop[] | null>(null)
+  if (!initialShapesRef.current) {
+    initialShapesRef.current = createDefaultShapeSequence()
+  }
+  const [shapes, setShapes] = useState<ShapeStop[]>(
+    () => initialShapesRef.current ?? []
+  )
+  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(
+    () => initialShapesRef.current?.[0]?.id ?? null
+  )
   const [openShapePicker, setOpenShapePicker] = useState<string | null>(null)
   const [activeRecipeId, setActiveRecipeId] = useState<string | null>(
     "google-metal"
