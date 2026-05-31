@@ -11,20 +11,15 @@ import * as THREE from "three"
 import { gradientStopsSignature, pathRebuildSignature } from "./SvgSceneUtils"
 import { updateGroupMaterialSettings } from "./SvgMaterialState"
 import { updateSceneLights } from "./SvgSceneSetup"
-import {
-  bindSvgSceneResize,
-  createSvgSceneResources,
-  disposeSvgSceneResources,
-} from "./SvgSceneLifecycle"
 import { SvgCanvasOverlays } from "./SvgCanvasOverlays"
 import type { SvgCanvasProps, SvgCanvasRef } from "./SvgTypes"
-import { bindSvgCanvasPointerInteractions } from "./SvgCanvasInteractions"
 import { useCanvasRecorder } from "./useCanvasRecorder"
 import { useSvgCanvasImperativeHandle } from "./useSvgCanvasImperativeHandle"
 import { useSvgCanvasLiveRefs } from "./useSvgCanvasLiveRefs"
 import { useSvgModelGroups } from "./useSvgModelGroups"
 import { useSvgRenderLoop } from "./useSvgRenderLoop"
 import { useSvgViewNudge } from "./useSvgViewNudge"
+import { useSvgCanvasSceneLifecycle } from "./useSvgCanvasSceneLifecycle"
 import { useTransformGizmoInteractions } from "./useTransformGizmoInteractions"
 import { useSvgCanvasSceneRefs } from "./useSvgCanvasSceneRefs"
 export type {
@@ -175,83 +170,46 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>(
       targetZoomRef.current = props.zoom
     }, [props.zoom])
 
-    // Effect: Initializes Scene, Camera, Renderer, and Lights
-    useEffect(() => {
-      if (!canvasRef.current || !containerRef.current) return
-
-      const canvas = canvasRef.current
-      const container = containerRef.current
-      const { renderer, studioEnvironment } = createSvgSceneResources({
-        canvas,
-        container,
-        props,
-        refs: {
-          sceneRef,
-          rendererRef,
-          cameraRef,
-          animationStartRef,
-          pivotGroupRef,
-          centerMarkerRef,
-          transformGizmoGroupRef,
-          transformGizmoHitObjectsRef,
-          rotationDragOverlayRef,
-          clipPlaneARef,
-          clipPlaneBRef,
-          ambientLightRef,
-          keyLightRef,
-          softboxLightRef,
-          rimLightRef,
-        },
-      })
-      const unbindCanvasPointerInteractions = bindSvgCanvasPointerInteractions({
-        canvas,
-        hitTransformGizmo,
-        beginTransformScale,
-        beginTransformMove,
-        beginTransformRotate,
-        setTransformGizmoHighlight,
-        applyViewRotationDelta,
-        isDraggingRef,
-        isInertiaActiveRef,
-        hasViewDragMovedRef,
-        activePointerIdRef,
-        pointerStartPositionRef,
-        previousPointerPositionRef,
-        rotationVelocityRef,
-        viewInertiaEnabledRef,
-        targetZoomRef,
-        currentZoomRef,
-        animationStartRef,
-        iconAGroupRef,
-        iconBGroupRef,
-        onZoomChange: props.onZoomChange,
-      })
-      const unbindSceneResize = bindSvgSceneResize({
-        container,
-        cameraRef,
-        rendererRef,
-        currentZoomRef,
-      })
-
-      return () => {
-        unbindSceneResize()
-        unbindCanvasPointerInteractions()
-        disposeSvgSceneResources({
-          refs: {
-            transformGizmoGroupRef,
-            rotationDragOverlayRef,
-            transformGizmoHitObjectsRef,
-          },
-          renderer,
-          studioEnvironment,
-        })
-        cancelViewNudge()
-        if (resetViewFrameRef.current !== null) {
-          cancelAnimationFrame(resetViewFrameRef.current)
-          resetViewFrameRef.current = null
-        }
-      }
-    }, [props.onZoomChange])
+    useSvgCanvasSceneLifecycle({
+      props,
+      canvasRef,
+      containerRef,
+      sceneRef,
+      rendererRef,
+      cameraRef,
+      animationStartRef,
+      ambientLightRef,
+      keyLightRef,
+      softboxLightRef,
+      rimLightRef,
+      pivotGroupRef,
+      iconAGroupRef,
+      iconBGroupRef,
+      centerMarkerRef,
+      clipPlaneARef,
+      clipPlaneBRef,
+      transformGizmoGroupRef,
+      transformGizmoHitObjectsRef,
+      rotationDragOverlayRef,
+      resetViewFrameRef,
+      isDraggingRef,
+      isInertiaActiveRef,
+      hasViewDragMovedRef,
+      activePointerIdRef,
+      pointerStartPositionRef,
+      previousPointerPositionRef,
+      rotationVelocityRef,
+      viewInertiaEnabledRef,
+      targetZoomRef,
+      currentZoomRef,
+      hitTransformGizmo,
+      beginTransformScale,
+      beginTransformMove,
+      beginTransformRotate,
+      setTransformGizmoHighlight,
+      applyViewRotationDelta,
+      cancelViewNudge,
+    })
 
     // Effect: Updates Lights
     useEffect(() => {
