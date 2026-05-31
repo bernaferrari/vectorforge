@@ -1,5 +1,4 @@
 import * as THREE from "three"
-import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader.js"
 import { createThreeMaterial } from "./MaterialPresets"
 import {
   applyGradientVertexColors,
@@ -23,41 +22,9 @@ import {
   containsInvalidPositions,
   finiteNumber,
   minContourDimension,
-  normalizeSvgToIconViewBox,
 } from "./SvgGeometry"
+import { parseSvgShapes, type ParsedSvgShapes } from "./SvgParsing"
 import type { SvgCanvasProps } from "./SvgTypes"
-
-type ParsedSvgPath = ReturnType<SVGLoader["parse"]>["paths"][number]
-
-type ParsedSvgShapes = {
-  paths: ParsedSvgPath[]
-  shapesByPath: THREE.Shape[][]
-}
-
-const PARSED_SVG_SHAPE_CACHE_LIMIT = 48
-const parsedSvgShapeCache = new Map<string, ParsedSvgShapes>()
-
-const rememberParsedSvgShapes = (cacheKey: string, parsed: ParsedSvgShapes) => {
-  if (parsedSvgShapeCache.size >= PARSED_SVG_SHAPE_CACHE_LIMIT) {
-    const oldestKey = parsedSvgShapeCache.keys().next().value
-    if (oldestKey !== undefined) parsedSvgShapeCache.delete(oldestKey)
-  }
-  parsedSvgShapeCache.set(cacheKey, parsed)
-  return parsed
-}
-
-const parseSvgShapes = (svgContent: string) => {
-  const normalizedSvg = normalizeSvgToIconViewBox(svgContent)
-  const cached = parsedSvgShapeCache.get(normalizedSvg)
-  if (cached) return cached
-
-  const loader = new SVGLoader()
-  const svgData = loader.parse(normalizedSvg)
-  return rememberParsedSvgShapes(normalizedSvg, {
-    paths: svgData.paths,
-    shapesByPath: svgData.paths.map((path) => SVGLoader.createShapes(path)),
-  })
-}
 
 export const buildSvgIconGroup = ({
   svgContent,

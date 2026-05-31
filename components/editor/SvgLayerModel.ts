@@ -1,5 +1,4 @@
-import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader.js"
-import { normalizeSvgToIconViewBox } from "../3d/SvgGeometry"
+import { parseSvgShapes } from "../3d/SvgParsing"
 export {
   ALL_LAYERS_ID,
   completePathOverride,
@@ -35,12 +34,11 @@ export const extractSvgLayers = (svgContent: string): SvgLayer[] => {
   if (!svgContent.trim()) return []
 
   try {
-    const loader = new SVGLoader()
-    const parsed = loader.parse(normalizeSvgToIconViewBox(svgContent))
+    const parsed = parseSvgShapes(svgContent)
     const layers: SvgLayer[] = []
 
     parsed.paths.forEach((path, pathIndex) => {
-      const shapes = SVGLoader.createShapes(path)
+      const shapes = parsed.shapesByPath[pathIndex] ?? []
       // Only treat a name as "explicit" when it actually came from the SVG
       // (data-name / aria-label / id). Auto-generated fallbacks must NOT be
       // suffixed with a sibling index, otherwise you get "Layer 1 1", "Layer 1 2".
