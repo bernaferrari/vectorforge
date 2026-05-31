@@ -8,7 +8,7 @@ import { InspectorSidebar } from "./InspectorSidebar"
 import { TimelineDock } from "./TimelineDock"
 import { ViewportStage } from "./ViewportStage"
 
-type AppLayoutViewProps = {
+export type AppLayoutViewProps = {
   topBarProps: ComponentProps<typeof AppTopBar>
   viewportProps: Omit<ComponentProps<typeof ViewportStage>, "ref">
   inspectorProps: ComponentProps<typeof InspectorSidebar>
