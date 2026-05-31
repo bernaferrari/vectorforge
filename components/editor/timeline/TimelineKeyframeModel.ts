@@ -186,9 +186,12 @@ export const clampTrackKeyframeBlockDelta = ({
   duration: number
 }) => {
   if (initial.length === 0) return 0
-  const times = initial.map((keyframe) => keyframe.time)
-  const minTime = Math.min(...times)
-  const maxTime = Math.max(...times)
+  let minTime = Infinity
+  let maxTime = -Infinity
+  initial.forEach((keyframe) => {
+    minTime = Math.min(minTime, keyframe.time)
+    maxTime = Math.max(maxTime, keyframe.time)
+  })
   if (minTime + delta < 0) return -minTime
   if (maxTime + delta > duration) return duration - maxTime
   return delta
@@ -237,34 +240,31 @@ export const snapTrackKeyframeBlockDelta = ({
   targets: TrackKeyframeBlockSnapTarget[]
   duration: number
 }) => {
-  const snapCandidate = initial.reduce<{
-    delta: number
-    distance: number
-  } | null>((closest, keyframe) => {
+  let snapDelta = 0
+  let snapDistance = Infinity
+
+  initial.forEach((keyframe) => {
     const movedTime = keyframe.time + delta
-    const target = targets.reduce<{
-      time: number
-      distance: number
-    } | null>((nearest, item) => {
+    let targetTime = 0
+    let targetDistance = Infinity
+
+    targets.forEach((item) => {
       const distance = Math.abs(item.time - movedTime)
-      if (distance > item.threshold) return nearest
-      if (!nearest || distance < nearest.distance)
-        return { time: item.time, distance }
-      return nearest
-    }, null)
+      if (distance > item.threshold || distance >= targetDistance) return
+      targetTime = item.time
+      targetDistance = distance
+    })
 
-    if (!target) return closest
-    const candidateDelta = target.time - movedTime
-    if (!closest || target.distance < closest.distance) {
-      return { delta: candidateDelta, distance: target.distance }
+    if (targetDistance < snapDistance) {
+      snapDelta = targetTime - movedTime
+      snapDistance = targetDistance
     }
-    return closest
-  }, null)
+  })
 
-  return snapCandidate
+  return Number.isFinite(snapDistance)
     ? clampTrackKeyframeBlockDelta({
         initial,
-        delta: delta + snapCandidate.delta,
+        delta: delta + snapDelta,
         duration,
       })
     : delta
