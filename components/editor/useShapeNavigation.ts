@@ -10,6 +10,7 @@ export type ShapeNavigationModel = {
   svgContent: string
   index: number
   total: number
+  canNavigate: boolean
   onPrevious: () => void
   onNext: () => void
 }
@@ -26,12 +27,15 @@ export function useShapeNavigation({
   setSelectedLayerId: Dispatch<SetStateAction<string>>
 }): ShapeNavigationModel | undefined {
   return useMemo(() => {
-    const selectedIndex = sortedShapes.findIndex(
+    if (sortedShapes.length === 0) return undefined
+
+    const explicitSelectedIndex = sortedShapes.findIndex(
       (shape) => shape.id === selectedShapeId
     )
-    if (selectedIndex < 0 || sortedShapes.length <= 1) return undefined
+    const selectedIndex = explicitSelectedIndex >= 0 ? explicitSelectedIndex : 0
 
     const selectShapeAt = (index: number) => {
+      if (sortedShapes.length <= 1) return
       const next =
         sortedShapes[(index + sortedShapes.length) % sortedShapes.length]
       if (!next) return
@@ -45,6 +49,7 @@ export function useShapeNavigation({
       svgContent: sortedShapes[selectedIndex]?.svgContent ?? "",
       index: selectedIndex,
       total: sortedShapes.length,
+      canNavigate: sortedShapes.length > 1,
       onPrevious: () => selectShapeAt(selectedIndex - 1),
       onNext: () => selectShapeAt(selectedIndex + 1),
     }

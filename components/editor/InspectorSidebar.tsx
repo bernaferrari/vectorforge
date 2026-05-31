@@ -56,29 +56,31 @@ function ShapeNavRow({
           {shapeNavigation.label}
         </span>
       </div>
-      <div className="flex shrink-0 items-center gap-0.5">
-        <button
-          type="button"
-          aria-label="Previous shape"
-          title="Previous shape"
-          onClick={shapeNavigation.onPrevious}
-          className="flex size-7 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none"
-        >
-          <ChevronLeft className="size-3.5" />
-        </button>
-        <span className="min-w-[30px] text-center font-mono text-[10px] text-muted-foreground/70 tabular-nums">
-          {shapeNavigation.index + 1}/{shapeNavigation.total}
-        </span>
-        <button
-          type="button"
-          aria-label="Next shape"
-          title="Next shape"
-          onClick={shapeNavigation.onNext}
-          className="flex size-7 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none"
-        >
-          <ChevronRight className="size-3.5" />
-        </button>
-      </div>
+      {shapeNavigation.canNavigate ? (
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            aria-label="Previous shape"
+            title="Previous shape"
+            onClick={shapeNavigation.onPrevious}
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none"
+          >
+            <ChevronLeft className="size-3.5" />
+          </button>
+          <span className="min-w-[30px] text-center font-mono text-[10px] text-muted-foreground/70 tabular-nums">
+            {shapeNavigation.index + 1}/{shapeNavigation.total}
+          </span>
+          <button
+            type="button"
+            aria-label="Next shape"
+            title="Next shape"
+            onClick={shapeNavigation.onNext}
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none"
+          >
+            <ChevronRight className="size-3.5" />
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -93,7 +95,7 @@ function InspectorContextHeader({
   transformProps: SidebarTransformProps
 }) {
   const { shapeNavigation } = transformProps
-  const showShapeNav = !!shapeNavigation && shapeNavigation.total > 1
+  const showShapeNav = !!shapeNavigation
   const showLayers = transformProps.selectedShapeLayers.length >= 2
   if (!showShapeNav && !showLayers) return null
 
