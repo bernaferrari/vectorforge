@@ -3,6 +3,7 @@
 import type { Dispatch, SetStateAction } from "react"
 import type { MaterialPresetId } from "../3d/MaterialPresets"
 import type {
+  GeometrySettings,
   LightPosition,
   MaterialSettings,
   MotionTrackId,
@@ -22,14 +23,7 @@ type EditorRecipeSurfaceOptions = {
   setShapes: Dispatch<SetStateAction<ShapeStop[]>>
   setSelectedShapeId: (shapeId: string | null) => void
   setMaterialBaseSettings: (settings: MaterialSettings) => void
-  setExtrusionDepth: Dispatch<SetStateAction<number>>
-  setBevelEnabled: Dispatch<SetStateAction<boolean>>
-  setBevelThickness: Dispatch<SetStateAction<number>>
-  setBevelSize: Dispatch<SetStateAction<number>>
-  setBevelSegments: Dispatch<SetStateAction<number>>
-  setGeometryQuality: Dispatch<SetStateAction<number>>
-  setLayerSpacing: Dispatch<SetStateAction<number>>
-  setInnerElementScale: Dispatch<SetStateAction<LightPosition>>
+  setGeometryBaseSettings: Dispatch<SetStateAction<GeometrySettings>>
   setRotationOffset: Dispatch<SetStateAction<LightPosition>>
   setRotationAxisKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   setObjectScale: Dispatch<SetStateAction<number>>

@@ -85,6 +85,17 @@ export type MaterialKeyframe = {
   easing: EasingType
 }
 
+export type GeometrySettings = {
+  extrusionDepth: number
+  bevelEnabled: boolean
+  bevelThickness: number
+  bevelSize: number
+  bevelSegments: number
+  geometryQuality: number
+  layerSpacing: number
+  innerElementScale: LightPosition
+}
+
 export type TimeKeyframe = { time: number }
 
 export type EditorSnapshot = {

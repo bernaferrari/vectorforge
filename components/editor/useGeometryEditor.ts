@@ -1,53 +1,111 @@
 "use client"
 
-import { useState } from "react"
+import {
+  useCallback,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react"
 import {
   EXTRUDE_DEFAULT,
   GEOMETRY_QUALITY_DEFAULT,
+  type GeometrySettings,
   type ScalarKeyframe,
   type Vector3Keyframe,
 } from "./EditorModel"
 
+const DEFAULT_GEOMETRY_SETTINGS: GeometrySettings = {
+  extrusionDepth: EXTRUDE_DEFAULT,
+  bevelEnabled: true,
+  bevelThickness: 0.15,
+  bevelSize: 0.08,
+  bevelSegments: 3,
+  geometryQuality: GEOMETRY_QUALITY_DEFAULT,
+  layerSpacing: 0.8,
+  innerElementScale: { x: 1, y: 1, z: 1 },
+}
+
+const applySettingValue = <T>(value: SetStateAction<T>, previous: T) =>
+  typeof value === "function" ? (value as (current: T) => T)(previous) : value
+
 export function useGeometryEditor() {
   const [wireframe] = useState(false)
-  const [extrusionDepth, setExtrusionDepth] = useState(EXTRUDE_DEFAULT)
-  const [bevelEnabled, setBevelEnabled] = useState(true)
-  const [bevelThickness, setBevelThickness] = useState(0.15)
-  const [bevelSize, setBevelSize] = useState(0.08)
-  const [bevelSegments, setBevelSegments] = useState(3)
-  const [geometryQuality, setGeometryQuality] = useState(
-    GEOMETRY_QUALITY_DEFAULT
+  const [baseGeometrySettings, setGeometryBaseSettings] = useState(
+    DEFAULT_GEOMETRY_SETTINGS
   )
   const [qualityKeyframes, setQualityKeyframes] = useState<ScalarKeyframe[]>([])
-  const [layerSpacing, setLayerSpacing] = useState(0.8)
-  const [innerElementScale, setInnerElementScale] = useState({
-    x: 1,
-    y: 1,
-    z: 1,
-  })
   const [innerScaleKeyframes, setInnerScaleKeyframes] = useState<
     Vector3Keyframe[]
   >([])
 
+  const setGeometrySetting = useCallback(
+    <Key extends keyof GeometrySettings>(
+      key: Key,
+      value: SetStateAction<GeometrySettings[Key]>
+    ) => {
+      setGeometryBaseSettings((settings) => ({
+        ...settings,
+        [key]: applySettingValue(value, settings[key]),
+      }))
+    },
+    []
+  )
+
+  const setExtrusionDepth: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => setGeometrySetting("extrusionDepth", value),
+    [setGeometrySetting]
+  )
+  const setBevelEnabled: Dispatch<SetStateAction<boolean>> = useCallback(
+    (value) => setGeometrySetting("bevelEnabled", value),
+    [setGeometrySetting]
+  )
+  const setBevelThickness: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => setGeometrySetting("bevelThickness", value),
+    [setGeometrySetting]
+  )
+  const setBevelSize: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => setGeometrySetting("bevelSize", value),
+    [setGeometrySetting]
+  )
+  const setBevelSegments: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => setGeometrySetting("bevelSegments", value),
+    [setGeometrySetting]
+  )
+  const setGeometryQuality: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => setGeometrySetting("geometryQuality", value),
+    [setGeometrySetting]
+  )
+  const setLayerSpacing: Dispatch<SetStateAction<number>> = useCallback(
+    (value) => setGeometrySetting("layerSpacing", value),
+    [setGeometrySetting]
+  )
+  const setInnerElementScale: Dispatch<
+    SetStateAction<GeometrySettings["innerElementScale"]>
+  > = useCallback(
+    (value) => setGeometrySetting("innerElementScale", value),
+    [setGeometrySetting]
+  )
+
   return {
     wireframe,
-    extrusionDepth,
+    setGeometryBaseSettings,
+    extrusionDepth: baseGeometrySettings.extrusionDepth,
     setExtrusionDepth,
-    bevelEnabled,
+    bevelEnabled: baseGeometrySettings.bevelEnabled,
     setBevelEnabled,
-    bevelThickness,
+    bevelThickness: baseGeometrySettings.bevelThickness,
     setBevelThickness,
-    bevelSize,
+    bevelSize: baseGeometrySettings.bevelSize,
     setBevelSize,
-    bevelSegments,
+    bevelSegments: baseGeometrySettings.bevelSegments,
     setBevelSegments,
-    geometryQuality,
+    geometryQuality: baseGeometrySettings.geometryQuality,
     setGeometryQuality,
     qualityKeyframes,
     setQualityKeyframes,
-    layerSpacing,
+    layerSpacing: baseGeometrySettings.layerSpacing,
     setLayerSpacing,
-    innerElementScale,
+    innerElementScale: baseGeometrySettings.innerElementScale,
     setInnerElementScale,
     innerScaleKeyframes,
     setInnerScaleKeyframes,

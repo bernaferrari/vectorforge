@@ -5,6 +5,7 @@ import {
   clampNumber,
   EditorSnapshot,
   FillMode,
+  GeometrySettings,
   LightPosition,
   MAX_UNDO_STEPS,
   MaterialKeyframe,
@@ -39,23 +40,16 @@ interface EditorSnapshotHistoryOptions {
   setMaterialKeyframes: Dispatch<SetStateAction<MaterialKeyframe[]>>
   setMaterialBaseSettings: (settings: MaterialSettings) => void
   extrusionDepth: number
-  setExtrusionDepth: Dispatch<SetStateAction<number>>
   bevelEnabled: boolean
-  setBevelEnabled: Dispatch<SetStateAction<boolean>>
   bevelThickness: number
-  setBevelThickness: Dispatch<SetStateAction<number>>
   bevelSize: number
-  setBevelSize: Dispatch<SetStateAction<number>>
   bevelSegments: number
-  setBevelSegments: Dispatch<SetStateAction<number>>
   geometryQuality: number
-  setGeometryQuality: Dispatch<SetStateAction<number>>
   qualityKeyframes: ScalarKeyframe[]
   setQualityKeyframes: Dispatch<SetStateAction<ScalarKeyframe[]>>
   layerSpacing: number
-  setLayerSpacing: Dispatch<SetStateAction<number>>
   innerElementScale: LightPosition
-  setInnerElementScale: Dispatch<SetStateAction<LightPosition>>
+  setGeometryBaseSettings: Dispatch<SetStateAction<GeometrySettings>>
   innerScaleKeyframes: Vector3Keyframe[]
   setInnerScaleKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   objectScale: number
@@ -112,23 +106,16 @@ export function useEditorSnapshotHistory({
   setMaterialKeyframes,
   setMaterialBaseSettings,
   extrusionDepth,
-  setExtrusionDepth,
   bevelEnabled,
-  setBevelEnabled,
   bevelThickness,
-  setBevelThickness,
   bevelSize,
-  setBevelSize,
   bevelSegments,
-  setBevelSegments,
   geometryQuality,
-  setGeometryQuality,
   qualityKeyframes,
   setQualityKeyframes,
   layerSpacing,
-  setLayerSpacing,
   innerElementScale,
-  setInnerElementScale,
+  setGeometryBaseSettings,
   innerScaleKeyframes,
   setInnerScaleKeyframes,
   objectScale,
@@ -258,15 +245,17 @@ export function useEditorSnapshotHistory({
     setMaterialPreset(nextSnapshot.materialPreset)
     setMaterialBaseSettings(nextSnapshot.materialSettings)
     setMaterialKeyframes(nextSnapshot.materialKeyframes)
-    setExtrusionDepth(nextSnapshot.extrusionDepth)
-    setBevelEnabled(nextSnapshot.bevelEnabled)
-    setBevelThickness(nextSnapshot.bevelThickness)
-    setBevelSize(nextSnapshot.bevelSize)
-    setBevelSegments(nextSnapshot.bevelSegments)
-    setGeometryQuality(nextSnapshot.geometryQuality)
+    setGeometryBaseSettings({
+      extrusionDepth: nextSnapshot.extrusionDepth,
+      bevelEnabled: nextSnapshot.bevelEnabled,
+      bevelThickness: nextSnapshot.bevelThickness,
+      bevelSize: nextSnapshot.bevelSize,
+      bevelSegments: nextSnapshot.bevelSegments,
+      geometryQuality: nextSnapshot.geometryQuality,
+      layerSpacing: nextSnapshot.layerSpacing,
+      innerElementScale: nextSnapshot.innerElementScale,
+    })
     setQualityKeyframes(nextSnapshot.qualityKeyframes)
-    setLayerSpacing(nextSnapshot.layerSpacing)
-    setInnerElementScale(nextSnapshot.innerElementScale)
     setInnerScaleKeyframes(nextSnapshot.innerScaleKeyframes)
     setObjectScale(nextSnapshot.objectScale)
     setObjectScaleAxes(nextSnapshot.objectScaleAxes ?? { x: 1, y: 1, z: 1 })

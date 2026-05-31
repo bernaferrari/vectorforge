@@ -10,6 +10,7 @@ import {
   SCALE_DEFAULT,
   ScalarKeyframe,
   Vector3Keyframe,
+  type GeometrySettings,
 } from "./EditorModel"
 import type { MotionRecipe } from "./MotionRecipes"
 import {
@@ -26,14 +27,7 @@ interface RecipeApplicationOptions {
   applyRecipeFill: (recipe: MotionRecipe) => void
   setShapes: Dispatch<SetStateAction<ShapeStop[]>>
   setMaterialBaseSettings: (settings: MaterialSettings) => void
-  setExtrusionDepth: Dispatch<SetStateAction<number>>
-  setBevelEnabled: Dispatch<SetStateAction<boolean>>
-  setBevelThickness: Dispatch<SetStateAction<number>>
-  setBevelSize: Dispatch<SetStateAction<number>>
-  setBevelSegments: Dispatch<SetStateAction<number>>
-  setGeometryQuality: Dispatch<SetStateAction<number>>
-  setLayerSpacing: Dispatch<SetStateAction<number>>
-  setInnerElementScale: Dispatch<SetStateAction<LightPosition>>
+  setGeometryBaseSettings: Dispatch<SetStateAction<GeometrySettings>>
   setRotationOffset: Dispatch<SetStateAction<LightPosition>>
   setRotationAxisKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   setObjectScale: Dispatch<SetStateAction<number>>
@@ -58,14 +52,7 @@ export function useRecipeApplication({
   applyRecipeFill,
   setShapes,
   setMaterialBaseSettings,
-  setExtrusionDepth,
-  setBevelEnabled,
-  setBevelThickness,
-  setBevelSize,
-  setBevelSegments,
-  setGeometryQuality,
-  setLayerSpacing,
-  setInnerElementScale,
+  setGeometryBaseSettings,
   setRotationOffset,
   setRotationAxisKeyframes,
   setObjectScale,
@@ -100,14 +87,16 @@ export function useRecipeApplication({
         emissiveIntensity: recipe.emissiveIntensity,
       })
 
-      setExtrusionDepth(recipe.extrusionDepth)
-      setBevelEnabled(recipe.bevelEnabled)
-      setBevelThickness(recipe.bevelThickness)
-      setBevelSize(recipe.bevelSize)
-      setBevelSegments(recipe.bevelSegments)
-      setGeometryQuality(recipe.geometryQuality ?? GEOMETRY_QUALITY_DEFAULT)
-      setLayerSpacing(recipe.layerSpacing)
-      setInnerElementScale({ x: 1, y: 1, z: 1 })
+      setGeometryBaseSettings({
+        extrusionDepth: recipe.extrusionDepth,
+        bevelEnabled: recipe.bevelEnabled,
+        bevelThickness: recipe.bevelThickness,
+        bevelSize: recipe.bevelSize,
+        bevelSegments: recipe.bevelSegments,
+        geometryQuality: recipe.geometryQuality ?? GEOMETRY_QUALITY_DEFAULT,
+        layerSpacing: recipe.layerSpacing,
+        innerElementScale: { x: 1, y: 1, z: 1 },
+      })
 
       setRotationOffset({ x: 0, y: 0, z: 0 })
       setRotationAxisKeyframes(
@@ -139,14 +128,7 @@ export function useRecipeApplication({
       setMaterialPreset,
       setShapes,
       setMaterialBaseSettings,
-      setExtrusionDepth,
-      setBevelEnabled,
-      setBevelThickness,
-      setBevelSize,
-      setBevelSegments,
-      setGeometryQuality,
-      setLayerSpacing,
-      setInnerElementScale,
+      setGeometryBaseSettings,
       setRotationOffset,
       setRotationAxisKeyframes,
       setObjectScale,
