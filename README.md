@@ -1,29 +1,29 @@
 # VectorForge
 
-VectorForge is a browser-based 3D motion editor for turning SVG icons into animated, extruded 3D assets. It combines a Three.js viewport, a keyframe timeline, Material Symbols import, Figma-style color controls, and export tooling aimed at handoff to web video or Android Filament pipelines.
+VectorForge is a browser-based 3D motion editor for turning SVG and Material Symbols icons into animated, extruded 3D assets. It combines a Three.js viewport, a keyframe timeline, Figma-style color controls, shape-to-shape wipe pairs, and export tooling for web and Android Filament handoff.
 
-The product goal is simple: make icon motion feel editable like a professional design tool instead of a parameter demo. The UI favors direct manipulation, compact inspector controls, timeline breakpoints, and predictable visual feedback.
+The product direction is intentionally closer to Figma, Framer, After Effects, Premiere, and DaVinci Resolve than to a parameter playground: the user should see an object, adjust it directly, add breakpoints only when they want animation, and understand what will export.
 
-## Highlights
+## What It Does
 
-- **SVG to 3D conversion** with extrusion, bevels, rounded edges, mesh color sampling, and PBR materials.
-- **Interactive 3D viewport** with drag rotation, optional inertia, zoom, reset, center-of-mass debugging, and a compact orientation gizmo.
-- **Motion timeline** with draggable shape clips, morph windows, keyframes, easing, snapping, zoom controls, timeline duration editing, and right-click context menus.
-- **Shape sequencing** for transitioning from one icon to another, including fade, wipe, and cut-style morph windows.
-- **Figma-inspired color picker** with solid, linear, radial, conic, and mesh gradient modes, editable stops, preset palettes, and keyframe support.
-- **Material/finish system** for satin, glass, chrome, pearl, lacquer, frost, and custom PBR tuning.
-- **Material Symbols import** using Google Material Symbols SVG sources, with style controls for outlined, rounded, and sharp symbol families.
-- **Export tools** for WebM recording, glTF download, and an Android Filament integration reference.
-- **Light and dark editor themes** using shadcn/Tailwind semantic color tokens.
+- Converts SVG paths into extruded Three.js geometry with safe bevel and depth limits.
+- Imports Material Symbols and includes curated wipe pairs for common slash/unslash transitions.
+- Animates icon sequences on a timeline with shape clips, transition windows, property rows, keyframes, easing, snapping, zoom, and context menus.
+- Renders a direct-manipulation 3D viewport with rotation, inertia, reset view, orientation controls, center-point debugging, and a transform gizmo.
+- Edits style through compact inspector controls for fill, finish, geometry, transform, and light.
+- Supports solid color and mesh gradients in the main color picker. Linear, radial, and conic modes are still present in code behind `SHOW_EXPERIMENTAL_GRADIENT_TYPES`.
+- Exports WebM recordings and glTF/GLB-oriented assets, with React and Android Filament reference snippets.
+- Uses light and dark editor themes through Tailwind/shadcn semantic tokens.
 
 ## Tech Stack
 
-- **Next.js 16** with React 19
-- **Three.js** for scene rendering, SVG loading, geometry generation, and glTF export
-- **Tailwind CSS 4** and shadcn-style UI primitives
-- **Base UI** for popovers and interaction primitives
-- **next-themes** for editor theme switching
-- **TypeScript** throughout the editor surface
+- **Next.js 16** and **React 19**
+- **Three.js** for SVG parsing, geometry generation, scene rendering, recording, and glTF export
+- **Tailwind CSS 4** with shadcn-style primitives
+- **Base UI** interaction primitives
+- **next-themes** for theme switching
+- **TypeScript** across app, editor, timeline, and renderer logic
+- **oxlint** and **oxfmt** for linting and formatting
 
 ## Getting Started
 
@@ -33,119 +33,172 @@ Install dependencies:
 pnpm install
 ```
 
-Run the local editor:
+Start the editor:
 
 ```bash
 pnpm dev
 ```
 
-Open:
+Open the local app:
 
 ```text
 http://localhost:3000
 ```
 
-Run a type check:
+Run the core quality gates:
 
 ```bash
 pnpm typecheck
-```
-
-Build for production:
-
-```bash
+pnpm lint
+pnpm format:check
 pnpm build
 ```
 
-## Project Structure
-
-```text
-app/
-  globals.css              Theme tokens, Tailwind setup, Material Symbols font classes
-  layout.tsx               App shell and font preloads
-  page.tsx                 Editor entry point
-
-components/
-  3d/
-    SvgCanvas.tsx          Three.js viewport, SVG extrusion, animation preview, export hooks
-    MaterialPresets.ts     PBR finish presets and material factory
-  editor/
-    AppLayout.tsx          Main editor layout, inspector state, playback, property wiring
-    Timeline.tsx           Shape sequence, keyframes, easing, duration, zoom, context menus
-    IconLibrary.ts         Preset icons and Material Symbols SVG import
-    ExportModal.tsx        WebM/glTF export UI and Filament reference
-    MotionRecipes.ts       Starter motion presets
-  ui/
-    color-picker.tsx       Solid/gradient/mesh color editor
-    button.tsx, popover.tsx, tabs.tsx, switch.tsx, slider.tsx
-
-lib/
-  drag-events.ts           Shared pointer/mouse drag helpers
-  utils.ts                 Class merging helper
-```
-
-## Editor Model
-
-VectorForge separates the editor into four main concepts:
-
-1. **Shape sequence**
-   Shapes are arranged on the top timeline row. Each shape is a clip. Adjacent clips can have a transition window that defines how one icon becomes the next.
-
-2. **Timeline properties**
-   Animated values are represented as breakpoint rows. The current model supports shape transitions, fill, extrusion, rotation, scale, move, and lighting-related properties.
-
-3. **Inspector properties**
-   The right inspector edits the selected shape and active properties. Properties only create animation data when the user explicitly adds breakpoints.
-
-4. **Renderer state**
-   `SvgCanvas` receives the evaluated state for the current time and renders the extruded icon with the active material, lighting, transform, and transition settings.
-
-## Timeline Interaction
-
-- Click the time readout in the top-left timeline rail to edit max duration.
-- Use `+`, `-`, and `0` to zoom the timeline in, out, and back to fit.
-- Enable or disable snap from the magnet control.
-- Right-click timeline space, clips, transitions, or keyframes for contextual actions.
-- Click a property breakpoint in the left rail to add/remove it at the playhead.
-- Click normal timeline space to clear selected keyframes.
-- Drag shape clips to retime them.
-- Drag transition handles to control morph duration.
-
-## Color and Materials
-
-The color system treats solid color as the simplest gradient case, so the editor can later support richer interpolation without changing the user model. Mesh gradients use a 3x3 palette-style sampling path for high-saturation icon finishes.
-
-Materials are app-level finish presets, not native Filament semantic material types. Exported glTF uses standard PBR fields such as metallic factor, roughness factor, emissive factor, double-sided rendering, and vertex colors where applicable.
-
-## Export
-
-The export modal supports:
-
-- **WebM recording** from the canvas stream.
-- **glTF export** of the current 3D icon scene.
-- **Android Filament reference code** for loading exported glTF assets in an Android renderer.
-
-The Android target is intentional: exported material data should remain standard glTF PBR so Filament can consume it without editor-specific shader semantics.
-
-## Development Notes
-
-- Prefer shadcn/Tailwind semantic tokens such as `bg-background`, `bg-popover`, `bg-muted`, `text-foreground`, `text-muted-foreground`, and `border-border`.
-- Avoid hard-coded black/white UI colors except where they are part of the rendered 3D viewport or actual asset preview.
-- Keep timeline and inspector interactions connected: if a value is keyframed, edits should update the breakpoint at the playhead or create one only after the user opted into animation.
-- Keep controls compact. This is an editor, not a landing page.
-- There is intentionally no ESLint workflow in this project.
+`next/font` fetches Google font assets during production builds. If the environment blocks network access, `pnpm build` can fail even when the source is valid.
 
 ## Scripts
 
 ```bash
-pnpm dev        # Start the Next.js development server
-pnpm build      # Build the app
-pnpm start      # Run the production build
-pnpm typecheck  # Run TypeScript checks
-pnpm format     # Format the codebase with oxfmt
-pnpm lint       # Lint the codebase with oxlint
+pnpm dev           # Start Next.js with Turbopack
+pnpm build         # Production build
+pnpm start         # Serve the production build
+pnpm typecheck     # TypeScript validation
+pnpm lint          # oxlint
+pnpm lint:fix      # oxlint --fix
+pnpm format        # oxfmt --write
+pnpm format:check  # oxfmt --check
 ```
 
-## Status
+There is no ESLint workflow in this project. Use oxlint/oxfmt.
 
-VectorForge is actively evolving. The current focus is editor ergonomics: making timeline behavior, material controls, color editing, and viewport manipulation feel coherent, fast, and professional.
+## Product Model
+
+VectorForge is organized around four user-facing concepts:
+
+1. **Shape sequence**
+   The top timeline row contains icon clips. Adjacent clips can overlap through transition windows, so an icon can wipe, fade, cut, or morph toward the next one.
+
+2. **Timeline properties**
+   Animated properties live in timeline rows. Shape, style, geometry, rotation, scale, move, and light-related values can be keyed and edited from the timeline or inspector.
+
+3. **Inspector controls**
+   The right panel edits the selected shape and the current evaluated state. Property edits stay static unless the user opts into animation by adding a breakpoint.
+
+4. **Renderer state**
+   The editor evaluates the current time, shape transition, material, color, transform, layer overrides, and lighting, then passes that resolved state into the Three.js canvas.
+
+## Architecture Map
+
+```text
+app/
+  layout.tsx                  Root shell, fonts, providers
+  page.tsx                    Editor entry point
+  globals.css                 Tailwind theme tokens and Material Symbols classes
+
+components/3d/
+  SvgCanvas.tsx               Canvas boundary and imperative export surface
+  SvgModelBuilder.ts          Builds icon groups from parsed SVG paths
+  SvgShapeGeometry.ts         Safe ExtrudeGeometry creation and invalid-position checks
+  SvgExtrudeSettings.ts       Bevel/depth safety rules
+  SvgPathMaterial.ts          Per-path material creation, clipping, opacity, polygon offset
+  SvgColor.ts                 Solid/mesh gradient sampling and vertex colors
+  SvgSceneLifecycle.ts        Scene/camera/light lifecycle helpers
+  TransformGizmo*.ts          3D transform gizmo rendering and interactions
+  DiagonalWipe.ts             Wipe transition math and clipping state
+
+components/editor/
+  AppLayout.tsx               High-level editor composition and state wiring
+  AppLayoutView.tsx           Pure layout shell
+  useEditorBaseState.ts       Root editor state groups
+  useEditorRenderState.ts     Evaluated render data for current time
+  useEditor*Surface.ts        Props/adapters for viewport, timeline, inspector, export
+  ShapeSequenceModel.ts       Shape clip creation, deletion, and wipe-pair application
+  TimelineModel.ts            Shared timeline/keyframe types and interpolation
+  TimelineProperty*Model.ts   Property row and keyframe modeling
+  FinishRegistry.ts           Finish labels, previews, and default material settings
+  Export*.tsx/ts              Export dialog, code snippets, scene snapshots
+
+components/editor/timeline/
+  Timeline.tsx                Timeline shell
+  useTimelineController.ts    Timeline controller composition
+  Timeline*Model.ts           Pure timeline geometry, snapping, menus, keyframes
+  Timeline*Row/Clip.tsx       Shape, track, and property lane rendering
+  ShapePicker*.tsx            Material Symbols and preset icon picker
+  WipePairPreview.tsx         Slash/unslash pair previews
+
+components/ui/
+  color-picker.tsx            Solid/mesh color picker
+  color-gradient-*.tsx/ts     Gradient rail, stops, presets, and pure stop operations
+  color-solid-*.tsx/ts        Solid color editor
+  button/dialog/popover/...   shadcn-style primitives
+
+lib/
+  drag-events.ts              Shared drag binding and pointer helpers
+  use-latest-ref.ts           Stable latest-value refs for interaction callbacks
+  utils.ts                    Tailwind class merging
+```
+
+## Timeline Behavior
+
+- Click the timeline time readout to edit the duration.
+- Use `+`, `-`, and `0` to zoom in, zoom out, and fit.
+- Toggle snapping from the magnet control.
+- Right-click timeline space, clips, transitions, and keyframes for contextual actions.
+- Click a property's left-rail diamond to add or remove a breakpoint at the playhead.
+- Drag keyframes or clips to retime them.
+- Drag transition handles to resize the morph window.
+- Press Space to play or pause.
+
+## Viewport Behavior
+
+- Drag the viewport to rotate the camera/object view.
+- Optional inertia keeps rotation moving after release.
+- Reset view animates back to the default view.
+- The orientation widget gives quick 45-degree nudges.
+- The transform gizmo supports direct manipulation of rotation, position, and scale.
+- Center-point debugging marks the object center, not the screen center.
+
+## Color, Finish, and Materials
+
+The visible color picker intentionally keeps the main choice simple:
+
+- **Solid** for one-color icons.
+- **Mesh** for high-saturation multi-point palettes.
+
+The code still contains linear, radial, and conic gradient support behind `SHOW_EXPERIMENTAL_GRADIENT_TYPES` in [color-gradient-mode-toggle.tsx](components/ui/color-gradient-mode-toggle.tsx), but those modes are hidden until their 3D application is good enough.
+
+Finish presets are editor-level labels. They are not custom Filament material semantics. Exported assets use standard glTF PBR fields such as `metallicFactor`, `roughnessFactor`, `emissiveFactor`, double-sided rendering, and vertex colors when mesh color is active.
+
+## Export
+
+The export dialog is built with the local shadcn-style dialog and tabs. It currently provides:
+
+- **Assets**: WebM recording and glTF export actions.
+- **React**: a React Three Fiber reference snippet.
+- **Android**: Gradle and Kotlin snippets for loading the exported GLB with Filament.
+
+Android/Filament is a first-class handoff target. The intended asset path in the sample code is:
+
+```text
+app/src/main/assets/exports/icon.glb
+```
+
+## Development Principles
+
+- Use Tailwind/shadcn semantic tokens: `bg-background`, `bg-popover`, `bg-muted`, `text-foreground`, `text-muted-foreground`, and `border-border`.
+- Avoid hard-coded black/white UI values except for the 3D viewport or asset preview itself.
+- Keep editor controls compact and scannable. This is a production tool surface, not a marketing page.
+- Prefer pure model helpers for timeline math, keyframe changes, gradient stop operations, SVG geometry safety, and material creation.
+- Keep interaction code centralized through shared drag helpers in [drag-events.ts](lib/drag-events.ts).
+- Do not create animation data as a side effect of ordinary property edits. Animation starts when the user adds a breakpoint.
+- Preserve export compatibility by keeping generated material data standard glTF PBR where possible.
+
+## Current Focus
+
+The app is actively being refined toward a professional editor standard. The main engineering priorities are:
+
+- Keep extracting large surfaces into focused model, hook, and component modules.
+- Make timeline and inspector behavior feel connected and predictable.
+- Keep 3D interactions fast during drag-heavy operations.
+- Keep color/material controls powerful without making the right inspector dense.
+- Keep export output production-ready for React and Android Filament handoff.
