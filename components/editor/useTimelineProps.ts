@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, type Dispatch, type SetStateAction } from "react"
+import { useCallback, useMemo, type Dispatch, type SetStateAction } from "react"
 import { PRESET_ICONS } from "./IconLibrary"
 import { TIMELINE_WIPE_DIRECTIONS } from "./timeline/TimelineWipeDirections"
 import type {
@@ -92,6 +92,26 @@ export function useTimelineProps({
   onOpenShapePicker,
   markCustom,
 }: UseTimelinePropsArgs): TimelineProps {
+  const handleShapesChange = useCallback(
+    (nextShapes: ShapeStop[]) => {
+      markCustom()
+      onShapesChange(nextShapes)
+    },
+    [markCustom, onShapesChange]
+  )
+
+  const handleShapeEasingChange = useCallback(
+    (id: string, easing: EasingType) => {
+      markCustom()
+      onShapesChange((currentShapes) =>
+        currentShapes.map((shape) =>
+          shape.id === id ? { ...shape, easing } : shape
+        )
+      )
+    },
+    [markCustom, onShapesChange]
+  )
+
   return useMemo(
     () => ({
       duration,
@@ -118,20 +138,10 @@ export function useTimelineProps({
       shapes,
       selectedShapeId,
       onSelectShape,
-      onShapesChange: (nextShapes: ShapeStop[]) => {
-        markCustom()
-        onShapesChange(nextShapes)
-      },
+      onShapesChange: handleShapesChange,
       onAddShape,
       onRemoveShape,
-      onShapeEasingChange: (id: string, easing: EasingType) => {
-        markCustom()
-        onShapesChange((currentShapes) =>
-          currentShapes.map((shape) =>
-            shape.id === id ? { ...shape, easing } : shape
-          )
-        )
-      },
+      onShapeEasingChange: handleShapeEasingChange,
       shapeOptions: PRESET_ICONS,
       onShapeIconChange,
       onShapeWipePairChange,
@@ -166,16 +176,16 @@ export function useTimelineProps({
       shapes,
       selectedShapeId,
       onSelectShape,
-      onShapesChange,
+      handleShapesChange,
       onAddShape,
       onRemoveShape,
+      handleShapeEasingChange,
       onShapeIconChange,
       onShapeWipePairChange,
       onUploadShape,
       onShapeBlendChange,
       openShapePicker,
       onOpenShapePicker,
-      markCustom,
     ]
   )
 }
