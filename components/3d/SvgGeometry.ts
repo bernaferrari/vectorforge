@@ -3,38 +3,6 @@ import * as THREE from "three"
 export const finiteNumber = (value: unknown, fallback: number) =>
   typeof value === "number" && Number.isFinite(value) ? value : fallback
 
-export const normalizeSvgToIconViewBox = (svgContent: string) => {
-  const viewBoxMatch = svgContent.match(/viewBox=["']([^"']+)["']/i)
-  if (!viewBoxMatch) return svgContent
-
-  const [minX, minY, width, height] = viewBoxMatch[1]
-    .trim()
-    .split(/[\s,]+/)
-    .map(Number)
-  if (
-    ![minX, minY, width, height].every(Number.isFinite) ||
-    width <= 0 ||
-    height <= 0
-  ) {
-    return svgContent
-  }
-
-  if (minX === 0 && minY === 0 && width === 24 && height === 24) {
-    return svgContent
-  }
-
-  const inner = svgContent
-    .replace(/^<svg\b[^>]*>/i, "")
-    .replace(/<\/svg>\s*$/i, "")
-    .trim()
-  const scaleX = 24 / width
-  const scaleY = 24 / height
-  const translateX = -minX * scaleX
-  const translateY = -minY * scaleY
-
-  return `<svg viewBox="0 0 24 24"><g transform="matrix(${scaleX} 0 0 ${scaleY} ${translateX} ${translateY})">${inner}</g></svg>`
-}
-
 export const containsInvalidPositions = (geometry: THREE.BufferGeometry) => {
   const position = geometry.getAttribute("position")
   if (!position) return true

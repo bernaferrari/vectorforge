@@ -1,4 +1,8 @@
 import type { CSSProperties } from "react"
+import {
+  appendVectorForgeSlash,
+  normalizeSvgToIconViewBox,
+} from "../3d/SvgText"
 
 export interface PresetIcon {
   id: string
@@ -48,48 +52,6 @@ const titleFromMaterialSymbolName = (name: string) =>
     .filter(Boolean)
     .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
     .join(" ")
-
-const normalizeSvgToIconViewBox = (svgContent: string) => {
-  const viewBoxMatch = svgContent.match(/viewBox=["']([^"']+)["']/i)
-  if (!viewBoxMatch) return svgContent
-
-  const [minX, minY, width, height] = viewBoxMatch[1]
-    .trim()
-    .split(/[\s,]+/)
-    .map(Number)
-  if (
-    ![minX, minY, width, height].every(Number.isFinite) ||
-    width <= 0 ||
-    height <= 0
-  ) {
-    return svgContent
-  }
-
-  if (minX === 0 && minY === 0 && width === 24 && height === 24) {
-    return svgContent
-  }
-
-  const inner = svgContent
-    .replace(/^<svg\b[^>]*>/i, "")
-    .replace(/<\/svg>\s*$/i, "")
-    .trim()
-  const scaleX = 24 / width
-  const scaleY = 24 / height
-  const translateX = -minX * scaleX
-  const translateY = -minY * scaleY
-
-  return `<svg viewBox="0 0 24 24"><g transform="matrix(${scaleX} 0 0 ${scaleY} ${translateX} ${translateY})">${inner}</g></svg>`
-}
-
-const appendVectorForgeSlash = (svgContent: string) => {
-  const normalized = normalizeSvgToIconViewBox(svgContent)
-  const inner = normalized
-    .replace(/^<svg\b[^>]*>/i, "")
-    .replace(/<\/svg>\s*$/i, "")
-    .trim()
-
-  return `<svg viewBox="0 0 24 24">${inner}<path data-vectorforge-slash="true" d="M2.25 3.79 2.79 3.25 20.79 21.25 20.25 21.79z"/></svg>`
-}
 
 const materialSymbolUrl = (name: string, style: MaterialSymbolStyle) => {
   const folder = materialSymbolFolder[style]

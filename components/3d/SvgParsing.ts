@@ -1,6 +1,6 @@
 import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader.js"
 import type * as THREE from "three"
-import { normalizeSvgToIconViewBox } from "./SvgGeometry"
+import { normalizeSvgToIconViewBox } from "./SvgText"
 
 export type ParsedSvgPath = ReturnType<SVGLoader["parse"]>["paths"][number]
 
