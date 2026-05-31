@@ -3,13 +3,19 @@ import type { MutableRefObject } from "react"
 import type { TransformAxis, TransformGizmoHandle } from "./TransformGizmo"
 import type { SvgCanvasProps } from "./SvgTypes"
 import {
+  hasViewDragExceededThreshold,
+  nextWheelZoom,
+  shouldStartViewInertia,
+  viewRotationVelocityFromPointerDelta,
+  type RotationVelocity,
+} from "./SvgPointerInteractionModel"
+import {
   isPrimaryButtonReleased,
   safelyReleasePointerCapture,
   safelySetPointerCapture,
 } from "@/lib/drag-events"
 
 type PointerPosition = { x: number; y: number }
-type RotationVelocity = { x: number; y: number }
 
 export type SvgCanvasPointerBindings = {
   canvas: HTMLCanvasElement
@@ -37,8 +43,6 @@ export type SvgCanvasPointerBindings = {
   iconBGroupRef: MutableRefObject<THREE.Group | null>
   onZoomChange?: SvgCanvasProps["onZoomChange"]
 }
-
-const clampZoom = (zoom: number) => Math.max(0.3, Math.min(3, zoom))
 
 export const bindSvgCanvasPointerInteractions = ({
   canvas,
@@ -99,11 +103,10 @@ export const bindSvgCanvasPointerInteractions = ({
     }
 
     hasViewDragMovedRef.current = false
-    const speed = Math.hypot(
-      rotationVelocityRef.current.x,
-      rotationVelocityRef.current.y
-    )
-    if (viewInertiaEnabledRef.current && speed > 0.002) {
+    if (
+      viewInertiaEnabledRef.current &&
+      shouldStartViewInertia(rotationVelocityRef.current)
+    ) {
       isInertiaActiveRef.current = true
     } else {
       isInertiaActiveRef.current = false
@@ -123,33 +126,30 @@ export const bindSvgCanvasPointerInteractions = ({
       return
     }
 
-    const totalDeltaX = event.clientX - pointerStartPositionRef.current.x
-    const totalDeltaY = event.clientY - pointerStartPositionRef.current.y
+    const currentPointer = { x: event.clientX, y: event.clientY }
     if (!hasViewDragMovedRef.current) {
-      if (Math.hypot(totalDeltaX, totalDeltaY) < 3) return
+      if (
+        !hasViewDragExceededThreshold(
+          pointerStartPositionRef.current,
+          currentPointer
+        )
+      )
+        return
       hasViewDragMovedRef.current = true
       isInertiaActiveRef.current = false
       rotationVelocityRef.current = { x: 0, y: 0 }
-      previousPointerPositionRef.current = {
-        x: event.clientX,
-        y: event.clientY,
-      }
+      previousPointerPositionRef.current = currentPointer
       return
     }
 
-    const deltaX = event.clientX - previousPointerPositionRef.current.x
-    const deltaY = event.clientY - previousPointerPositionRef.current.y
-    const velocity = {
-      x: deltaY * 0.006,
-      y: deltaX * 0.006,
-    }
+    const velocity = viewRotationVelocityFromPointerDelta(
+      previousPointerPositionRef.current,
+      currentPointer
+    )
 
     rotationVelocityRef.current = velocity
     applyViewRotationDelta(velocity)
-    previousPointerPositionRef.current = {
-      x: event.clientX,
-      y: event.clientY,
-    }
+    previousPointerPositionRef.current = currentPointer
   }
 
   const handlePointerCancel = (event: PointerEvent) => {
@@ -169,8 +169,7 @@ export const bindSvgCanvasPointerInteractions = ({
   const handleWheel = (event: WheelEvent) => {
     event.preventDefault()
     if (!onZoomChange) return
-    const direction = event.deltaY > 0 ? -1 : 1
-    const newZoom = clampZoom(targetZoomRef.current + direction * 0.08)
+    const newZoom = nextWheelZoom(targetZoomRef.current, event.deltaY)
     targetZoomRef.current = newZoom
     onZoomChange(Number(newZoom.toFixed(2)))
   }
