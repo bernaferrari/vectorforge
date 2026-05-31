@@ -23,8 +23,8 @@ import {
   applyRotationDragOverlay,
   createRotationDragWorldFrame,
   getRotationDragScreenFrame,
+  nextRotationDragUpdate,
   rotationDialAngleFromPointer,
-  shortestAngleDelta,
   updateRotationDragSector,
   updateRotationDragTooltip,
 } from "./TransformGizmoDrag"
@@ -275,30 +275,23 @@ export function useTransformGizmoInteractions({
         clientY: ev.clientY,
       })
       if (angle === null) return
-      const stepDelta = shortestAngleDelta(angle, drag.lastAngle)
-      const delta = drag.sweepDelta + stepDelta
-      const next = Math.round(drag.startValue + delta)
-      rotationDragScreenRef.current = {
-        ...drag,
-        lastAngle: angle,
-        sweepDelta: delta,
-      }
-      const displayAngle = drag.startAngle + delta
-      setRotationDragOverlay(axis, displayAngle)
+      const update = nextRotationDragUpdate(drag, angle)
+      rotationDragScreenRef.current = update.frame
+      setRotationDragOverlay(axis, update.displayAngle)
       if (rotationDragOverlayRef.current) {
         updateRotationDragSector({
           overlay: rotationDragOverlayRef.current,
           startAngleDeg: drag.startAngle,
-          currentAngleDeg: displayAngle,
+          currentAngleDeg: update.displayAngle,
         })
       }
       updateRotationDragTooltip({
         tooltip: rotationDragTooltipRef.current,
-        delta,
+        delta: update.delta,
         clientX: ev.clientX,
         clientY: ev.clientY,
       })
-      onRotationAxisChangeRef.current?.(axis, next)
+      onRotationAxisChangeRef.current?.(axis, update.value)
     })
   }
 

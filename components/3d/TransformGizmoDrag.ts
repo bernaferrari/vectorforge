@@ -18,11 +18,38 @@ export type RotationDragWorldFrame = {
   scale: THREE.Vector3
 }
 
+export type RotationDragUpdate = {
+  frame: RotationDragScreenFrame
+  delta: number
+  displayAngle: number
+  value: number
+}
+
 export const shortestAngleDelta = (angle: number, origin: number) => {
   let delta = angle - origin
   while (delta > 180) delta -= 360
   while (delta < -180) delta += 360
   return delta
+}
+
+export const nextRotationDragUpdate = (
+  drag: RotationDragScreenFrame,
+  angle: number
+): RotationDragUpdate => {
+  const stepDelta = shortestAngleDelta(angle, drag.lastAngle)
+  const delta = drag.sweepDelta + stepDelta
+  const displayAngle = drag.startAngle + delta
+
+  return {
+    frame: {
+      ...drag,
+      lastAngle: angle,
+      sweepDelta: delta,
+    },
+    delta,
+    displayAngle,
+    value: Math.round(drag.startValue + delta),
+  }
 }
 
 const localAxisVector = (axis: TransformAxis) =>
