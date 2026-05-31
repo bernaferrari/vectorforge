@@ -1,4 +1,5 @@
 import * as THREE from "three"
+import { finiteNumber } from "./SvgGeometry"
 import { TRANSFORM_GIZMO_SIZE, type TransformAxis } from "./TransformGizmo"
 
 export type RotationDragScreenFrame = {
@@ -16,9 +17,6 @@ export type RotationDragWorldFrame = {
   quaternion: THREE.Quaternion
   scale: THREE.Vector3
 }
-
-const finiteNumber = (value: unknown, fallback: number) =>
-  typeof value === "number" && Number.isFinite(value) ? value : fallback
 
 export const shortestAngleDelta = (angle: number, origin: number) => {
   let delta = angle - origin

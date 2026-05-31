@@ -1,7 +1,5 @@
 import { MaterialPresetId } from "./MaterialPresets"
-
-const finiteNumber = (value: unknown, fallback: number) =>
-  typeof value === "number" && Number.isFinite(value) ? value : fallback
+import { finiteNumber } from "./SvgGeometry"
 
 export const clamp01Number = (value: unknown, fallback = 0) =>
   Math.max(0, Math.min(1, finiteNumber(value, fallback)))

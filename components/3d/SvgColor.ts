@@ -1,8 +1,6 @@
 import * as THREE from "three"
+import { finiteNumber } from "./SvgGeometry"
 import type { GradientStop, GradientType } from "./SvgTypes"
-
-const finiteNumber = (value: unknown, fallback: number) =>
-  typeof value === "number" && Number.isFinite(value) ? value : fallback
 
 const GOOGLE_MESH_PALETTE = [
   ["#FF9900", "#FF360A", "#D13AB3"],
