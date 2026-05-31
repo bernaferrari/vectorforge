@@ -22,7 +22,6 @@ type EditorRecipeSurfaceOptions = {
   setMaterialPreset: Dispatch<SetStateAction<MaterialPresetId>>
   applyRecipeFill: (recipe: MotionRecipe) => void
   setShapes: Dispatch<SetStateAction<ShapeStop[]>>
-  setSelectedShapeId: (shapeId: string | null) => void
   setMaterialBaseSettings: (settings: MaterialSettings) => void
   setGeometryBaseSettings: Dispatch<SetStateAction<GeometrySettings>>
   setTransformBaseSettings: Dispatch<SetStateAction<TransformSettings>>
@@ -38,16 +37,13 @@ type EditorRecipeSurfaceOptions = {
   setIsPlaying: Dispatch<SetStateAction<boolean>>
 }
 
-export function useEditorRecipeSurface({
-  setSelectedShapeId,
-  ...recipeOptions
-}: EditorRecipeSurfaceOptions) {
+export function useEditorRecipeSurface(
+  recipeOptions: EditorRecipeSurfaceOptions
+) {
   const applyRecipe = useRecipeApplication(recipeOptions)
 
   useInitialRecipeBoot({
     applyRecipe,
-    setShapes: recipeOptions.setShapes,
-    setSelectedShapeId,
   })
 
   return applyRecipe

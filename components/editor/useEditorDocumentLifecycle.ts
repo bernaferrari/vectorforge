@@ -24,7 +24,6 @@ export function useEditorDocumentLifecycle(editor: EditorBaseState) {
     setMaterialPreset: material.setMaterialPreset,
     applyRecipeFill: fill.applyRecipeFill,
     setShapes: shapes.setShapes,
-    setSelectedShapeId: shapes.setSelectedShapeId,
     setMaterialBaseSettings: material.setMaterialBaseSettings,
     setGeometryBaseSettings: geometry.setGeometryBaseSettings,
     setTransformBaseSettings: transform.setTransformBaseSettings,
