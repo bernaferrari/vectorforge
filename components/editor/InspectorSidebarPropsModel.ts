@@ -72,7 +72,6 @@ export type UseInspectorSidebarPropsArgs = {
   moveKeyframesLength: number
   activeMoveOffset: LightPosition
   selectedShapeLayers: SvgLayer[]
-  selectedLayer: SvgLayer | null
   selectedLayerId: string
   selectedLayerOverride: PathOverride | null
   shapeNavigation?: SidebarTransformProps["shapeNavigation"]
@@ -161,7 +160,6 @@ export type TransformSidebarPropsArgs = Pick<
   | "moveKeyframesLength"
   | "activeMoveOffset"
   | "selectedShapeLayers"
-  | "selectedLayer"
   | "selectedLayerId"
   | "selectedLayerOverride"
   | "shapeNavigation"

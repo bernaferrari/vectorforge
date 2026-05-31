@@ -3,37 +3,23 @@
 import { Eye, EyeOff, Layers } from "lucide-react"
 import { memo } from "react"
 import { cn } from "@/lib/utils"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import type { PathOverride } from "../3d/SvgTypes"
 import { ALL_LAYERS_ID, type SvgLayer } from "./SvgLayerModel"
 
 type LayerSwitcherProps = {
   layers: SvgLayer[]
-  selectedLayer: SvgLayer | null
   selectedLayerId: string
   selectedLayerOverride: PathOverride | null
   onSelectLayer: (id: string) => void
   onToggleVisibility: () => void
 }
 
-function LayerSwatch({ color }: { color?: string | null }) {
-  return (
-    <span
-      className="size-3 shrink-0 rounded-[3px] ring-1 ring-black/25 ring-inset"
-      style={{ backgroundColor: color || "transparent" }}
-    />
-  )
-}
-
+// Layers in this app are anonymous SVG paths — no real names, no meaningful
+// thumbnail. The switcher is a labeled segmented control so its purpose is
+// obvious: a Layers icon + caption on the left, then [All · 1 · 2 · 3]. The eye
+// toggle only appears when a single layer is targeted.
 function LayerSwitcherComponent({
   layers,
-  selectedLayer,
   selectedLayerId,
   selectedLayerOverride,
   onSelectLayer,
@@ -44,67 +30,66 @@ function LayerSwitcherComponent({
 
   const isAllLayers = selectedLayerId === ALL_LAYERS_ID
   const visible = selectedLayerOverride?.visible ?? true
-  const activeLabel = isAllLayers
-    ? "All layers"
-    : (selectedLayer?.name ?? "Layer")
+
+  const chip = (key: string, label: string, active: boolean, value: string) => (
+    <button
+      key={key}
+      type="button"
+      aria-pressed={active}
+      onClick={() => onSelectLayer(value)}
+      className={cn(
+        "flex h-6 min-w-6 shrink-0 items-center justify-center rounded-[6px] px-2 text-[11px] font-medium tabular-nums transition-colors focus-visible:outline-none",
+        active
+          ? "bg-foreground/[0.10] text-foreground shadow-[inset_0_0_0_1px_rgba(140,140,160,0.18)]"
+          : "text-muted-foreground hover:text-foreground"
+      )}
+    >
+      {label}
+    </button>
+  )
 
   return (
-    <div className="mb-2 flex items-center gap-1.5">
-      <Select
-        value={selectedLayerId}
-        onValueChange={(next) => {
-          if (next) onSelectLayer(next)
-        }}
-      >
-        <SelectTrigger
-          size="sm"
-          className="h-8 min-w-0 flex-1 rounded-lg border border-border/50 bg-foreground/[0.04] px-2.5 text-[12px] text-foreground transition-colors hover:bg-foreground/[0.07] focus-visible:ring-0"
-        >
-          <SelectValue>
-            <span className="flex min-w-0 items-center gap-2">
-              {isAllLayers ? (
-                <Layers className="size-3.5 shrink-0 text-muted-foreground" />
-              ) : (
-                <LayerSwatch color={selectedLayer?.color} />
-              )}
-              <span className="truncate font-medium">{activeLabel}</span>
-            </span>
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent align="start">
-          <SelectItem value={ALL_LAYERS_ID}>
-            <Layers className="size-3.5 shrink-0 text-muted-foreground" />
-            <span>All layers</span>
-          </SelectItem>
-          {layers.map((layer) => (
-            <SelectItem key={layer.id} value={layer.id}>
-              <LayerSwatch color={layer.color} />
-              <span className="truncate">{layer.name}</span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <div className="mb-2 flex h-9 items-center gap-2 rounded-lg border border-border/40 bg-foreground/[0.02] pr-1 pl-2.5">
+      <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+        <Layers className="size-3.5" />
+        Layers
+      </span>
+
+      <div className="ml-auto flex min-w-0 items-center gap-0.5 overflow-x-auto">
+        {chip("all", "All", isAllLayers, ALL_LAYERS_ID)}
+        {layers.map((layer, index) =>
+          chip(
+            layer.id,
+            String(index + 1),
+            layer.id === selectedLayerId,
+            layer.id
+          )
+        )}
+      </div>
 
       {!isAllLayers ? (
-        <button
-          type="button"
-          aria-label={visible ? "Hide layer" : "Show layer"}
-          aria-pressed={!visible}
-          title={visible ? "Hide layer" : "Show layer"}
-          onClick={onToggleVisibility}
-          className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded-lg border border-border/50 transition-colors focus-visible:outline-none",
-            visible
-              ? "text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
-              : "bg-foreground/[0.04] text-muted-foreground/40 hover:bg-foreground/10"
-          )}
-        >
-          {visible ? (
-            <Eye className="size-3.5" />
-          ) : (
-            <EyeOff className="size-3.5" />
-          )}
-        </button>
+        <>
+          <span className="h-4 w-px shrink-0 bg-border/50" />
+          <button
+            type="button"
+            aria-label={visible ? "Hide layer" : "Show layer"}
+            aria-pressed={!visible}
+            title={visible ? "Hide layer" : "Show layer"}
+            onClick={onToggleVisibility}
+            className={cn(
+              "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none",
+              visible
+                ? "text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+                : "text-muted-foreground/40 hover:bg-foreground/10"
+            )}
+          >
+            {visible ? (
+              <Eye className="size-3.5" />
+            ) : (
+              <EyeOff className="size-3.5" />
+            )}
+          </button>
+        </>
       ) : null}
     </div>
   )

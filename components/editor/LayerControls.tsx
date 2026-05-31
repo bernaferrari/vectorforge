@@ -8,11 +8,8 @@ import { InspectorSlider } from "./InspectorSlider"
 
 type LayerControlsProps = {
   layers: SvgLayer[]
-  selectedLayer: SvgLayer | null
   selectedLayerId: string
   selectedLayerOverride: PathOverride | null
-  onSelectLayer: (id: string) => void
-  onToggleVisibility: () => void
   onScaleChange: (value: number) => void
   onDepthChange: (value: number) => void
 }

@@ -39,7 +39,6 @@ export type TransformInspectorSectionProps = {
   moveKeyframesLength: number
   activeMoveOffset: LightPosition
   selectedShapeLayers: SvgLayer[]
-  selectedLayer: SvgLayer | null
   selectedLayerId: string
   selectedLayerOverride: PathOverride | null
   shapeNavigation?: {
@@ -56,8 +55,6 @@ export type TransformInspectorSectionProps = {
   onScaleAxisChange: (axis: Axis, value: number) => void
   onRotationAxisChange: (axis: Axis, value: number) => void
   onMoveAxisChange: (axis: Axis, value: number) => void
-  onSelectLayer: (id: string) => void
-  onToggleLayerVisibility: () => void
   onLayerScaleChange: (value: number) => void
   onLayerDepthChange: (value: number) => void
   onCustomEdit: () => void
@@ -78,7 +75,6 @@ export function TransformInspectorSection({
   moveKeyframesLength,
   activeMoveOffset,
   selectedShapeLayers,
-  selectedLayer,
   selectedLayerId,
   selectedLayerOverride,
   transformKeyframeControl,
@@ -88,8 +84,6 @@ export function TransformInspectorSection({
   onScaleAxisChange,
   onRotationAxisChange,
   onMoveAxisChange,
-  onSelectLayer,
-  onToggleLayerVisibility,
   onLayerScaleChange,
   onLayerDepthChange,
   onCustomEdit,
@@ -183,11 +177,8 @@ export function TransformInspectorSection({
 
       <LayerControls
         layers={selectedShapeLayers}
-        selectedLayer={selectedLayer}
         selectedLayerId={selectedLayerId}
         selectedLayerOverride={selectedLayerOverride}
-        onSelectLayer={onSelectLayer}
-        onToggleVisibility={onToggleLayerVisibility}
         onScaleChange={onLayerScaleChange}
         onDepthChange={onLayerDepthChange}
       />

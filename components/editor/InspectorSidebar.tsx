@@ -21,7 +21,10 @@ import {
 
 export type SidebarStyleProps = StyleInspectorSectionProps
 export type SidebarGeometryProps = GeometryInspectorSectionProps
-export type SidebarTransformProps = TransformInspectorSectionProps
+export type SidebarTransformProps = TransformInspectorSectionProps & {
+  onSelectLayer: (id: string) => void
+  onToggleLayerVisibility: () => void
+}
 export type SidebarLightProps = LightInspectorSectionProps
 
 export type InspectorSidebarProps = {
@@ -93,7 +96,6 @@ export function InspectorSidebar({
 
       <LayerSwitcher
         layers={transformProps.selectedShapeLayers}
-        selectedLayer={transformProps.selectedLayer}
         selectedLayerId={transformProps.selectedLayerId}
         selectedLayerOverride={transformProps.selectedLayerOverride}
         onSelectLayer={transformProps.onSelectLayer}
