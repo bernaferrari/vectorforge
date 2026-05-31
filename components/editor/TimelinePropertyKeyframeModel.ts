@@ -8,8 +8,10 @@ import type {
 } from "./EditorModel"
 import { createEditorId } from "./EditorModel"
 import {
-  findKeyframeAtTime,
-  previousEasingFor,
+  addKeyframeAtTime,
+  moveKeyframeById,
+  removeKeyframeById,
+  setKeyframeEasingById,
   upsertVectorKeyframeAtTime,
 } from "./EditorKeyframeModel"
 import type { FillKeyframe } from "./TimelineModel"
@@ -24,11 +26,6 @@ export const styleKeyframeTimeFromId = (keyframeId: string) =>
 export const matchesStyleKeyframeId = (time: number, keyframeId: string) =>
   Math.abs(time - styleKeyframeTimeFromId(keyframeId)) < KEYFRAME_TIME_THRESHOLD
 
-export const removeKeyframeById = <T extends { id: string }>(
-  keyframes: T[],
-  keyframeId: string
-) => keyframes.filter((keyframe) => keyframe.id !== keyframeId)
-
 export const removeStyleKeyframesAtIdTime = <T extends { time: number }>(
   keyframes: T[],
   keyframeId: string
@@ -36,17 +33,6 @@ export const removeStyleKeyframesAtIdTime = <T extends { time: number }>(
   keyframes.filter(
     (keyframe) => !matchesStyleKeyframeId(keyframe.time, keyframeId)
   )
-
-export const moveKeyframeById = <T extends { id: string; time: number }>(
-  keyframes: T[],
-  keyframeId: string,
-  time: number
-) =>
-  keyframes
-    .map((keyframe) =>
-      keyframe.id === keyframeId ? { ...keyframe, time } : keyframe
-    )
-    .sort((a, b) => a.time - b.time)
 
 export const moveStyleKeyframesAtIdTime = <T extends { time: number }>(
   keyframes: T[],
@@ -56,19 +42,6 @@ export const moveStyleKeyframesAtIdTime = <T extends { time: number }>(
   keyframes.map((keyframe) =>
     matchesStyleKeyframeId(keyframe.time, keyframeId)
       ? { ...keyframe, time }
-      : keyframe
-  )
-
-export const setKeyframeEasingById = <
-  T extends { id: string; easing: EasingType },
->(
-  keyframes: T[],
-  keyframeId: string | null,
-  easing: EasingType
-) =>
-  keyframes.map((keyframe) =>
-    keyframeId === null || keyframe.id === keyframeId
-      ? { ...keyframe, easing }
       : keyframe
   )
 
@@ -185,17 +158,17 @@ export const addFillKeyframe = (
     "selectedShapeFillStops" | "selectedShapeGradientType"
   >
 ) => {
-  if (findKeyframeAtTime(keyframes, time)) return keyframes
-  return [
-    ...keyframes,
-    {
+  return addKeyframeAtTime({
+    keyframes,
+    time,
+    create: (easing) => ({
       id: createEditorId("fill"),
       time,
       stops: values.selectedShapeFillStops,
       gradientType: values.selectedShapeGradientType,
-      easing: previousEasingFor(keyframes, time),
-    },
-  ].sort((a, b) => a.time - b.time)
+      easing,
+    }),
+  })
 }
 
 export const addMaterialKeyframe = (
@@ -203,16 +176,16 @@ export const addMaterialKeyframe = (
   time: number,
   values: Pick<TimelinePropertyKeyframeValues, "activeMaterialSettings">
 ) => {
-  if (findKeyframeAtTime(keyframes, time)) return keyframes
-  return [
-    ...keyframes,
-    {
+  return addKeyframeAtTime({
+    keyframes,
+    time,
+    create: (easing) => ({
       id: createEditorId("material"),
       time,
       value: values.activeMaterialSettings,
-      easing: previousEasingFor(keyframes, time),
-    },
-  ].sort((a, b) => a.time - b.time)
+      easing,
+    }),
+  })
 }
 
 export const addPropertyRowKeyframe = (

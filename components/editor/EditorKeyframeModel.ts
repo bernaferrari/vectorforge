@@ -8,7 +8,7 @@ import {
   createEditorId,
   quantizeTimeToFrame,
 } from "./EditorModel"
-import type { FillKeyframe, TimelineTrack } from "./TimelineModel"
+import type { EasingType, FillKeyframe, TimelineTrack } from "./TimelineModel"
 
 type EasedTimeKeyframe = TimeKeyframe & {
   easing?: FillKeyframe["easing"]
@@ -29,6 +29,50 @@ export const removeKeyframesAtTime = <T extends TimeKeyframe>(
   keyframes: T[],
   time: number
 ) => keyframes.filter((keyframe) => !keyframeTimeMatches(keyframe.time, time))
+
+export const removeKeyframeById = <T extends { id: string }>(
+  keyframes: T[],
+  keyframeId: string
+) => keyframes.filter((keyframe) => keyframe.id !== keyframeId)
+
+export const moveKeyframeById = <T extends { id: string; time: number }>(
+  keyframes: T[],
+  keyframeId: string,
+  time: number
+) =>
+  keyframes
+    .map((keyframe) =>
+      keyframe.id === keyframeId ? { ...keyframe, time } : keyframe
+    )
+    .sort((a, b) => a.time - b.time)
+
+export const setKeyframeEasingById = <
+  T extends { id: string; easing: EasingType },
+>(
+  keyframes: T[],
+  keyframeId: string | null,
+  easing: EasingType
+) =>
+  keyframes.map((keyframe) =>
+    keyframeId === null || keyframe.id === keyframeId
+      ? { ...keyframe, easing }
+      : keyframe
+  )
+
+export const addKeyframeAtTime = <T extends EasedTimeKeyframe>({
+  keyframes,
+  time,
+  create,
+}: {
+  keyframes: T[]
+  time: number
+  create: (easing: FillKeyframe["easing"]) => T
+}) => {
+  if (findKeyframeAtTime(keyframes, time)) return keyframes
+  return [...keyframes, create(previousEasingFor(keyframes, time))].sort(
+    (a, b) => a.time - b.time
+  )
+}
 
 export const previousEasingFor = <T extends EasedTimeKeyframe>(
   keyframes: T[],
