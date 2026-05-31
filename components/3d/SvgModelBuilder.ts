@@ -7,7 +7,6 @@ import {
 } from "./SvgColor"
 import {
   ICON_VIEWBOX_SIZE,
-  MAX_BEVEL_SEGMENTS,
   SVG_PATH_LAYER_GAP_MIN,
   SVG_PATH_LAYER_GAP_RATIO,
   VECTORFORGE_SLASH_DEPTH_RATIO,
@@ -15,16 +14,16 @@ import {
   applySvgModelScale,
 } from "./SvgSceneUtils"
 import { cacheGroupGeometryAnalysis } from "./SvgGeometryAnalysis"
-import {
-  containsInvalidPositions,
-  finiteNumber,
-  minContourDimension,
-} from "./SvgGeometry"
+import { containsInvalidPositions, finiteNumber } from "./SvgGeometry"
 import {
   applyInnerElementScale,
   applyMeshSetScale,
   cacheInnerGeometryElements,
 } from "./SvgGeometryScale"
+import {
+  safeShapeExtrudeSettings,
+  svgExtrudeBaseSettings,
+} from "./SvgExtrudeSettings"
 import { parseSvgShapes, type ParsedSvgShapes } from "./SvgParsing"
 import type { SvgCanvasProps } from "./SvgTypes"
 
@@ -62,42 +61,24 @@ export const buildSvgIconGroup = ({
     mesh: THREE.Mesh
     scale: NonNullable<SvgCanvasProps["pathOverridesA"]>[number]["scale"]
   }> = []
-  const baseDepth = Math.max(0.02, finiteNumber(props.extrusionDepth, 1))
-  const baseBevelSize = Math.max(0, finiteNumber(props.bevelSize, 0))
-  const baseBevelThickness = Math.max(0, finiteNumber(props.bevelThickness, 0))
-  const baseBevelSegments = Math.max(
-    0,
-    Math.min(
-      MAX_BEVEL_SEGMENTS,
-      Math.round(finiteNumber(props.bevelSegments, 1))
-    )
-  )
-  const curveSegments = Math.max(
-    8,
-    Math.min(
-      64,
-      Math.round(
-        1 / Math.max(0.015, finiteNumber(props.geometryQuality, 0.045))
-      )
-    )
-  )
+  const baseExtrude = svgExtrudeBaseSettings(props)
   const layerSpacing = finiteNumber(props.layerSpacing, 0)
   const pathLayerGap =
     layerCount > 1
       ? Math.max(
           SVG_PATH_LAYER_GAP_MIN,
-          baseDepth * SVG_PATH_LAYER_GAP_RATIO,
+          baseExtrude.depth * SVG_PATH_LAYER_GAP_RATIO,
           layerSpacing * 0.06
         )
       : 0
 
   const extrudeSettings = {
-    depth: baseDepth,
+    depth: baseExtrude.depth,
     bevelEnabled: props.bevelEnabled,
-    bevelThickness: baseBevelThickness,
-    bevelSize: baseBevelSize,
-    bevelSegments: baseBevelSegments,
-    curveSegments,
+    bevelThickness: baseExtrude.bevelThickness,
+    bevelSize: baseExtrude.bevelSize,
+    bevelSegments: baseExtrude.bevelSegments,
+    curveSegments: baseExtrude.curveSegments,
     steps: 1,
   }
 
@@ -220,52 +201,25 @@ export const buildSvgIconGroup = ({
         return
       }
 
-      const shapeMinDim = Math.max(
-        0.1,
-        Math.min(Math.abs(shapeSize.x), Math.abs(shapeSize.y))
-      )
-      const contourMinDim = Math.max(
-        0.1,
-        minContourDimension(shape) || shapeMinDim
-      )
-      const hasHoles = shape.holes.length > 0
-
-      const shapeDepth = isSlashOverlay
-        ? Math.max(0.08, baseDepth * VECTORFORGE_SLASH_DEPTH_RATIO)
-        : Math.max(0.02, baseDepth * depthMultiplier)
-      const bevelContourLimit = hasHoles
-        ? contourMinDim * 0.025
-        : shapeMinDim * 0.05
-      const bevelDepthLimit = hasHoles ? shapeDepth * 0.12 : shapeDepth * 0.18
-      const safeBevelSize = props.bevelEnabled
-        ? Math.max(
-            0.001,
-            Math.min(baseBevelSize, bevelContourLimit, bevelDepthLimit)
-          )
-        : 0
-      const safeBevelThickness = props.bevelEnabled
-        ? Math.max(
-            0.001,
-            Math.min(
-              baseBevelThickness,
-              hasHoles ? contourMinDim * 0.04 : shapeMinDim * 0.08,
-              hasHoles ? shapeDepth * 0.16 : shapeDepth * 0.25
-            )
-          )
-        : 0
+      const safeExtrude = safeShapeExtrudeSettings({
+        shape,
+        shapeSize,
+        base: baseExtrude,
+        depthMultiplier,
+        bevelEnabled: props.bevelEnabled,
+        slashDepthRatio: VECTORFORGE_SLASH_DEPTH_RATIO,
+        isSlashOverlay,
+      })
 
       let geometry: THREE.ExtrudeGeometry
       try {
         geometry = new THREE.ExtrudeGeometry(shape, {
           ...extrudeSettings,
-          depth: shapeDepth,
-          bevelSize: safeBevelSize,
-          bevelThickness: safeBevelThickness,
-          bevelSegments: baseBevelSegments,
-          bevelEnabled:
-            props.bevelEnabled &&
-            safeBevelSize > 0.001 &&
-            safeBevelThickness > 0.001,
+          depth: safeExtrude.shapeDepth,
+          bevelSize: safeExtrude.bevelSize,
+          bevelThickness: safeExtrude.bevelThickness,
+          bevelSegments: baseExtrude.bevelSegments,
+          bevelEnabled: safeExtrude.bevelEnabled,
         })
       } catch (error) {
         console.warn("Skipping SVG shape that failed extrusion", error)
@@ -279,7 +233,7 @@ export const buildSvgIconGroup = ({
         layerOrder += 1
         return
       }
-      geometry.translate(0, 0, -shapeDepth / 2)
+      geometry.translate(0, 0, -safeExtrude.shapeDepth / 2)
 
       if (useGradientVertexColors) {
         const stops =
@@ -296,10 +250,10 @@ export const buildSvgIconGroup = ({
       const mesh = new THREE.Mesh(geometry, pathMaterial)
       mesh.userData.pathLayerId = layerId
       mesh.position.z = isSlashOverlay
-        ? baseDepth / 2 +
-          shapeDepth / 2 +
+        ? baseExtrude.depth / 2 +
+          safeExtrude.shapeDepth / 2 +
           pathLayerGap +
-          baseDepth * VECTORFORGE_SLASH_FORWARD_RATIO
+          baseExtrude.depth * VECTORFORGE_SLASH_FORWARD_RATIO
         : layerOrder * pathLayerGap
       mesh.renderOrder = isSlashOverlay ? 100 + layerOrder : layerOrder
       mesh.castShadow = true
