@@ -20,6 +20,35 @@ import type { EasingType } from "./TimelineModel"
 const STYLE_ROW_PREFIX = "style-"
 const KEYFRAME_TIME_THRESHOLD = 0.04
 
+type KeyframeArraySetter<T> = Dispatch<SetStateAction<T[]>>
+
+const updateKeyframes = <T>(
+  setter: KeyframeArraySetter<T>,
+  updater: (keyframes: T[]) => T[]
+) => {
+  setter((prev) => updater(prev))
+}
+
+const removeKeyframe = <T extends { id: string }>(
+  setter: KeyframeArraySetter<T>,
+  keyframeId: string
+) => updateKeyframes(setter, (prev) => removeKeyframeById(prev, keyframeId))
+
+const moveKeyframe = <T extends { id: string; time: number }>(
+  setter: KeyframeArraySetter<T>,
+  keyframeId: string,
+  time: number
+) => updateKeyframes(setter, (prev) => moveKeyframeById(prev, keyframeId, time))
+
+const setKeyframeEasing = <T extends { id: string; easing: EasingType }>(
+  setter: KeyframeArraySetter<T>,
+  keyframeId: string | null,
+  easing: EasingType
+) =>
+  updateKeyframes(setter, (prev) =>
+    setKeyframeEasingById(prev, keyframeId, easing)
+  )
+
 export const styleKeyframeTimeFromId = (keyframeId: string) =>
   Number(keyframeId.replace(STYLE_ROW_PREFIX, ""))
 
@@ -122,30 +151,22 @@ export const removePropertyRowKeyframe = (
       )
       break
     case "fill":
-      setters.setFillKeyframes((prev) => removeKeyframeById(prev, keyframeId))
+      removeKeyframe(setters.setFillKeyframes, keyframeId)
       break
     case "light-position":
-      setters.setKeyLightPositionKeyframes((prev) =>
-        removeKeyframeById(prev, keyframeId)
-      )
+      removeKeyframe(setters.setKeyLightPositionKeyframes, keyframeId)
       break
     case "rotation":
-      setters.setRotationAxisKeyframes((prev) =>
-        removeKeyframeById(prev, keyframeId)
-      )
+      removeKeyframe(setters.setRotationAxisKeyframes, keyframeId)
       break
     case "move":
-      setters.setMoveKeyframes((prev) => removeKeyframeById(prev, keyframeId))
+      removeKeyframe(setters.setMoveKeyframes, keyframeId)
       break
     case "material":
-      setters.setMaterialKeyframes((prev) =>
-        removeKeyframeById(prev, keyframeId)
-      )
+      removeKeyframe(setters.setMaterialKeyframes, keyframeId)
       break
     case "quality":
-      setters.setQualityKeyframes((prev) =>
-        removeKeyframeById(prev, keyframeId)
-      )
+      removeKeyframe(setters.setQualityKeyframes, keyframeId)
       break
   }
 }
@@ -264,34 +285,22 @@ export const movePropertyRowKeyframe = (
       )
       break
     case "fill":
-      setters.setFillKeyframes((prev) =>
-        moveKeyframeById(prev, keyframeId, time)
-      )
+      moveKeyframe(setters.setFillKeyframes, keyframeId, time)
       break
     case "light-position":
-      setters.setKeyLightPositionKeyframes((prev) =>
-        moveKeyframeById(prev, keyframeId, time)
-      )
+      moveKeyframe(setters.setKeyLightPositionKeyframes, keyframeId, time)
       break
     case "rotation":
-      setters.setRotationAxisKeyframes((prev) =>
-        moveKeyframeById(prev, keyframeId, time)
-      )
+      moveKeyframe(setters.setRotationAxisKeyframes, keyframeId, time)
       break
     case "move":
-      setters.setMoveKeyframes((prev) =>
-        moveKeyframeById(prev, keyframeId, time)
-      )
+      moveKeyframe(setters.setMoveKeyframes, keyframeId, time)
       break
     case "material":
-      setters.setMaterialKeyframes((prev) =>
-        moveKeyframeById(prev, keyframeId, time)
-      )
+      moveKeyframe(setters.setMaterialKeyframes, keyframeId, time)
       break
     case "quality":
-      setters.setQualityKeyframes((prev) =>
-        moveKeyframeById(prev, keyframeId, time)
-      )
+      moveKeyframe(setters.setQualityKeyframes, keyframeId, time)
       break
   }
 }
@@ -312,34 +321,26 @@ export const setPropertyRowKeyframeEasing = (
       )
       break
     case "fill":
-      setters.setFillKeyframes((prev) =>
-        setKeyframeEasingById(prev, keyframeId, easing)
-      )
+      setKeyframeEasing(setters.setFillKeyframes, keyframeId, easing)
       break
     case "light-position":
-      setters.setKeyLightPositionKeyframes((prev) =>
-        setKeyframeEasingById(prev, keyframeId, easing)
+      setKeyframeEasing(
+        setters.setKeyLightPositionKeyframes,
+        keyframeId,
+        easing
       )
       break
     case "rotation":
-      setters.setRotationAxisKeyframes((prev) =>
-        setKeyframeEasingById(prev, keyframeId, easing)
-      )
+      setKeyframeEasing(setters.setRotationAxisKeyframes, keyframeId, easing)
       break
     case "move":
-      setters.setMoveKeyframes((prev) =>
-        setKeyframeEasingById(prev, keyframeId, easing)
-      )
+      setKeyframeEasing(setters.setMoveKeyframes, keyframeId, easing)
       break
     case "material":
-      setters.setMaterialKeyframes((prev) =>
-        setKeyframeEasingById(prev, keyframeId, easing)
-      )
+      setKeyframeEasing(setters.setMaterialKeyframes, keyframeId, easing)
       break
     case "quality":
-      setters.setQualityKeyframes((prev) =>
-        setKeyframeEasingById(prev, keyframeId, easing)
-      )
+      setKeyframeEasing(setters.setQualityKeyframes, keyframeId, easing)
       break
   }
 }
