@@ -1,8 +1,9 @@
 "use client"
 
-import { Eye, EyeOff, Layers } from "lucide-react"
 import { memo } from "react"
+import { Layers } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Switch } from "@/components/ui/switch"
 import type { PathOverride } from "../3d/SvgTypes"
 import { InspectorRow } from "./InspectorPrimitives"
 import { InspectorSlider } from "./InspectorSlider"
@@ -19,10 +20,10 @@ type LayerSwitcherProps = {
 }
 
 // Layers in this app are anonymous SVG paths — no real names, no meaningful
-// thumbnail. The switcher is a labeled segmented control ([All · 1 · 2 · 3]) and
-// it OWNS everything per-layer: visibility + the layer's Scale/Depth overrides
-// appear right here when a single layer is targeted, so the controls live next
-// to the thing they affect instead of being stranded at the bottom of TRANSFORM.
+// thumbnail. The switcher is a labeled chip group ([All · 1 · 2 · 3], each chip
+// carrying the layer's fill color so they're scannable) that WRAPS for many
+// layers, and it OWNS everything per-layer: Scale / Depth / Visible all live in
+// the controls block that drops in when a single layer is targeted.
 //
 // Rendered BORDERLESS — the parent InspectorContextHeader provides the card so
 // the shape navigation and the layer switcher read as one "what am I editing"
@@ -43,71 +44,52 @@ function LayerSwitcherComponent({
   const visible = selectedLayerOverride?.visible ?? true
   const showLayerControls = !isAllLayers && selectedLayerOverride
 
-  const chip = (key: string, label: string, active: boolean, value: string) => (
-    <button
-      key={key}
-      type="button"
-      aria-pressed={active}
-      onClick={() => onSelectLayer(value)}
-      className={cn(
-        "flex h-6 min-w-6 shrink-0 items-center justify-center rounded-[6px] px-2 text-[11px] font-medium tabular-nums transition-colors focus-visible:outline-none",
-        active
-          ? "bg-foreground/[0.10] text-foreground shadow-[inset_0_0_0_1px_rgba(140,140,160,0.18)]"
-          : "text-muted-foreground hover:text-foreground"
-      )}
-    >
-      {label}
-    </button>
-  )
-
   return (
     <div className="flex flex-col">
-      <div className="flex h-9 items-center gap-2 pr-1 pl-2.5">
-        <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+      <div className="flex min-h-9 items-start gap-2 px-2.5 py-1.5">
+        <span className="flex h-6 shrink-0 items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
           <Layers className="size-3.5" />
           Layers
         </span>
 
-        <div className="ml-auto flex min-w-0 items-center gap-0.5 overflow-x-auto">
-          {chip("all", "All", isAllLayers, ALL_LAYERS_ID)}
-          {layers.map((layer, index) =>
-            chip(
-              layer.id,
-              String(index + 1),
-              layer.id === selectedLayerId,
-              layer.id
-            )
-          )}
-        </div>
-
-        {/* Trailing slot is always reserved so toggling a layer never shifts the
-            chips left/right. It just becomes interactive when a layer is active. */}
-        <div
-          className={cn(
-            "flex shrink-0 items-center gap-1 pl-1",
-            isAllLayers && "pointer-events-none invisible"
-          )}
-        >
-          <span className="h-4 w-px bg-border/50" />
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
           <button
             type="button"
-            aria-label={visible ? "Hide layer" : "Show layer"}
-            aria-pressed={!visible}
-            title={visible ? "Hide layer" : "Show layer"}
-            onClick={onToggleVisibility}
+            aria-pressed={isAllLayers}
+            onClick={() => onSelectLayer(ALL_LAYERS_ID)}
             className={cn(
-              "flex size-7 items-center justify-center rounded-md transition-colors focus-visible:outline-none",
-              visible
-                ? "text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
-                : "text-muted-foreground/40 hover:bg-foreground/10"
+              "flex h-6 shrink-0 items-center justify-center rounded-[6px] px-2 text-[11px] font-medium transition-colors focus-visible:outline-none",
+              isAllLayers
+                ? "bg-foreground/[0.10] text-foreground shadow-[inset_0_0_0_1px_rgba(140,140,160,0.18)]"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
-            {visible ? (
-              <Eye className="size-3.5" />
-            ) : (
-              <EyeOff className="size-3.5" />
-            )}
+            All
           </button>
+          {layers.map((layer, index) => {
+            const active = layer.id === selectedLayerId
+            return (
+              <button
+                key={layer.id}
+                type="button"
+                aria-pressed={active}
+                title={`Layer ${index + 1}`}
+                onClick={() => onSelectLayer(layer.id)}
+                className={cn(
+                  "flex h-6 min-w-6 shrink-0 items-center justify-center gap-1.5 rounded-[6px] px-2 text-[11px] font-medium tabular-nums transition-colors focus-visible:outline-none",
+                  active
+                    ? "bg-foreground/[0.10] text-foreground shadow-[inset_0_0_0_1px_rgba(140,140,160,0.18)]"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <span
+                  className="size-2 shrink-0 rounded-full ring-1 ring-inset ring-black/25"
+                  style={{ backgroundColor: layer.color }}
+                />
+                {index + 1}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -135,6 +117,16 @@ function LayerSwitcherComponent({
               precision={2}
               onChange={onDepthChange}
             />
+          </InspectorRow>
+          <InspectorRow label="Visible">
+            <div className="flex flex-1 justify-end pr-1">
+              <Switch
+                checked={visible}
+                onCheckedChange={onToggleVisibility}
+                size="sm"
+                aria-label={visible ? "Hide layer" : "Show layer"}
+              />
+            </div>
           </InspectorRow>
         </div>
       ) : null}
