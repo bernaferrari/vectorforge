@@ -13,17 +13,15 @@ import {
   applySvgModelScale,
 } from "./SvgSceneUtils"
 import { cacheGroupGeometryAnalysis } from "./SvgGeometryAnalysis"
-import { containsInvalidPositions, finiteNumber } from "./SvgGeometry"
+import { finiteNumber } from "./SvgGeometry"
 import {
   applyInnerElementScale,
   applyMeshSetScale,
   cacheInnerGeometryElements,
 } from "./SvgGeometryScale"
-import {
-  safeShapeExtrudeSettings,
-  svgExtrudeBaseSettings,
-} from "./SvgExtrudeSettings"
+import { svgExtrudeBaseSettings } from "./SvgExtrudeSettings"
 import { createSvgPathMaterial } from "./SvgPathMaterial"
+import { createSvgShapeGeometry } from "./SvgShapeGeometry"
 import { parseSvgShapes, type ParsedSvgShapes } from "./SvgParsing"
 import type { SvgCanvasProps } from "./SvgTypes"
 
@@ -72,16 +70,6 @@ export const buildSvgIconGroup = ({
         )
       : 0
 
-  const extrudeSettings = {
-    depth: baseExtrude.depth,
-    bevelEnabled: props.bevelEnabled,
-    bevelThickness: baseExtrude.bevelThickness,
-    bevelSize: baseExtrude.bevelSize,
-    bevelSegments: baseExtrude.bevelSegments,
-    curveSegments: baseExtrude.curveSegments,
-    steps: 1,
-  }
-
   const clippingPlanes: THREE.Plane[] = []
   const isWipeActive =
     props.transitionType === "wipe" &&
@@ -108,20 +96,19 @@ export const buildSvgIconGroup = ({
   const overrideByLayerId = new Map(
     (overrides ?? []).map((override) => [override.id, override])
   )
+  const gradientType = props.gradientType ?? "linear"
+  const gradientStops = gradientStopsFromFill(
+    isIconA ? props.colorAStops : props.colorBStops,
+    isIconA ? props.colorA : props.colorB,
+    isIconA
+      ? props.colorASecondary || props.colorA
+      : props.colorBSecondary || props.colorB
+  )
+  const useGradientVertexColors = Boolean(props.enableGradient)
 
   paths.forEach((path, pathIndex) => {
     const isSlashOverlay =
       path.userData?.node?.getAttribute?.("data-vectorforge-slash") === "true"
-
-    const gradientType = props.gradientType ?? "linear"
-    const gradientStops = gradientStopsFromFill(
-      isIconA ? props.colorAStops : props.colorBStops,
-      isIconA ? props.colorA : props.colorB,
-      isIconA
-        ? props.colorASecondary || props.colorA
-        : props.colorBSecondary || props.colorB
-    )
-    const useGradientVertexColors = Boolean(props.enableGradient)
 
     shapesByPath[pathIndex].forEach((shape, shapeIndex) => {
       const layerId = `${pathIndex}:${shapeIndex}`
@@ -172,39 +159,21 @@ export const buildSvgIconGroup = ({
         return
       }
 
-      const safeExtrude = safeShapeExtrudeSettings({
+      const shapeGeometry = createSvgShapeGeometry({
         shape,
         shapeSize,
-        base: baseExtrude,
+        baseExtrude,
         depthMultiplier,
         bevelEnabled: props.bevelEnabled,
         slashDepthRatio: VECTORFORGE_SLASH_DEPTH_RATIO,
         isSlashOverlay,
       })
-
-      let geometry: THREE.ExtrudeGeometry
-      try {
-        geometry = new THREE.ExtrudeGeometry(shape, {
-          ...extrudeSettings,
-          depth: safeExtrude.shapeDepth,
-          bevelSize: safeExtrude.bevelSize,
-          bevelThickness: safeExtrude.bevelThickness,
-          bevelSegments: baseExtrude.bevelSegments,
-          bevelEnabled: safeExtrude.bevelEnabled,
-        })
-      } catch (error) {
-        console.warn("Skipping SVG shape that failed extrusion", error)
+      if (!shapeGeometry) {
         layerOrder += 1
         return
       }
 
-      if (containsInvalidPositions(geometry)) {
-        geometry.dispose()
-        console.warn("Skipping SVG shape with invalid geometry positions")
-        layerOrder += 1
-        return
-      }
-      geometry.translate(0, 0, -safeExtrude.shapeDepth / 2)
+      const { geometry, extrude } = shapeGeometry
 
       if (useGradientVertexColors) {
         const stops =
@@ -222,7 +191,7 @@ export const buildSvgIconGroup = ({
       mesh.userData.pathLayerId = layerId
       mesh.position.z = isSlashOverlay
         ? baseExtrude.depth / 2 +
-          safeExtrude.shapeDepth / 2 +
+          extrude.shapeDepth / 2 +
           pathLayerGap +
           baseExtrude.depth * VECTORFORGE_SLASH_FORWARD_RATIO
         : layerOrder * pathLayerGap
