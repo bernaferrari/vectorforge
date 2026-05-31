@@ -15,6 +15,15 @@ const clampTime = (time: number, duration: number) =>
 const formatTime = (time: number, frameSnapActive: boolean) =>
   Number((frameSnapActive ? quantizeTimeToFrame(time) : time).toFixed(3))
 
+const sortTrackKeyframes = (keyframes: Keyframe[]) =>
+  [...keyframes].sort((a, b) => a.time - b.time)
+
+const updateTimelineTrack = (
+  tracks: TimelineTrack[],
+  trackId: string,
+  update: (track: TimelineTrack) => TimelineTrack
+) => tracks.map((track) => (track.id === trackId ? update(track) : track))
+
 export const toggleTrackKeyframeAtTime = ({
   tracks,
   trackId,
@@ -25,8 +34,7 @@ export const toggleTrackKeyframeAtTime = ({
   time: number
 }) => {
   let selected: SelectedTimelineKeyframe = null
-  const nextTracks = tracks.map((track) => {
-    if (track.id !== trackId) return track
+  const nextTracks = updateTimelineTrack(tracks, trackId, (track) => {
     const existing = track.keyframes.find((keyframe) =>
       keyframeTimeMatches(keyframe.time, time, 0.05)
     )
@@ -50,7 +58,7 @@ export const toggleTrackKeyframeAtTime = ({
 
     return {
       ...track,
-      keyframes: [...track.keyframes, keyframe].sort((a, b) => a.time - b.time),
+      keyframes: sortTrackKeyframes([...track.keyframes, keyframe]),
     }
   })
 
@@ -72,8 +80,7 @@ export const addTrackKeyframeAtTime = ({
 }) => {
   const nextTime = formatTime(clampTime(time, duration), frameSnapActive)
   let selected: SelectedTimelineKeyframe = null
-  const nextTracks = tracks.map((track) => {
-    if (track.id !== trackId) return track
+  const nextTracks = updateTimelineTrack(tracks, trackId, (track) => {
     const existing = track.keyframes.find((keyframe) =>
       keyframeTimeMatches(keyframe.time, nextTime, 0.05)
     )
@@ -92,7 +99,7 @@ export const addTrackKeyframeAtTime = ({
 
     return {
       ...track,
-      keyframes: [...track.keyframes, keyframe].sort((a, b) => a.time - b.time),
+      keyframes: sortTrackKeyframes([...track.keyframes, keyframe]),
     }
   })
 
@@ -104,16 +111,10 @@ export const removeTrackKeyframeById = (
   trackId: string,
   keyframeId: string
 ) =>
-  tracks.map((track) =>
-    track.id === trackId
-      ? {
-          ...track,
-          keyframes: track.keyframes.filter(
-            (keyframe) => keyframe.id !== keyframeId
-          ),
-        }
-      : track
-  )
+  updateTimelineTrack(tracks, trackId, (track) => ({
+    ...track,
+    keyframes: track.keyframes.filter((keyframe) => keyframe.id !== keyframeId),
+  }))
 
 export const setTrackKeyframeTime = ({
   tracks,
@@ -131,20 +132,14 @@ export const setTrackKeyframeTime = ({
   frameSnapActive: boolean
 }) => {
   const nextTime = formatTime(clampTime(time, duration), frameSnapActive)
-  return tracks.map((track) =>
-    track.id === trackId
-      ? {
-          ...track,
-          keyframes: track.keyframes
-            .map((keyframe) =>
-              keyframe.id === keyframeId
-                ? { ...keyframe, time: nextTime }
-                : keyframe
-            )
-            .sort((a, b) => a.time - b.time),
-        }
-      : track
-  )
+  return updateTimelineTrack(tracks, trackId, (track) => ({
+    ...track,
+    keyframes: sortTrackKeyframes(
+      track.keyframes.map((keyframe) =>
+        keyframe.id === keyframeId ? { ...keyframe, time: nextTime } : keyframe
+      )
+    ),
+  }))
 }
 
 export const moveTrackKeyframe = ({
@@ -158,18 +153,14 @@ export const moveTrackKeyframe = ({
   keyframeId: string
   time: number
 }) =>
-  tracks.map((track) =>
-    track.id === trackId
-      ? {
-          ...track,
-          keyframes: track.keyframes
-            .map((keyframe) =>
-              keyframe.id === keyframeId ? { ...keyframe, time } : keyframe
-            )
-            .sort((a, b) => a.time - b.time),
-        }
-      : track
-  )
+  updateTimelineTrack(tracks, trackId, (track) => ({
+    ...track,
+    keyframes: sortTrackKeyframes(
+      track.keyframes.map((keyframe) =>
+        keyframe.id === keyframeId ? { ...keyframe, time } : keyframe
+      )
+    ),
+  }))
 
 export type TrackKeyframeTimeSnapshot = {
   id: string
@@ -289,22 +280,18 @@ export const offsetTrackKeyframeBlock = ({
     initial.map((keyframe) => [keyframe.id, keyframe.time])
   )
 
-  return tracks.map((track) =>
-    track.id !== trackId
-      ? track
-      : {
-          ...track,
-          keyframes: track.keyframes.map((keyframe) => {
-            const initialTime = initialTimesById.get(keyframe.id)
-            if (initialTime === undefined) return keyframe
-            const nextTime = clampTime(initialTime + delta, duration)
-            return {
-              ...keyframe,
-              time: formatTime(nextTime, frameSnapActive),
-            }
-          }),
-        }
-  )
+  return updateTimelineTrack(tracks, trackId, (track) => ({
+    ...track,
+    keyframes: track.keyframes.map((keyframe) => {
+      const initialTime = initialTimesById.get(keyframe.id)
+      if (initialTime === undefined) return keyframe
+      const nextTime = clampTime(initialTime + delta, duration)
+      return {
+        ...keyframe,
+        time: formatTime(nextTime, frameSnapActive),
+      }
+    }),
+  }))
 }
 
 export const setTrackEasing = (
@@ -312,17 +299,13 @@ export const setTrackEasing = (
   trackId: string,
   easing: EasingType
 ) =>
-  tracks.map((track) =>
-    track.id === trackId
-      ? {
-          ...track,
-          keyframes: track.keyframes.map((keyframe) => ({
-            ...keyframe,
-            easing,
-          })),
-        }
-      : track
-  )
+  updateTimelineTrack(tracks, trackId, (track) => ({
+    ...track,
+    keyframes: track.keyframes.map((keyframe) => ({
+      ...keyframe,
+      easing,
+    })),
+  }))
 
 export const setSingleKeyframeEasing = (
   tracks: TimelineTrack[],
@@ -330,13 +313,9 @@ export const setSingleKeyframeEasing = (
   keyframeId: string,
   easing: EasingType
 ) =>
-  tracks.map((track) =>
-    track.id === trackId
-      ? {
-          ...track,
-          keyframes: track.keyframes.map((keyframe) =>
-            keyframe.id === keyframeId ? { ...keyframe, easing } : keyframe
-          ),
-        }
-      : track
-  )
+  updateTimelineTrack(tracks, trackId, (track) => ({
+    ...track,
+    keyframes: track.keyframes.map((keyframe) =>
+      keyframe.id === keyframeId ? { ...keyframe, easing } : keyframe
+    ),
+  }))
