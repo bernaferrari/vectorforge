@@ -39,22 +39,21 @@ export const sortPathOverrides = (overrides: PathOverride[]) =>
     return Number(aPath) - Number(bPath) || Number(aShape) - Number(bShape)
   })
 
-export const getSelectedLayer = (layers: SvgLayer[], selectedLayerId: string) =>
+const getSelectedLayer = (layers: SvgLayer[], selectedLayerId: string) =>
   selectedLayerId === ALL_LAYERS_ID
     ? null
     : (layers.find((layer) => layer.id === selectedLayerId) ?? null)
 
 export const getLayerSelectionOverride = ({
   layers,
-  selectedLayer,
   selectedLayerId,
   overrides,
 }: {
   layers: SvgLayer[]
-  selectedLayer: SvgLayer | null
   selectedLayerId: string
   overrides: PathOverride[] | undefined
 }) => {
+  const selectedLayer = getSelectedLayer(layers, selectedLayerId)
   if (selectedLayer) return getPathOverride(selectedLayer, overrides)
   if (selectedLayerId !== ALL_LAYERS_ID || layers.length === 0) return null
 
@@ -78,18 +77,15 @@ export const getLayerSelectionOverride = ({
 
 export const getLayerSelectionTargets = ({
   layers,
-  selectedLayer,
   selectedLayerId,
 }: {
   layers: SvgLayer[]
-  selectedLayer: SvgLayer | null
   selectedLayerId: string
-}) =>
-  selectedLayerId === ALL_LAYERS_ID
-    ? layers
-    : selectedLayer
-      ? [selectedLayer]
-      : []
+}) => {
+  if (selectedLayerId === ALL_LAYERS_ID) return layers
+  const selectedLayer = getSelectedLayer(layers, selectedLayerId)
+  return selectedLayer ? [selectedLayer] : []
+}
 
 export const updatePathOverridesForLayers = ({
   overrides = [],

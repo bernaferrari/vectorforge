@@ -14,7 +14,6 @@ import {
   extractSvgLayers,
   getLayerSelectionOverride,
   getLayerSelectionTargets,
-  getSelectedLayer,
   updatePathOverridesForLayers,
 } from "./SvgLayerModel"
 import { clampNumber } from "./EditorModel"
@@ -46,31 +45,25 @@ export const useLayerEditor = ({
     () => extractSvgLayers(selectedShape?.svgContent ?? ""),
     [selectedShape?.svgContent]
   )
-  const selectedLayer = useMemo(
-    () => getSelectedLayer(layers, selectedLayerId),
-    [layers, selectedLayerId]
-  )
   const selectedLayerOverride = useMemo(
     () =>
       selectedShape
         ? getLayerSelectionOverride({
             layers,
-            selectedLayer,
             selectedLayerId,
             overrides: selectedShape.pathOverrides,
           })
         : null,
-    [layers, selectedLayer, selectedLayerId, selectedShape]
+    [layers, selectedLayerId, selectedShape]
   )
 
   const selectedLayerTargets = useMemo(
     () =>
       getLayerSelectionTargets({
         layers,
-        selectedLayer,
         selectedLayerId,
       }),
-    [layers, selectedLayer, selectedLayerId]
+    [layers, selectedLayerId]
   )
 
   useEffect(() => {
@@ -138,7 +131,6 @@ export const useLayerEditor = ({
 
   return {
     layers,
-    selectedLayer,
     selectedLayerOverride,
     selectedLayerId,
     setSelectedLayerId,

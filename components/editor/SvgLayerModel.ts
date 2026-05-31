@@ -6,7 +6,6 @@ export {
   getLayerSelectionOverride,
   getLayerSelectionTargets,
   getPathOverride,
-  getSelectedLayer,
   sortPathOverrides,
   updatePathOverridesForLayers,
 } from "./SvgLayerOverrideModel"
