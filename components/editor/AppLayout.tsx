@@ -1,18 +1,19 @@
 "use client"
 
-import { isInspectorInputDragActive } from "./InspectorControlModel"
 import { useEditorBaseState } from "./useEditorBaseState"
+import { useEditorDocumentLifecycle } from "./useEditorDocumentLifecycle"
 import { useEditorTimelineSurface } from "./useEditorTimelineSurface"
 import { useEditorViewportSurface } from "./useEditorViewportSurface"
 import { useEditorExportSurface } from "./useEditorExportSurface"
 import { useEditorInspectorSurface } from "./useEditorInspectorSurface"
-import { useEditorHistorySurface } from "./useEditorHistorySurface"
 import { useEditorRenderState } from "./useEditorRenderState"
 import { useEditorMotionSurface } from "./useEditorMotionSurface"
-import { useEditorRecipeSurface } from "./useEditorRecipeSurface"
 import { AppLayoutView } from "./AppLayoutView"
 
 export default function AppLayout() {
+  const editor = useEditorBaseState()
+  useEditorDocumentLifecycle(editor)
+
   const {
     theme: { themeMounted, isLightTheme, themeToggleLabel, setTheme },
     playback: {
@@ -22,7 +23,6 @@ export default function AppLayout() {
       currentTime,
       setCurrentTime,
       isPlaying,
-      setIsPlaying,
       loop,
       setLoop,
       isPreviewModelReady,
@@ -43,7 +43,6 @@ export default function AppLayout() {
       setSelectedShapeId,
       openShapePicker,
       setOpenShapePicker,
-      activeRecipeId,
       setActiveRecipeId,
       markCustom,
       setShapeIcon,
@@ -53,7 +52,6 @@ export default function AppLayout() {
     },
     geometry: {
       wireframe,
-      setGeometryBaseSettings,
       extrusionDepth,
       setExtrusionDepth,
       bevelEnabled,
@@ -69,10 +67,8 @@ export default function AppLayout() {
       layerSpacing,
       innerElementScale,
       innerScaleKeyframes,
-      setInnerScaleKeyframes,
     },
     transform: {
-      setTransformBaseSettings,
       objectScale,
       setObjectScale,
       objectScaleAxes,
@@ -99,8 +95,6 @@ export default function AppLayout() {
       fillStops,
       fillKeyframes,
       setFillKeyframes,
-      restoreFillState,
-      applyRecipeFill,
       setGradientEnabled,
       updateFillColor,
       updateGradientType,
@@ -122,7 +116,6 @@ export default function AppLayout() {
     },
     material: {
       materialPreset,
-      setMaterialPreset,
       roughness,
       metalness,
       reflectance,
@@ -135,21 +128,17 @@ export default function AppLayout() {
       setMaterialKeyframes,
       isAdvancedMaterialOpen,
       setIsAdvancedMaterialOpen,
-      baseMaterialSettings,
       activeMaterialSettings,
-      setMaterialBaseSettings,
       updateMaterialSetting,
       applyMaterialPreset,
     },
     light: {
       ambientColor,
       ambientIntensity,
-      setLightBaseSettings,
       keyLightColor,
       setKeyLightColor,
       keyLightIntensity,
       setKeyLightIntensity,
-      keyLightPosition,
       keyLightSoftness,
       setKeyLightSoftness,
       keyLightPositionKeyframes,
@@ -175,89 +164,7 @@ export default function AppLayout() {
       scaleTrack,
       lightingTrack,
     },
-  } = useEditorBaseState()
-
-  useEditorRecipeSurface({
-    duration,
-    setActiveRecipeId,
-    setMaterialPreset,
-    applyRecipeFill,
-    setShapes,
-    setSelectedShapeId,
-    setMaterialBaseSettings,
-    setGeometryBaseSettings,
-    setTransformBaseSettings,
-    setRotationAxisKeyframes,
-    setMoveKeyframes,
-    setQualityKeyframes,
-    setInnerScaleKeyframes,
-    setLightBaseSettings,
-    setKeyLightPositionKeyframes,
-    setTracks,
-    setSelectedMotionTrackId,
-    setCurrentTime,
-    setIsPlaying,
-  })
-
-  useEditorHistorySurface({
-    activeRecipeId,
-    setActiveRecipeId,
-    shapes,
-    setShapes,
-    setSelectedShapeId,
-    setOpenShapePicker,
-    duration,
-    setDuration,
-    setCurrentTime,
-    materialPreset,
-    setMaterialPreset,
-    materialSettings: baseMaterialSettings,
-    materialKeyframes,
-    setMaterialKeyframes,
-    setMaterialBaseSettings,
-    extrusionDepth,
-    bevelEnabled,
-    bevelThickness,
-    bevelSize,
-    bevelSegments,
-    geometryQuality,
-    qualityKeyframes,
-    setQualityKeyframes,
-    layerSpacing,
-    innerElementScale,
-    setGeometryBaseSettings,
-    innerScaleKeyframes,
-    setInnerScaleKeyframes,
-    objectScale,
-    objectScaleAxes,
-    moveOffset,
-    setTransformBaseSettings,
-    moveKeyframes,
-    setMoveKeyframes,
-    enableGradient,
-    fillMode,
-    fillColor,
-    fillColorSecondary,
-    fillGradientType,
-    fillStops,
-    fillKeyframes,
-    restoreFillState,
-    rotationOffset,
-    rotationAxisKeyframes,
-    setRotationAxisKeyframes,
-    keyLightColor,
-    keyLightIntensity,
-    keyLightPosition,
-    keyLightSoftness,
-    setLightBaseSettings,
-    keyLightPositionKeyframes,
-    setKeyLightPositionKeyframes,
-    tracks,
-    setTracks,
-    setIsPlaying,
-    isInputDragActive: isInspectorInputDragActive,
-    onPlayPause: handlePlayToggle,
-  })
+  } = editor
 
   const {
     sortedShapes,

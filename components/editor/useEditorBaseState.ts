@@ -57,3 +57,5 @@ export function useEditorBaseState() {
     timelineTracks,
   }
 }
+
+export type EditorBaseState = ReturnType<typeof useEditorBaseState>
