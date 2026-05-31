@@ -83,7 +83,7 @@ function LayerSwitcherComponent({
                 )}
               >
                 <span
-                  className="size-2 shrink-0 rounded-full ring-1 ring-inset ring-black/25"
+                  className="size-2 shrink-0 rounded-full ring-1 ring-black/25 ring-inset"
                   style={{ backgroundColor: layer.color }}
                 />
                 {index + 1}
