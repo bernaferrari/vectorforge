@@ -1,7 +1,8 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo, useState, type SetStateAction } from "react"
 import {
+  type LightSettings,
   LightPosition,
   LightPositionKeyframe,
   clampNumber,
@@ -18,6 +19,16 @@ export const STATIC_STUDIO_LIGHTING = {
   rimLightIntensity: 0.8,
 }
 
+const DEFAULT_LIGHT_SETTINGS: LightSettings = {
+  keyLightColor: "#ffffff",
+  keyLightIntensity: 1.2,
+  keyLightPosition: { x: 5, y: 5, z: 4 },
+  keyLightSoftness: 0.35,
+}
+
+const applyLightSettingValue = <T>(value: SetStateAction<T>, previous: T) =>
+  typeof value === "function" ? (value as (current: T) => T)(previous) : value
+
 export function useLightEditor({
   currentTime,
   duration,
@@ -27,26 +38,54 @@ export function useLightEditor({
   duration: number
   onEdit: () => void
 }) {
-  const [keyLightColor, setKeyLightColor] = useState<string>("#ffffff")
-  const [keyLightIntensity, setKeyLightIntensity] = useState<number>(1.2)
-  const [keyLightPosition, setKeyLightPosition] = useState<LightPosition>({
-    x: 5,
-    y: 5,
-    z: 4,
-  })
-  const [keyLightSoftness, setKeyLightSoftness] = useState<number>(0.35)
+  const [baseLightSettings, setLightBaseSettings] = useState(
+    DEFAULT_LIGHT_SETTINGS
+  )
   const [keyLightPositionKeyframes, setKeyLightPositionKeyframes] = useState<
     LightPositionKeyframe[]
   >([])
+
+  const setLightSetting = useCallback(
+    <Key extends keyof LightSettings>(
+      key: Key,
+      value: SetStateAction<LightSettings[Key]>
+    ) => {
+      setLightBaseSettings((settings) => ({
+        ...settings,
+        [key]: applyLightSettingValue(value, settings[key]),
+      }))
+    },
+    []
+  )
+
+  const setKeyLightColor = useCallback(
+    (value: SetStateAction<string>) => setLightSetting("keyLightColor", value),
+    [setLightSetting]
+  )
+  const setKeyLightIntensity = useCallback(
+    (value: SetStateAction<number>) =>
+      setLightSetting("keyLightIntensity", value),
+    [setLightSetting]
+  )
+  const setKeyLightPosition = useCallback(
+    (value: SetStateAction<LightPosition>) =>
+      setLightSetting("keyLightPosition", value),
+    [setLightSetting]
+  )
+  const setKeyLightSoftness = useCallback(
+    (value: SetStateAction<number>) =>
+      setLightSetting("keyLightSoftness", value),
+    [setLightSetting]
+  )
 
   const activeKeyLightPosition = useMemo(
     () =>
       interpolateLightPositionKeyframes(
         currentTime,
-        keyLightPosition,
+        baseLightSettings.keyLightPosition,
         keyLightPositionKeyframes
       ),
-    [currentTime, keyLightPosition, keyLightPositionKeyframes]
+    [currentTime, baseLightSettings.keyLightPosition, keyLightPositionKeyframes]
   )
 
   const lightPositionKeyframeAtPlayhead = useCallback(() => {
@@ -127,13 +166,14 @@ export function useLightEditor({
 
   return {
     ...STATIC_STUDIO_LIGHTING,
-    keyLightColor,
+    setLightBaseSettings,
+    keyLightColor: baseLightSettings.keyLightColor,
     setKeyLightColor,
-    keyLightIntensity,
+    keyLightIntensity: baseLightSettings.keyLightIntensity,
     setKeyLightIntensity,
-    keyLightPosition,
+    keyLightPosition: baseLightSettings.keyLightPosition,
     setKeyLightPosition,
-    keyLightSoftness,
+    keyLightSoftness: baseLightSettings.keyLightSoftness,
     setKeyLightSoftness,
     keyLightPositionKeyframes,
     setKeyLightPositionKeyframes,

@@ -11,6 +11,7 @@ import {
   ScalarKeyframe,
   Vector3Keyframe,
   type GeometrySettings,
+  type LightSettings,
 } from "./EditorModel"
 import type { MotionRecipe } from "./MotionRecipes"
 import {
@@ -35,9 +36,7 @@ interface RecipeApplicationOptions {
   setMoveKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   setQualityKeyframes: Dispatch<SetStateAction<ScalarKeyframe[]>>
   setInnerScaleKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
-  setKeyLightIntensity: Dispatch<SetStateAction<number>>
-  setKeyLightPosition: Dispatch<SetStateAction<LightPosition>>
-  setKeyLightSoftness: Dispatch<SetStateAction<number>>
+  setLightBaseSettings: Dispatch<SetStateAction<LightSettings>>
   setKeyLightPositionKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   setTracks: Dispatch<SetStateAction<TimelineTrack[]>>
   setSelectedMotionTrackId: Dispatch<SetStateAction<MotionTrackId>>
@@ -60,9 +59,7 @@ export function useRecipeApplication({
   setMoveKeyframes,
   setQualityKeyframes,
   setInnerScaleKeyframes,
-  setKeyLightIntensity,
-  setKeyLightPosition,
-  setKeyLightSoftness,
+  setLightBaseSettings,
   setKeyLightPositionKeyframes,
   setTracks,
   setSelectedMotionTrackId,
@@ -111,9 +108,12 @@ export function useRecipeApplication({
       setMoveKeyframes([])
       setQualityKeyframes([])
       setInnerScaleKeyframes([])
-      setKeyLightIntensity(recipe.keyLightIntensity)
-      setKeyLightPosition({ x: 5, y: 5, z: 4 })
-      setKeyLightSoftness(0.35)
+      setLightBaseSettings((settings) => ({
+        ...settings,
+        keyLightIntensity: recipe.keyLightIntensity,
+        keyLightPosition: { x: 5, y: 5, z: 4 },
+        keyLightSoftness: 0.35,
+      }))
       setKeyLightPositionKeyframes([])
 
       setTracks(normalizeRecipeTracks(recipe))
@@ -136,9 +136,7 @@ export function useRecipeApplication({
       setMoveKeyframes,
       setQualityKeyframes,
       setInnerScaleKeyframes,
-      setKeyLightIntensity,
-      setKeyLightPosition,
-      setKeyLightSoftness,
+      setLightBaseSettings,
       setKeyLightPositionKeyframes,
       setTracks,
       setSelectedMotionTrackId,

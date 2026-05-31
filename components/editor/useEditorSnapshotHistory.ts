@@ -6,6 +6,7 @@ import {
   EditorSnapshot,
   FillMode,
   GeometrySettings,
+  LightSettings,
   LightPosition,
   MAX_UNDO_STEPS,
   MaterialKeyframe,
@@ -74,13 +75,10 @@ interface EditorSnapshotHistoryOptions {
   setRotationAxisKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   setPreviewRotationY: Dispatch<SetStateAction<number | null>>
   keyLightColor: string
-  setKeyLightColor: Dispatch<SetStateAction<string>>
   keyLightIntensity: number
-  setKeyLightIntensity: Dispatch<SetStateAction<number>>
   keyLightPosition: LightPosition
-  setKeyLightPosition: Dispatch<SetStateAction<LightPosition>>
   keyLightSoftness: number
-  setKeyLightSoftness: Dispatch<SetStateAction<number>>
+  setLightBaseSettings: Dispatch<SetStateAction<LightSettings>>
   keyLightPositionKeyframes: Vector3Keyframe[]
   setKeyLightPositionKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   tracks: TimelineTrack[]
@@ -140,13 +138,10 @@ export function useEditorSnapshotHistory({
   setRotationAxisKeyframes,
   setPreviewRotationY,
   keyLightColor,
-  setKeyLightColor,
   keyLightIntensity,
-  setKeyLightIntensity,
   keyLightPosition,
-  setKeyLightPosition,
   keyLightSoftness,
-  setKeyLightSoftness,
+  setLightBaseSettings,
   keyLightPositionKeyframes,
   setKeyLightPositionKeyframes,
   tracks,
@@ -265,10 +260,12 @@ export function useEditorSnapshotHistory({
     setRotationOffset(nextSnapshot.rotationOffset)
     setRotationAxisKeyframes(nextSnapshot.rotationAxisKeyframes)
     setPreviewRotationY(null)
-    setKeyLightColor(nextSnapshot.keyLightColor)
-    setKeyLightIntensity(nextSnapshot.keyLightIntensity)
-    setKeyLightPosition(nextSnapshot.keyLightPosition)
-    setKeyLightSoftness(nextSnapshot.keyLightSoftness)
+    setLightBaseSettings({
+      keyLightColor: nextSnapshot.keyLightColor,
+      keyLightIntensity: nextSnapshot.keyLightIntensity,
+      keyLightPosition: nextSnapshot.keyLightPosition,
+      keyLightSoftness: nextSnapshot.keyLightSoftness,
+    })
     setKeyLightPositionKeyframes(nextSnapshot.keyLightPositionKeyframes)
     setTracks(nextSnapshot.tracks)
     setIsPlaying(false)

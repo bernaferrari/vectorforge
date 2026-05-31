@@ -4,6 +4,7 @@ import type { Dispatch, SetStateAction } from "react"
 import type { MaterialPresetId } from "../3d/MaterialPresets"
 import type {
   GeometrySettings,
+  LightSettings,
   LightPosition,
   MaterialSettings,
   MotionTrackId,
@@ -31,9 +32,7 @@ type EditorRecipeSurfaceOptions = {
   setMoveKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   setQualityKeyframes: Dispatch<SetStateAction<ScalarKeyframe[]>>
   setInnerScaleKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
-  setKeyLightIntensity: Dispatch<SetStateAction<number>>
-  setKeyLightPosition: Dispatch<SetStateAction<LightPosition>>
-  setKeyLightSoftness: Dispatch<SetStateAction<number>>
+  setLightBaseSettings: Dispatch<SetStateAction<LightSettings>>
   setKeyLightPositionKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   setTracks: Dispatch<SetStateAction<TimelineTrack[]>>
   setSelectedMotionTrackId: Dispatch<SetStateAction<MotionTrackId>>

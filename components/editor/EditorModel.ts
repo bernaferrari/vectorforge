@@ -96,6 +96,13 @@ export type GeometrySettings = {
   innerElementScale: LightPosition
 }
 
+export type LightSettings = {
+  keyLightColor: string
+  keyLightIntensity: number
+  keyLightPosition: LightPosition
+  keyLightSoftness: number
+}
+
 export type TimeKeyframe = { time: number }
 
 export type EditorSnapshot = {
