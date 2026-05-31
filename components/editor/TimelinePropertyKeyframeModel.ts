@@ -67,60 +67,6 @@ const addVectorKeyframe = (
     })
   )
 
-const clearStyleKeyframes = (setters: TimelinePropertyKeyframeSetters) => {
-  setters.setFillKeyframes([])
-  setters.setMaterialKeyframes([])
-}
-
-const removeStyleKeyframe = (
-  setters: TimelinePropertyKeyframeSetters,
-  keyframeId: string
-) => {
-  setters.setFillKeyframes((prev) =>
-    removeStyleKeyframesAtIdTime(prev, keyframeId)
-  )
-  setters.setMaterialKeyframes((prev) =>
-    removeStyleKeyframesAtIdTime(prev, keyframeId)
-  )
-}
-
-const addStyleKeyframe = (
-  setters: TimelinePropertyKeyframeSetters,
-  time: number,
-  values: TimelinePropertyKeyframeValues
-) => {
-  setters.setFillKeyframes((prev) => addFillKeyframe(prev, time, values))
-  setters.setMaterialKeyframes((prev) =>
-    addMaterialKeyframe(prev, time, values)
-  )
-}
-
-const moveStyleKeyframe = (
-  setters: TimelinePropertyKeyframeSetters,
-  keyframeId: string,
-  time: number
-) => {
-  setters.setFillKeyframes((prev) =>
-    moveStyleKeyframesAtIdTime(prev, keyframeId, time)
-  )
-  setters.setMaterialKeyframes((prev) =>
-    moveStyleKeyframesAtIdTime(prev, keyframeId, time)
-  )
-}
-
-const setStyleKeyframeEasing = (
-  setters: TimelinePropertyKeyframeSetters,
-  keyframeId: string | null,
-  easing: EasingType
-) => {
-  setters.setFillKeyframes((prev) =>
-    setStyleKeyframesEasingAtIdTime(prev, keyframeId, easing)
-  )
-  setters.setMaterialKeyframes((prev) =>
-    setStyleKeyframesEasingAtIdTime(prev, keyframeId, easing)
-  )
-}
-
 export const styleKeyframeTimeFromId = (keyframeId: string) =>
   Number(keyframeId.replace(STYLE_ROW_PREFIX, ""))
 
@@ -273,6 +219,60 @@ export const addMaterialKeyframe = (
       easing,
     }),
   })
+}
+
+const clearStyleKeyframes = (setters: TimelinePropertyKeyframeSetters) => {
+  setters.setFillKeyframes([])
+  setters.setMaterialKeyframes([])
+}
+
+const removeStyleKeyframe = (
+  setters: TimelinePropertyKeyframeSetters,
+  keyframeId: string
+) => {
+  setters.setFillKeyframes((prev) =>
+    removeStyleKeyframesAtIdTime(prev, keyframeId)
+  )
+  setters.setMaterialKeyframes((prev) =>
+    removeStyleKeyframesAtIdTime(prev, keyframeId)
+  )
+}
+
+const addStyleKeyframe = (
+  setters: TimelinePropertyKeyframeSetters,
+  time: number,
+  values: TimelinePropertyKeyframeValues
+) => {
+  setters.setFillKeyframes((prev) => addFillKeyframe(prev, time, values))
+  setters.setMaterialKeyframes((prev) =>
+    addMaterialKeyframe(prev, time, values)
+  )
+}
+
+const moveStyleKeyframe = (
+  setters: TimelinePropertyKeyframeSetters,
+  keyframeId: string,
+  time: number
+) => {
+  setters.setFillKeyframes((prev) =>
+    moveStyleKeyframesAtIdTime(prev, keyframeId, time)
+  )
+  setters.setMaterialKeyframes((prev) =>
+    moveStyleKeyframesAtIdTime(prev, keyframeId, time)
+  )
+}
+
+const setStyleKeyframeEasing = (
+  setters: TimelinePropertyKeyframeSetters,
+  keyframeId: string | null,
+  easing: EasingType
+) => {
+  setters.setFillKeyframes((prev) =>
+    setStyleKeyframesEasingAtIdTime(prev, keyframeId, easing)
+  )
+  setters.setMaterialKeyframes((prev) =>
+    setStyleKeyframesEasingAtIdTime(prev, keyframeId, easing)
+  )
 }
 
 export const addPropertyRowKeyframe = (
