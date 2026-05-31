@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import type { SvgCanvasRef } from "../3d/SvgCanvas"
 import { useAnimatedTimeSeek } from "./useAnimatedTimeSeek"
 import { usePlaybackController } from "./usePlaybackController"
@@ -50,14 +50,14 @@ export function useEditorPlaybackState() {
     stopPlayback,
   })
 
-  const resetPlayback = () => {
+  const resetPlayback = useCallback(() => {
     seekToTime(0)
-  }
+  }, [seekToTime])
 
-  const togglePlayback = () => {
+  const togglePlayback = useCallback(() => {
     cancelAnimatedSeek()
     togglePlaybackNow()
-  }
+  }, [cancelAnimatedSeek, togglePlaybackNow])
 
   return {
     canvas3DRef,
