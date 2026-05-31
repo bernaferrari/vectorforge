@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import {
   fetchMaterialSymbolIcon,
-  fetchMaterialSymbolNames,
   normalizeMaterialSymbolName,
   type MaterialSymbolFontSettings,
   type MaterialSymbolStyle,
@@ -14,6 +13,7 @@ import {
   visibleWipePairs,
 } from "./MaterialSymbolCatalog"
 import type { MaterialSymbolStatus } from "./ShapePickerSymbolModel"
+import { useMaterialSymbolCatalogLoader } from "./useMaterialSymbolCatalogLoader"
 
 const errorMessageFromUnknown = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback
@@ -47,36 +47,13 @@ export function useShapePickerCatalog({
     })
   const [materialSymbolOptionsOpen, setMaterialSymbolOptionsOpen] =
     useState(false)
-  const [materialSymbolNames, setMaterialSymbolNames] = useState<string[]>([])
-  const [materialCatalogLoading, setMaterialCatalogLoading] = useState(false)
+  const { materialSymbolNames } = useMaterialSymbolCatalogLoader(
+    Boolean(openShapePicker)
+  )
   const [materialSymbolStatus, setMaterialSymbolStatus] =
     useState<MaterialSymbolStatus>({ state: "idle" })
   const [wipePairMode, setWipePairMode] = useState<"slash" | "morph">("slash")
   const importInFlightRef = useRef(false)
-
-  useEffect(() => {
-    if (
-      !openShapePicker ||
-      materialSymbolNames.length > 0 ||
-      materialCatalogLoading
-    )
-      return
-    let cancelled = false
-    setMaterialCatalogLoading(true)
-    fetchMaterialSymbolNames()
-      .then((names) => {
-        if (!cancelled) setMaterialSymbolNames(names)
-      })
-      .catch(() => {
-        if (!cancelled) setMaterialSymbolNames([])
-      })
-      .finally(() => {
-        if (!cancelled) setMaterialCatalogLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [materialCatalogLoading, materialSymbolNames.length, openShapePicker])
 
   const normalizedShapeQuery = materialSymbolQuery(shapeSearchQuery)
   const visibleShapeOptions = useMemo(() => {
