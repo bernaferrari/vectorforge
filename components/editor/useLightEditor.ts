@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState, type SetStateAction } from "react"
 import {
+  DEFAULT_LIGHT_SETTINGS,
   type LightSettings,
   LightPosition,
   LightPositionKeyframe,
@@ -17,13 +18,6 @@ export const STATIC_STUDIO_LIGHTING = {
   ambientIntensity: 0.6,
   rimLightColor: "#a48bff",
   rimLightIntensity: 0.8,
-}
-
-const DEFAULT_LIGHT_SETTINGS: LightSettings = {
-  keyLightColor: "#ffffff",
-  keyLightIntensity: 1.2,
-  keyLightPosition: { x: 5, y: 5, z: 4 },
-  keyLightSoftness: 0.35,
 }
 
 const applyLightSettingValue = <T>(value: SetStateAction<T>, previous: T) =>

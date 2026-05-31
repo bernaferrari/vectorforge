@@ -3,6 +3,9 @@
 import { Dispatch, SetStateAction, useMemo } from "react"
 import {
   clampNumber,
+  DEFAULT_GEOMETRY_SETTINGS,
+  DEFAULT_LIGHT_SETTINGS,
+  DEFAULT_TRANSFORM_SETTINGS,
   EditorSnapshot,
   FillMode,
   GeometrySettings,
@@ -83,6 +86,42 @@ interface EditorSnapshotHistoryOptions {
   setIsPlaying: Dispatch<SetStateAction<boolean>>
   isInputDragActive: () => boolean
 }
+
+const geometrySettingsFromSnapshot = (
+  snapshot: EditorSnapshot
+): GeometrySettings => ({
+  ...DEFAULT_GEOMETRY_SETTINGS,
+  extrusionDepth: snapshot.extrusionDepth,
+  bevelEnabled: snapshot.bevelEnabled,
+  bevelThickness: snapshot.bevelThickness,
+  bevelSize: snapshot.bevelSize,
+  bevelSegments: snapshot.bevelSegments,
+  geometryQuality: snapshot.geometryQuality,
+  layerSpacing: snapshot.layerSpacing,
+  innerElementScale: snapshot.innerElementScale,
+})
+
+const transformSettingsFromSnapshot = (
+  snapshot: EditorSnapshot
+): TransformSettings => ({
+  ...DEFAULT_TRANSFORM_SETTINGS,
+  objectScale: snapshot.objectScale,
+  objectScaleAxes:
+    snapshot.objectScaleAxes ?? DEFAULT_TRANSFORM_SETTINGS.objectScaleAxes,
+  moveOffset: snapshot.moveOffset,
+  rotationOffset: snapshot.rotationOffset,
+  previewRotationY: null,
+})
+
+const lightSettingsFromSnapshot = (
+  snapshot: EditorSnapshot
+): LightSettings => ({
+  ...DEFAULT_LIGHT_SETTINGS,
+  keyLightColor: snapshot.keyLightColor,
+  keyLightIntensity: snapshot.keyLightIntensity,
+  keyLightPosition: snapshot.keyLightPosition,
+  keyLightSoftness: snapshot.keyLightSoftness,
+})
 
 export function useEditorSnapshotHistory({
   activeRecipeId,
@@ -233,35 +272,14 @@ export function useEditorSnapshotHistory({
     setMaterialPreset(nextSnapshot.materialPreset)
     setMaterialBaseSettings(nextSnapshot.materialSettings)
     setMaterialKeyframes(nextSnapshot.materialKeyframes)
-    setGeometryBaseSettings({
-      extrusionDepth: nextSnapshot.extrusionDepth,
-      bevelEnabled: nextSnapshot.bevelEnabled,
-      bevelThickness: nextSnapshot.bevelThickness,
-      bevelSize: nextSnapshot.bevelSize,
-      bevelSegments: nextSnapshot.bevelSegments,
-      geometryQuality: nextSnapshot.geometryQuality,
-      layerSpacing: nextSnapshot.layerSpacing,
-      innerElementScale: nextSnapshot.innerElementScale,
-    })
+    setGeometryBaseSettings(geometrySettingsFromSnapshot(nextSnapshot))
     setQualityKeyframes(nextSnapshot.qualityKeyframes)
     setInnerScaleKeyframes(nextSnapshot.innerScaleKeyframes)
-    setTransformBaseSettings({
-      objectScale: nextSnapshot.objectScale,
-      objectScaleAxes: nextSnapshot.objectScaleAxes ?? { x: 1, y: 1, z: 1 },
-      moveOffset: nextSnapshot.moveOffset,
-      rotationOffset: nextSnapshot.rotationOffset,
-      previewRotationY: null,
-      isScaleLocked: true,
-    })
+    setTransformBaseSettings(transformSettingsFromSnapshot(nextSnapshot))
     setMoveKeyframes(nextSnapshot.moveKeyframes)
     restoreFillState(nextSnapshot)
     setRotationAxisKeyframes(nextSnapshot.rotationAxisKeyframes)
-    setLightBaseSettings({
-      keyLightColor: nextSnapshot.keyLightColor,
-      keyLightIntensity: nextSnapshot.keyLightIntensity,
-      keyLightPosition: nextSnapshot.keyLightPosition,
-      keyLightSoftness: nextSnapshot.keyLightSoftness,
-    })
+    setLightBaseSettings(lightSettingsFromSnapshot(nextSnapshot))
     setKeyLightPositionKeyframes(nextSnapshot.keyLightPositionKeyframes)
     setTracks(nextSnapshot.tracks)
     setIsPlaying(false)

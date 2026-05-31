@@ -100,6 +100,8 @@ export function InspectorSidebar({
         selectedLayerOverride={transformProps.selectedLayerOverride}
         onSelectLayer={transformProps.onSelectLayer}
         onToggleVisibility={transformProps.onToggleLayerVisibility}
+        onScaleChange={transformProps.onLayerScaleChange}
+        onDepthChange={transformProps.onLayerDepthChange}
       />
 
       <div className="flex flex-col divide-y divide-border/30">

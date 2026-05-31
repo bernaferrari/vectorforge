@@ -7,23 +7,11 @@ import {
   type SetStateAction,
 } from "react"
 import {
-  EXTRUDE_DEFAULT,
-  GEOMETRY_QUALITY_DEFAULT,
+  DEFAULT_GEOMETRY_SETTINGS,
   type GeometrySettings,
   type ScalarKeyframe,
   type Vector3Keyframe,
 } from "./EditorModel"
-
-const DEFAULT_GEOMETRY_SETTINGS: GeometrySettings = {
-  extrusionDepth: EXTRUDE_DEFAULT,
-  bevelEnabled: true,
-  bevelThickness: 0.15,
-  bevelSize: 0.08,
-  bevelSegments: 3,
-  geometryQuality: GEOMETRY_QUALITY_DEFAULT,
-  layerSpacing: 0.8,
-  innerElementScale: { x: 1, y: 1, z: 1 },
-}
 
 const applySettingValue = <T>(value: SetStateAction<T>, previous: T) =>
   typeof value === "function" ? (value as (current: T) => T)(previous) : value

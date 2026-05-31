@@ -7,22 +7,13 @@ import {
   type SetStateAction,
 } from "react"
 import {
-  DEFAULT_ROTATION_END,
-  DEFAULT_ROTATION_START,
+  DEFAULT_TRANSFORM_SETTINGS,
   type LightPosition,
-  SCALE_DEFAULT,
   type TransformSettings,
   type Vector3Keyframe,
+  DEFAULT_ROTATION_END,
+  DEFAULT_ROTATION_START,
 } from "./EditorModel"
-
-const DEFAULT_TRANSFORM_SETTINGS: TransformSettings = {
-  objectScale: SCALE_DEFAULT,
-  objectScaleAxes: { x: 1, y: 1, z: 1 },
-  moveOffset: { x: 0, y: 0, z: 0 },
-  rotationOffset: { x: 0, y: 0, z: 0 },
-  previewRotationY: null,
-  isScaleLocked: true,
-}
 
 const applyTransformSettingValue = <T>(value: SetStateAction<T>, previous: T) =>
   typeof value === "function" ? (value as (current: T) => T)(previous) : value

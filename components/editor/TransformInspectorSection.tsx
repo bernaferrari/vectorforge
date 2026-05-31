@@ -17,7 +17,6 @@ import {
 import { AxisLockButton } from "./AxisLockButton"
 import { InspectorRow, InspectorSection } from "./InspectorPrimitives"
 import { InspectorSlider } from "./InspectorSlider"
-import { LayerControls } from "./LayerControls"
 import type { SvgLayer } from "./SvgLayerModel"
 import type { TimelineTrack } from "./TimelineModel"
 import { Vector3NumberFields } from "./Vector3NumberFields"
@@ -74,9 +73,6 @@ export function TransformInspectorSection({
   rotationAxisKeyframes,
   moveKeyframesLength,
   activeMoveOffset,
-  selectedShapeLayers,
-  selectedLayerId,
-  selectedLayerOverride,
   transformKeyframeControl,
   onActivateTrack,
   onScaleLockChange,
@@ -84,8 +80,6 @@ export function TransformInspectorSection({
   onScaleAxisChange,
   onRotationAxisChange,
   onMoveAxisChange,
-  onLayerScaleChange,
-  onLayerDepthChange,
   onCustomEdit,
 }: TransformInspectorSectionProps) {
   const scaleValue = finiteNumber(
@@ -174,14 +168,6 @@ export function TransformInspectorSection({
           onChange={onMoveAxisChange}
         />
       </InspectorRow>
-
-      <LayerControls
-        layers={selectedShapeLayers}
-        selectedLayerId={selectedLayerId}
-        selectedLayerOverride={selectedLayerOverride}
-        onScaleChange={onLayerScaleChange}
-        onDepthChange={onLayerDepthChange}
-      />
     </InspectorSection>
   )
 }

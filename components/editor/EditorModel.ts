@@ -171,6 +171,33 @@ export const ROTATION_MAX = 100000
 export const MOVE_COLOR = "#38bdf8"
 export const MAX_UNDO_STEPS = 80
 
+export const DEFAULT_GEOMETRY_SETTINGS: GeometrySettings = {
+  extrusionDepth: EXTRUDE_DEFAULT,
+  bevelEnabled: true,
+  bevelThickness: 0.15,
+  bevelSize: 0.08,
+  bevelSegments: 3,
+  geometryQuality: GEOMETRY_QUALITY_DEFAULT,
+  layerSpacing: 0.8,
+  innerElementScale: { x: 1, y: 1, z: 1 },
+}
+
+export const DEFAULT_TRANSFORM_SETTINGS: TransformSettings = {
+  objectScale: SCALE_DEFAULT,
+  objectScaleAxes: { x: 1, y: 1, z: 1 },
+  moveOffset: { x: 0, y: 0, z: 0 },
+  rotationOffset: { x: 0, y: 0, z: 0 },
+  previewRotationY: null,
+  isScaleLocked: true,
+}
+
+export const DEFAULT_LIGHT_SETTINGS: LightSettings = {
+  keyLightColor: "#ffffff",
+  keyLightIntensity: 1.2,
+  keyLightPosition: { x: 5, y: 5, z: 4 },
+  keyLightSoftness: 0.35,
+}
+
 export const AXIS_COLORS: Record<string, string> = {
   X: "#c4766f",
   Y: "#7dac8e",
