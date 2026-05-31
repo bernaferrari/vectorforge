@@ -3,10 +3,8 @@
 import { Dispatch, SetStateAction, useCallback } from "react"
 import type { MaterialPresetId } from "../3d/MaterialPresets"
 import {
-  GEOMETRY_QUALITY_DEFAULT,
   MaterialSettings,
   MotionTrackId,
-  SCALE_DEFAULT,
   ScalarKeyframe,
   Vector3Keyframe,
   type GeometrySettings,
@@ -15,9 +13,13 @@ import {
 } from "./EditorModel"
 import type { MotionRecipe } from "./MotionRecipes"
 import {
+  geometrySettingsForRecipe,
+  lightSettingsForRecipe,
+  materialSettingsForRecipe,
   normalizeRecipeRotationKeyframes,
   normalizeRecipeTracks,
   recolorShapesForRecipe,
+  transformSettingsForRecipe,
 } from "./RecipeModel"
 import type { ShapeStop, TimelineTrack } from "./TimelineModel"
 
@@ -69,52 +71,16 @@ export function useRecipeApplication({
       applyRecipeFill(recipe)
       setShapes((prev) => recolorShapesForRecipe(shapeList ?? prev, recipe))
 
-      setMaterialBaseSettings({
-        roughness: recipe.roughness,
-        metalness: recipe.metalness,
-        reflectance: recipe.reflectance ?? 0.5,
-        clearcoat: recipe.clearcoat,
-        clearcoatRoughness: recipe.clearcoatRoughness ?? 0.1,
-        transmission: recipe.transmission,
-        thickness: recipe.thickness ?? 1.0,
-        emissiveIntensity: recipe.emissiveIntensity,
-      })
-
-      setGeometryBaseSettings({
-        extrusionDepth: recipe.extrusionDepth,
-        bevelEnabled: recipe.bevelEnabled,
-        bevelThickness: recipe.bevelThickness,
-        bevelSize: recipe.bevelSize,
-        bevelSegments: recipe.bevelSegments,
-        geometryQuality: recipe.geometryQuality ?? GEOMETRY_QUALITY_DEFAULT,
-        layerSpacing: recipe.layerSpacing,
-        innerElementScale: { x: 1, y: 1, z: 1 },
-      })
-
-      setTransformBaseSettings({
-        objectScale: SCALE_DEFAULT,
-        objectScaleAxes: { x: 1, y: 1, z: 1 },
-        moveOffset: {
-          x: recipe.translateX ?? 0,
-          y: recipe.translateY ?? 0,
-          z: recipe.translateZ ?? 0,
-        },
-        rotationOffset: { x: 0, y: 0, z: 0 },
-        previewRotationY: null,
-        isScaleLocked: true,
-      })
+      setMaterialBaseSettings(materialSettingsForRecipe(recipe))
+      setGeometryBaseSettings(geometrySettingsForRecipe(recipe))
+      setTransformBaseSettings(transformSettingsForRecipe(recipe))
       setRotationAxisKeyframes(
         normalizeRecipeRotationKeyframes(recipe, duration)
       )
       setMoveKeyframes([])
       setQualityKeyframes([])
       setInnerScaleKeyframes([])
-      setLightBaseSettings((settings) => ({
-        ...settings,
-        keyLightIntensity: recipe.keyLightIntensity,
-        keyLightPosition: { x: 5, y: 5, z: 4 },
-        keyLightSoftness: 0.35,
-      }))
+      setLightBaseSettings(lightSettingsForRecipe(recipe))
       setKeyLightPositionKeyframes([])
 
       setTracks(normalizeRecipeTracks(recipe))

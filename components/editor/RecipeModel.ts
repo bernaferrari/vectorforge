@@ -1,6 +1,9 @@
 import {
+  DEFAULT_GEOMETRY_SETTINGS,
+  DEFAULT_LIGHT_SETTINGS,
   DEFAULT_ROTATION_END,
   DEFAULT_ROTATION_START,
+  DEFAULT_TRANSFORM_SETTINGS,
   EXTRUDE_MAX,
   LIGHT_MAX,
   MOTION_TRACK_NAMES,
@@ -8,7 +11,12 @@ import {
   SCALE_DEFAULT,
   SCALE_MAX,
   googleMeshFillStops,
+  type GeometrySettings,
+  type LightSettings,
+  type MaterialSettings,
+  type TransformSettings,
 } from "./EditorModel"
+import { DEFAULT_MATERIAL_SETTINGS } from "./MaterialEditorModel"
 import type { ShapeStop, TimelineTrack } from "./TimelineModel"
 import type { MOTION_RECIPES } from "./MotionRecipes"
 
@@ -29,6 +37,54 @@ export const recolorShapesForRecipe = (
     transitionType: recipe.transitionType,
     wipeDirection: recipe.wipeDirection,
   }))
+
+export const materialSettingsForRecipe = (
+  recipe: MotionRecipe
+): MaterialSettings => ({
+  ...DEFAULT_MATERIAL_SETTINGS,
+  roughness: recipe.roughness,
+  metalness: recipe.metalness,
+  reflectance: recipe.reflectance ?? DEFAULT_MATERIAL_SETTINGS.reflectance,
+  clearcoat: recipe.clearcoat,
+  clearcoatRoughness:
+    recipe.clearcoatRoughness ?? DEFAULT_MATERIAL_SETTINGS.clearcoatRoughness,
+  transmission: recipe.transmission,
+  thickness: recipe.thickness ?? DEFAULT_MATERIAL_SETTINGS.thickness,
+  emissiveIntensity: recipe.emissiveIntensity,
+})
+
+export const geometrySettingsForRecipe = (
+  recipe: MotionRecipe
+): GeometrySettings => ({
+  ...DEFAULT_GEOMETRY_SETTINGS,
+  extrusionDepth: recipe.extrusionDepth,
+  bevelEnabled: recipe.bevelEnabled,
+  bevelThickness: recipe.bevelThickness,
+  bevelSize: recipe.bevelSize,
+  bevelSegments: recipe.bevelSegments,
+  geometryQuality:
+    recipe.geometryQuality ?? DEFAULT_GEOMETRY_SETTINGS.geometryQuality,
+  layerSpacing: recipe.layerSpacing,
+})
+
+export const transformSettingsForRecipe = (
+  recipe: MotionRecipe
+): TransformSettings => ({
+  ...DEFAULT_TRANSFORM_SETTINGS,
+  moveOffset: {
+    x: recipe.translateX ?? DEFAULT_TRANSFORM_SETTINGS.moveOffset.x,
+    y: recipe.translateY ?? DEFAULT_TRANSFORM_SETTINGS.moveOffset.y,
+    z: recipe.translateZ ?? DEFAULT_TRANSFORM_SETTINGS.moveOffset.z,
+  },
+  previewRotationY: null,
+})
+
+export const lightSettingsForRecipe = (
+  recipe: MotionRecipe
+): LightSettings => ({
+  ...DEFAULT_LIGHT_SETTINGS,
+  keyLightIntensity: recipe.keyLightIntensity,
+})
 
 export const normalizeRecipeTracks = (
   recipe: MotionRecipe
