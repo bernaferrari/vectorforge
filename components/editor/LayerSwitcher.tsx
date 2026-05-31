@@ -63,7 +63,7 @@ function LayerSwitcherComponent({
   return (
     <div className="flex flex-col">
       <div className="flex h-9 items-center gap-2 pr-1 pl-2.5">
-        <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+        <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
           <Layers className="size-3.5" />
           Layers
         </span>

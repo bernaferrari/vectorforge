@@ -41,13 +41,21 @@ function ShapeNavRow({
   shapeNavigation: NonNullable<SidebarTransformProps["shapeNavigation"]>
 }) {
   return (
-    <div className="flex h-9 items-center justify-between gap-2 pr-1 pl-2.5">
-      <span
-        className="min-w-0 truncate text-[12px] font-semibold text-foreground"
-        title={shapeNavigation.label}
-      >
-        {shapeNavigation.label}
-      </span>
+    <div className="flex min-h-11 items-center justify-between gap-2 pr-1 pl-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <span
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-background text-foreground shadow-sm [&_svg]:size-4 [&_svg_*]:fill-current"
+          style={{ color: shapeNavigation.color }}
+          aria-hidden="true"
+          dangerouslySetInnerHTML={{ __html: shapeNavigation.svgContent }}
+        />
+        <span
+          className="min-w-0 truncate text-[12px] font-semibold text-foreground"
+          title={shapeNavigation.label}
+        >
+          {shapeNavigation.label}
+        </span>
+      </div>
       <div className="flex shrink-0 items-center gap-0.5">
         <button
           type="button"
@@ -90,7 +98,7 @@ function InspectorContextHeader({
   if (!showShapeNav && !showLayers) return null
 
   return (
-    <div className="mb-3 flex flex-col overflow-hidden rounded-xl border border-border/40 bg-foreground/[0.02]">
+    <div className="mb-3 flex shrink-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-muted/25 shadow-sm">
       {showShapeNav ? <ShapeNavRow shapeNavigation={shapeNavigation} /> : null}
       {showShapeNav && showLayers ? (
         <div className="h-px bg-border/40" />

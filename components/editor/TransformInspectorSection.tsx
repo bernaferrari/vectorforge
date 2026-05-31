@@ -17,6 +17,7 @@ import {
 import { AxisLockButton } from "./AxisLockButton"
 import { InspectorRow, InspectorSection } from "./InspectorPrimitives"
 import { InspectorSlider } from "./InspectorSlider"
+import type { ShapeNavigationModel } from "./useShapeNavigation"
 import type { SvgLayer } from "./SvgLayerModel"
 import type { TimelineTrack } from "./TimelineModel"
 import { Vector3NumberFields } from "./Vector3NumberFields"
@@ -40,13 +41,7 @@ export type TransformInspectorSectionProps = {
   selectedShapeLayers: SvgLayer[]
   selectedLayerId: string
   selectedLayerOverride: PathOverride | null
-  shapeNavigation?: {
-    label: string
-    index: number
-    total: number
-    onPrevious: () => void
-    onNext: () => void
-  }
+  shapeNavigation?: ShapeNavigationModel
   transformKeyframeControl: ReactNode
   onActivateTrack: (trackId: MotionTrackId) => void
   onScaleLockChange: (locked: boolean) => void

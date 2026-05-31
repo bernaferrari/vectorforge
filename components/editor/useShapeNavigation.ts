@@ -6,6 +6,8 @@ import type { ShapeStop } from "./TimelineModel"
 
 export type ShapeNavigationModel = {
   label: string
+  color: string
+  svgContent: string
   index: number
   total: number
   onPrevious: () => void
@@ -39,6 +41,8 @@ export function useShapeNavigation({
 
     return {
       label: sortedShapes[selectedIndex]?.iconName ?? "Shape",
+      color: sortedShapes[selectedIndex]?.color ?? "currentColor",
+      svgContent: sortedShapes[selectedIndex]?.svgContent ?? "",
       index: selectedIndex,
       total: sortedShapes.length,
       onPrevious: () => selectShapeAt(selectedIndex - 1),
