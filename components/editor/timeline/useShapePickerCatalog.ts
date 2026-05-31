@@ -1,22 +1,16 @@
-import { useMemo, useRef, useState } from "react"
+import { useMemo, useState } from "react"
 import {
-  fetchMaterialSymbolIcon,
-  normalizeMaterialSymbolName,
   type MaterialSymbolFontSettings,
   type MaterialSymbolStyle,
 } from "../IconLibrary"
-import type { MaterialWipeIconPair } from "../MaterialWipePairs"
 import type { ShapeOption } from "./TimelineTypes"
 import {
   materialSymbolQuery,
   visibleMaterialSymbols,
   visibleWipePairs,
 } from "./MaterialSymbolCatalog"
-import type { MaterialSymbolStatus } from "./ShapePickerSymbolModel"
 import { useMaterialSymbolCatalogLoader } from "./useMaterialSymbolCatalogLoader"
-
-const errorMessageFromUnknown = (error: unknown, fallback: string) =>
-  error instanceof Error ? error.message : fallback
+import { useMaterialSymbolImportActions } from "./useMaterialSymbolImportActions"
 
 export function useShapePickerCatalog({
   openShapePicker,
@@ -50,10 +44,22 @@ export function useShapePickerCatalog({
   const { materialSymbolNames } = useMaterialSymbolCatalogLoader(
     Boolean(openShapePicker)
   )
-  const [materialSymbolStatus, setMaterialSymbolStatus] =
-    useState<MaterialSymbolStatus>({ state: "idle" })
   const [wipePairMode, setWipePairMode] = useState<"slash" | "morph">("slash")
-  const importInFlightRef = useRef(false)
+  const {
+    materialSymbolStatus,
+    setMaterialSymbolStatus,
+    importMaterialSymbol,
+    chooseMaterialSymbol,
+    chooseWipePair,
+  } = useMaterialSymbolImportActions({
+    shapeSearchQuery,
+    materialSymbolStyle,
+    wipePairMode,
+    onShapeIconChange,
+    onShapeWipePairChange,
+    onSearchQueryChange: setShapeSearchQuery,
+    onOpenShapePicker,
+  })
 
   const normalizedShapeQuery = materialSymbolQuery(shapeSearchQuery)
   const visibleShapeOptions = useMemo(() => {
@@ -88,72 +94,6 @@ export function useShapePickerCatalog({
     value: MaterialSymbolFontSettings[K]
   ) => {
     setMaterialSymbolSettings((current) => ({ ...current, [key]: value }))
-  }
-
-  const chooseMaterialSymbol = (shapeId: string, symbolName: string) => {
-    const normalizedName = normalizeMaterialSymbolName(symbolName)
-    if (!normalizedName || importInFlightRef.current) return
-
-    setMaterialSymbolStatus({ state: "idle" })
-    void (async () => {
-      importInFlightRef.current = true
-      setMaterialSymbolStatus({ state: "loading" })
-      try {
-        const icon = await fetchMaterialSymbolIcon(
-          normalizedName,
-          materialSymbolStyle
-        )
-        onShapeIconChange(shapeId, icon)
-        setShapeSearchQuery("")
-        setMaterialSymbolStatus({ state: "idle" })
-        onOpenShapePicker(null)
-      } catch (error) {
-        setMaterialSymbolStatus({
-          state: "error",
-          message: errorMessageFromUnknown(
-            error,
-            "Could not import that symbol."
-          ),
-        })
-      } finally {
-        importInFlightRef.current = false
-      }
-    })()
-  }
-
-  const importMaterialSymbol = (shapeId: string) => {
-    chooseMaterialSymbol(shapeId, shapeSearchQuery)
-  }
-
-  const chooseWipePair = (shapeId: string, pair: MaterialWipeIconPair) => {
-    if (importInFlightRef.current) return
-
-    void (async () => {
-      importInFlightRef.current = true
-      setMaterialSymbolStatus({ state: "loading" })
-      try {
-        const [enabled, disabled] = await Promise.all([
-          fetchMaterialSymbolIcon(pair.enabled, materialSymbolStyle),
-          fetchMaterialSymbolIcon(pair.disabled, materialSymbolStyle, {
-            syntheticOffSlash: wipePairMode === "slash",
-          }),
-        ])
-        onShapeWipePairChange(shapeId, enabled, disabled)
-        setShapeSearchQuery("")
-        setMaterialSymbolStatus({ state: "idle" })
-        onOpenShapePicker(null)
-      } catch (error) {
-        setMaterialSymbolStatus({
-          state: "error",
-          message: errorMessageFromUnknown(
-            error,
-            "Could not import that wipe pair."
-          ),
-        })
-      } finally {
-        importInFlightRef.current = false
-      }
-    })()
   }
 
   return {
