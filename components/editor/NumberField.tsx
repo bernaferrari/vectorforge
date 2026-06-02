@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useRef, useState } from "react"
+import React, { useRef, useState } from "react"
 import { bindWindowPointerDrag } from "@/lib/drag-events"
 import {
   clampInspectorValue,
@@ -35,19 +35,18 @@ export function NumberField({
   inputClassName?: string
   onChange: (value: number) => void
 }) {
-  const [draft, setDraft] = useState(() => value.toFixed(precision))
+  const [draft, setDraft] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const { flush: flushScrubChange, schedule: scheduleScrubChange } =
     useRafNumberChange(onChange)
-
-  useEffect(() => {
-    setDraft(value.toFixed(precision))
-  }, [value, precision])
+  const displayValue = draft ?? value.toFixed(precision)
 
   const commit = () => {
+    if (draft === null) return
+
     const parsed = Number.parseFloat(draft)
+    setDraft(null)
     if (!Number.isFinite(parsed)) {
-      setDraft(value.toFixed(precision))
       return
     }
     onChange(clampInspectorValue(parsed, min, max))
@@ -81,6 +80,7 @@ export function NumberField({
         flushScrubChange()
         setInspectorInputDragActive(false)
         document.body.style.cursor = ""
+        if (moved) setDraft(null)
         if (!moved) inputRef.current?.focus()
       },
     })
@@ -106,13 +106,16 @@ export function NumberField({
       <input
         ref={inputRef}
         type="text"
-        value={draft}
+        value={displayValue}
         inputMode="decimal"
         aria-valuemin={min}
         aria-valuemax={max}
         aria-valuenow={value}
         onChange={(event) => setDraft(event.target.value)}
-        onFocus={(event) => event.currentTarget.select()}
+        onFocus={(event) => {
+          setDraft(value.toFixed(precision))
+          event.currentTarget.select()
+        }}
         onBlur={commit}
         onKeyDown={(event) => {
           if (event.key === "Enter") {

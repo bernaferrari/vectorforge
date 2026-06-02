@@ -18,6 +18,7 @@ export type MotionPropertyControlsOptions = {
   setExtrusionDepth: Dispatch<SetStateAction<number>>
   setRotationOffset: Dispatch<SetStateAction<LightPosition>>
   activeRotationOffset: LightPosition
+  rotationAxisKeyframes: Vector3Keyframe[]
   setRotationAxisKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   setPreviewRotationY: Dispatch<SetStateAction<number | null>>
   setObjectScale: Dispatch<SetStateAction<number>>

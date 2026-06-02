@@ -13,7 +13,6 @@ import type {
 } from "./EditorModel"
 import type { MotionRecipe } from "./MotionRecipes"
 import type { ShapeStop, TimelineTrack } from "./TimelineModel"
-import { useInitialRecipeBoot } from "./useInitialRecipeBoot"
 import { useRecipeApplication } from "./useRecipeApplication"
 
 type EditorRecipeSurfaceOptions = {
@@ -40,11 +39,5 @@ type EditorRecipeSurfaceOptions = {
 export function useEditorRecipeSurface(
   recipeOptions: EditorRecipeSurfaceOptions
 ) {
-  const applyRecipe = useRecipeApplication(recipeOptions)
-
-  useInitialRecipeBoot({
-    applyRecipe,
-  })
-
-  return applyRecipe
+  return useRecipeApplication(recipeOptions)
 }

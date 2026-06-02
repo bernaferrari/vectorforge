@@ -22,6 +22,13 @@ import {
 } from "./TimelinePropertyKeyframeModel"
 import type { TimelinePropertyKeyframeSetters } from "./TimelinePropertyKeyframeModel"
 import { createTimelinePropertyRows } from "./TimelinePropertyRowsModel"
+import {
+  clampTimelineDuration,
+  scaleShapeStopTimes,
+  scaleTimelineKeyframeState,
+  scaleTimelineTime,
+  scaleTimelineTrackTimes,
+} from "./TimelineDurationModel"
 import type {
   EasingType,
   FillKeyframe,
@@ -49,6 +56,7 @@ export function useTimelineDockController({
   moveKeyframes,
   setMoveKeyframes,
   setQualityKeyframes,
+  setInnerScaleKeyframes,
   selectedShapeFillStops,
   selectedShapeGradientType,
   activeMaterialSettings,
@@ -80,6 +88,9 @@ export function useTimelineDockController({
   moveKeyframes: Vector3Keyframe[]
   setMoveKeyframes: React.Dispatch<React.SetStateAction<Vector3Keyframe[]>>
   setQualityKeyframes: React.Dispatch<React.SetStateAction<ScalarKeyframe[]>>
+  setInnerScaleKeyframes: React.Dispatch<
+    React.SetStateAction<Vector3Keyframe[]>
+  >
   selectedShapeFillStops: FillKeyframe["stops"]
   selectedShapeGradientType: FillKeyframe["gradientType"]
   activeMaterialSettings: MaterialSettings
@@ -163,9 +174,30 @@ export function useTimelineDockController({
   }
 
   const handleDurationChange = (value: number) => {
-    const next = clampNumber(value, 0.5, 30)
-    setDuration(next)
-    seekToTime(clampNumber(currentTime, 0, next), { animated: false })
+    const nextDuration = clampTimelineDuration(value)
+    if (Math.abs(nextDuration - duration) < 0.001) return
+
+    const ratio = nextDuration / duration
+    setDuration(nextDuration)
+    setShapes((prev) => scaleShapeStopTimes(prev, ratio, nextDuration))
+    setTracks((prev) => scaleTimelineTrackTimes(prev, ratio, nextDuration))
+    scaleTimelineKeyframeState({
+      ratio,
+      duration: nextDuration,
+      setters: {
+        setFillKeyframes,
+        setMaterialKeyframes,
+        setKeyLightPositionKeyframes,
+        setRotationAxisKeyframes,
+        setMoveKeyframes,
+        setQualityKeyframes,
+        setInnerScaleKeyframes,
+      },
+    })
+    seekToTime(
+      scaleTimelineTime({ time: currentTime, ratio, duration: nextDuration }),
+      { animated: false }
+    )
     markCustom()
   }
 

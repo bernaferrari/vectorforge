@@ -6,6 +6,7 @@ import React, {
   forwardRef,
   useMemo,
   useCallback,
+  useRef,
 } from "react"
 import * as THREE from "three"
 import { gradientStopsSignature, pathRebuildSignature } from "./SvgSceneUtils"
@@ -123,6 +124,8 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>(
         rotationVelocityRef,
         onViewRotationSetRef,
       })
+    const pendingViewRotationDeltaRef = useRef({ x: 0, y: 0, z: 0 })
+    const viewRotationCommitFrameRef = useRef<number | null>(null)
 
     useEffect(() => {
       props.onModelReadyChange?.(modelReady)
@@ -139,11 +142,28 @@ export const SvgCanvas = forwardRef<SvgCanvasRef, SvgCanvasProps>(
           Math.abs(rotationDelta.x) > 0.1 ||
           Math.abs(rotationDelta.y) > 0.1
         ) {
-          onViewRotationCommitRef.current?.(rotationDelta)
+          pendingViewRotationDeltaRef.current.x += rotationDelta.x
+          pendingViewRotationDeltaRef.current.y += rotationDelta.y
+
+          if (viewRotationCommitFrameRef.current !== null) return
+          viewRotationCommitFrameRef.current = requestAnimationFrame(() => {
+            viewRotationCommitFrameRef.current = null
+            const pendingDelta = pendingViewRotationDeltaRef.current
+            pendingViewRotationDeltaRef.current = { x: 0, y: 0, z: 0 }
+            onViewRotationCommitRef.current?.(pendingDelta)
+          })
         }
       },
       [onViewRotationCommitRef]
     )
+
+    useEffect(() => {
+      return () => {
+        if (viewRotationCommitFrameRef.current === null) return
+        cancelAnimationFrame(viewRotationCommitFrameRef.current)
+        viewRotationCommitFrameRef.current = null
+      }
+    }, [])
 
     useSvgCanvasImperativeHandle({
       ref,

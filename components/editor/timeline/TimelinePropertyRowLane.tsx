@@ -64,6 +64,9 @@ export function TimelinePropertyRowLane({
   const times = row.keyframes.map((keyframe) => keyframe.time)
   const minTime = Math.min(...times)
   const maxTime = Math.max(...times)
+  const keyCountLabel = `${row.keyframes.length} ${
+    row.keyframes.length === 1 ? "key" : "keys"
+  }`
 
   return (
     <div
@@ -95,9 +98,27 @@ export function TimelinePropertyRowLane({
         ])
       }}
     >
+      {row.keyframes.length > 0 && (
+        <>
+          <div
+            className="absolute inset-x-3 top-1/2 h-px -translate-y-1/2 opacity-40"
+            style={{ backgroundColor: row.color }}
+          />
+          <div className="pointer-events-none absolute inset-y-0 left-2 flex items-center gap-1.5">
+            <span
+              className="size-1.5 rounded-full"
+              style={{ backgroundColor: row.color }}
+            />
+            <span className="rounded-md border border-border/45 bg-background/80 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+              {keyCountLabel}
+            </span>
+          </div>
+        </>
+      )}
+
       {row.keyframes.length > 1 && (
         <div
-          className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full opacity-45"
+          className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full opacity-70"
           style={{
             left: xForFrac(minTime / duration),
             width: widthForSpan((maxTime - minTime) / duration),
@@ -122,7 +143,7 @@ export function TimelinePropertyRowLane({
             type="button"
             key={keyframe.id}
             title={`${row.name}${keyframe.label ? ` - ${keyframe.label}` : ""} @ ${keyframe.time.toFixed(2)}s`}
-            className="absolute top-1/2 flex size-4 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center transition-transform hover:scale-110 focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:outline-none"
+            className="absolute top-1/2 flex size-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center transition-transform hover:scale-110 focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:outline-none"
             style={{
               left: xForFrac(keyframe.time / duration),
               zIndex: TIMELINE_LAYER.propertyKeyframe,
@@ -200,6 +221,7 @@ export function TimelinePropertyRowLane({
               color={row.color}
               borderColor="rgba(0,0,0,0.8)"
               selected={selected}
+              className="size-[18px]"
             />
           </button>
         )

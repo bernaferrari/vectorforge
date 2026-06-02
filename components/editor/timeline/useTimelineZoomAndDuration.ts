@@ -7,9 +7,7 @@ import {
   TIMELINE_ZOOM_STEP,
   isEditableTarget,
 } from "./TimelineGeometry"
-
-const clampDuration = (duration: number) =>
-  Math.max(0.5, Math.min(30, Number(duration.toFixed(1))))
+import { clampTimelineDuration } from "../TimelineDurationModel"
 
 const clampTimelineZoom = (zoom: number) =>
   Number(
@@ -41,7 +39,7 @@ export function useTimelineZoomAndDuration({
     if (durationEditor === null) return
     const parsed = Number.parseFloat(durationEditor)
     if (Number.isFinite(parsed)) {
-      onDurationChange(clampDuration(parsed))
+      onDurationChange(clampTimelineDuration(parsed))
     }
     setDurationEditor(null)
   }, [durationEditor, onDurationChange])
@@ -53,7 +51,7 @@ export function useTimelineZoomAndDuration({
 
   const applyDuration = useCallback(
     (value: number) => {
-      onDurationChange(clampDuration(value))
+      onDurationChange(clampTimelineDuration(value))
       setDurationEditor(null)
     },
     [onDurationChange]

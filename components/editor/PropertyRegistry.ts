@@ -50,7 +50,7 @@ export const TIMELINE_TRACK_DEFINITIONS: TimelineTrackDefinition[] = [
     color: "#ff5b9a",
     min: 0,
     max: LIGHT_MAX,
-    defaultValue: 1.2,
+    defaultValue: 1.08,
   },
 ]
 

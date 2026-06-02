@@ -1,6 +1,7 @@
 import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader.js"
 import type * as THREE from "three"
 import { normalizeSvgToIconViewBox } from "./SvgText"
+import { unionOverlappingSvgShapes } from "./SvgShapeUnion"
 
 export type ParsedSvgPath = ReturnType<SVGLoader["parse"]>["paths"][number]
 
@@ -30,6 +31,8 @@ export const parseSvgShapes = (svgContent: string) => {
   const svgData = loader.parse(normalizedSvg)
   return rememberParsedSvgShapes(normalizedSvg, {
     paths: svgData.paths,
-    shapesByPath: svgData.paths.map((path) => SVGLoader.createShapes(path)),
+    shapesByPath: svgData.paths.map((path) =>
+      unionOverlappingSvgShapes(SVGLoader.createShapes(path))
+    ),
   })
 }

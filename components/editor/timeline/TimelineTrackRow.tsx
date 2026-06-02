@@ -83,6 +83,10 @@ export function TimelineTrackRow({
   const sortedKeyframes = [...track.keyframes].sort((a, b) => a.time - b.time)
   const firstKeyframe = sortedKeyframes[0]
   const lastKeyframe = sortedKeyframes[sortedKeyframes.length - 1]
+  const firstEasing = track.keyframes[0]?.easing
+  const keyCountLabel = `${track.keyframes.length} ${
+    track.keyframes.length === 1 ? "key" : "keys"
+  }`
 
   return (
     <div
@@ -128,13 +132,20 @@ export function TimelineTrackRow({
         onAddTrackKeyframeAtTime(track.id, timeFromClientX(event.clientX))
       }}
     >
+      {animated && firstKeyframe && (
+        <div
+          className="absolute inset-x-3 top-1/2 h-px -translate-y-1/2 opacity-45"
+          style={{ backgroundColor: track.color }}
+        />
+      )}
+
       {animated &&
         firstKeyframe &&
         lastKeyframe &&
         lastKeyframe.time > firstKeyframe.time && (
           <div
             title="Drag to move - drag the diamonds to resize"
-            className="absolute top-1/2 h-2 -translate-y-1/2 cursor-grab rounded-full opacity-55 transition-opacity hover:opacity-80 active:cursor-grabbing"
+            className="absolute top-1/2 h-2 -translate-y-1/2 cursor-grab rounded-full opacity-75 transition-opacity hover:opacity-95 active:cursor-grabbing"
             style={{
               left: xForFrac(firstKeyframe.time / duration),
               width: widthForSpan(
@@ -147,12 +158,44 @@ export function TimelineTrackRow({
         )}
 
       {!animated && (
-        <div className="pointer-events-none absolute inset-y-0 left-2 flex items-center">
-          <span className="rounded bg-background/95 px-1 text-[10px] text-muted-foreground">
-            {formatValueLabel(track, track.defaultValue)} · constant
+        <div className="pointer-events-none absolute inset-y-0 left-2 flex items-center gap-1.5">
+          <span className="rounded-md border border-border/55 bg-background/85 px-1.5 py-0.5 font-mono text-[10px] text-foreground tabular-nums">
+            {formatValueLabel(track, track.defaultValue)}
+          </span>
+          <span className="rounded-md bg-muted/65 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            static
           </span>
         </div>
       )}
+
+      {animated && (
+        <div className="pointer-events-none absolute inset-y-0 left-2 flex items-center gap-1.5">
+          <span
+            className="size-1.5 rounded-full"
+            style={{ backgroundColor: track.color }}
+          />
+          <span className="rounded-md border border-border/45 bg-background/80 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+            {keyCountLabel}
+          </span>
+          {firstEasing ? (
+            <span className="rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              {firstEasing}
+            </span>
+          ) : null}
+        </div>
+      )}
+
+      {animated &&
+        firstKeyframe &&
+        lastKeyframe?.time === firstKeyframe.time && (
+          <div
+            className="absolute top-1/2 h-2 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-45"
+            style={{
+              left: xForFrac(firstKeyframe.time / duration),
+              backgroundColor: track.color,
+            }}
+          />
+        )}
 
       {track.keyframes.map((keyframe) => (
         <TimelineTrackKeyframeButton

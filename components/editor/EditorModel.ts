@@ -173,11 +173,11 @@ export const MAX_UNDO_STEPS = 80
 export const DEFAULT_GEOMETRY_SETTINGS: GeometrySettings = {
   extrusionDepth: EXTRUDE_DEFAULT,
   bevelEnabled: true,
-  bevelThickness: 0.15,
-  bevelSize: 0.08,
-  bevelSegments: 3,
+  bevelThickness: 0.12,
+  bevelSize: 0.06,
+  bevelSegments: 4,
   geometryQuality: GEOMETRY_QUALITY_DEFAULT,
-  layerSpacing: 0.8,
+  layerSpacing: 0.16,
   innerElementScale: { x: 1, y: 1, z: 1 },
 }
 
@@ -192,7 +192,7 @@ export const DEFAULT_TRANSFORM_SETTINGS: TransformSettings = {
 
 export const DEFAULT_LIGHT_SETTINGS: LightSettings = {
   keyLightColor: "#ffffff",
-  keyLightIntensity: 1.2,
+  keyLightIntensity: 1.08,
   keyLightPosition: { x: 5, y: 5, z: 4 },
   keyLightSoftness: 0.35,
 }

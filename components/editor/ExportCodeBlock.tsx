@@ -9,6 +9,11 @@ type ExportCodeBlockProps = {
   className?: string
 }
 
+const sanitizeHighlightedHtml = (value: string) =>
+  value
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*')/gi, "")
+
 export function ExportCodeBlock({
   code,
   lang,
@@ -28,7 +33,7 @@ export function ExportCodeBlock({
         })
       )
       .then((nextHtml) => {
-        if (!cancelled) setHtml(nextHtml)
+        if (!cancelled) setHtml(sanitizeHighlightedHtml(nextHtml))
       })
       .catch(() => {
         if (!cancelled) setHtml(null)

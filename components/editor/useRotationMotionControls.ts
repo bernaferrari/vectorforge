@@ -21,6 +21,7 @@ type RotationMotionControlsOptions = Pick<
   | "setSelectedMotionTrackId"
   | "setRotationOffset"
   | "activeRotationOffset"
+  | "rotationAxisKeyframes"
   | "setRotationAxisKeyframes"
   | "setPreviewRotationY"
 > & {
@@ -50,6 +51,7 @@ export function useRotationMotionControls({
   setSelectedMotionTrackId,
   setRotationOffset,
   activeRotationOffset,
+  rotationAxisKeyframes,
   setRotationAxisKeyframes,
   setPreviewRotationY,
   markCustom,
@@ -109,32 +111,57 @@ export function useRotationMotionControls({
       setSelectedMotionTrackId("rotation")
       markCustom()
       setPreviewRotationY(null)
-      const nextRotation = {
-        x: clampNumber(
-          activeRotationOffset.x + delta.x,
-          ROTATION_MIN,
-          ROTATION_MAX
-        ),
-        y: clampNumber(
-          activeRotationOffset.y + delta.y,
-          ROTATION_MIN,
-          ROTATION_MAX
-        ),
-        z: clampNumber(
-          activeRotationOffset.z + delta.z,
-          ROTATION_MIN,
-          ROTATION_MAX
-        ),
+
+      if (rotationAxisKeyframes.length === 0) {
+        setRotationOffset((currentRotation) => ({
+          x: clampNumber(
+            currentRotation.x + delta.x,
+            ROTATION_MIN,
+            ROTATION_MAX
+          ),
+          y: clampNumber(
+            currentRotation.y + delta.y,
+            ROTATION_MIN,
+            ROTATION_MAX
+          ),
+          z: clampNumber(
+            currentRotation.z + delta.z,
+            ROTATION_MIN,
+            ROTATION_MAX
+          ),
+        }))
+        return
       }
 
-      applyRotation(nextRotation, playheadTime())
+      commitRotationKeyframe(
+        {
+          x: clampNumber(
+            activeRotationOffset.x + delta.x,
+            ROTATION_MIN,
+            ROTATION_MAX
+          ),
+          y: clampNumber(
+            activeRotationOffset.y + delta.y,
+            ROTATION_MIN,
+            ROTATION_MAX
+          ),
+          z: clampNumber(
+            activeRotationOffset.z + delta.z,
+            ROTATION_MIN,
+            ROTATION_MAX
+          ),
+        },
+        playheadTime()
+      )
     },
     [
       activeRotationOffset,
-      applyRotation,
+      commitRotationKeyframe,
       markCustom,
       playheadTime,
+      rotationAxisKeyframes.length,
       setPreviewRotationY,
+      setRotationOffset,
       setSelectedMotionTrackId,
     ]
   )

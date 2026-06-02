@@ -49,6 +49,7 @@ type UseEditorTimelineSurfaceArgs = {
   moveKeyframes: Vector3Keyframe[]
   setMoveKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   setQualityKeyframes: Dispatch<SetStateAction<ScalarKeyframe[]>>
+  setInnerScaleKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   selectedShapeFillStops: FillKeyframe["stops"]
   selectedShapeGradientType: FillKeyframe["gradientType"]
   activeMaterialSettings: MaterialSettings
@@ -102,6 +103,7 @@ export function useEditorTimelineSurface({
   moveKeyframes,
   setMoveKeyframes,
   setQualityKeyframes,
+  setInnerScaleKeyframes,
   selectedShapeFillStops,
   selectedShapeGradientType,
   activeMaterialSettings,
@@ -154,6 +156,7 @@ export function useEditorTimelineSurface({
     moveKeyframes,
     setMoveKeyframes,
     setQualityKeyframes,
+    setInnerScaleKeyframes,
     selectedShapeFillStops,
     selectedShapeGradientType,
     activeMaterialSettings,

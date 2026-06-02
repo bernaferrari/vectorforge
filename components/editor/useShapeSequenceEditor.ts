@@ -31,9 +31,7 @@ export function useShapeSequenceEditor({
     () => initialShapesRef.current?.[0]?.id ?? null
   )
   const [openShapePicker, setOpenShapePicker] = useState<string | null>(null)
-  const [activeRecipeId, setActiveRecipeId] = useState<string | null>(
-    "google-metal"
-  )
+  const [activeRecipeId, setActiveRecipeId] = useState<string | null>(null)
 
   const markCustom = useCallback(() => setActiveRecipeId(null), [])
 

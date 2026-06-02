@@ -98,7 +98,7 @@ export function TimelineTrackKeyframeButton({
       <PopoverTrigger
         type="button"
         title={`${track.name} · ${formatValueLabel(track, keyframe.value)} @ ${keyframe.time.toFixed(2)}s`}
-        className={`absolute top-1/2 flex size-4 -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center transition-transform hover:scale-110 focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:outline-none active:cursor-grabbing ${selected ? "scale-110" : ""}`}
+        className={`absolute top-1/2 flex size-5 -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center transition-transform hover:scale-110 focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:outline-none active:cursor-grabbing ${selected ? "scale-110" : ""}`}
         style={{
           left: xForFrac(keyframe.time / duration),
           zIndex: selected
@@ -151,6 +151,7 @@ export function TimelineTrackKeyframeButton({
           color={track.color}
           borderColor="rgba(0,0,0,0.85)"
           selected={selected}
+          className="size-[18px]"
         />
       </PopoverTrigger>
       {editingTime && timeEditor && (

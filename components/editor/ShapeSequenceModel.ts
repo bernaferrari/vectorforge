@@ -1,5 +1,6 @@
 import { PRESET_ICONS, type PresetIcon } from "./IconLibrary"
 import { DEFAULT_WIPE_PAIR } from "./DefaultShapeIcons"
+import { googleMeshFillStops } from "./FillStopModel"
 import {
   DEFAULT_TRANSITION_END,
   DEFAULT_TRANSITION_START,
@@ -18,9 +19,9 @@ export const createShapeStop = (
   iconName: icon.name,
   svgContent: icon.svgContent,
   color: icon.defaultTint,
-  colorSecondary: "#7c5cff",
-  fillGradientType: "linear",
-  fillStops: undefined,
+  colorSecondary: "#00C796",
+  fillGradientType: "mesh",
+  fillStops: googleMeshFillStops(),
   fillKeyframes: [],
   pathOverrides: [],
   easing: "ease-in-out",

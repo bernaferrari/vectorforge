@@ -67,6 +67,7 @@ export function useAppLayoutController(): AppLayoutViewProps {
       layerSpacing,
       innerElementScale,
       innerScaleKeyframes,
+      setInnerScaleKeyframes,
     },
     transform: {
       objectScale,
@@ -253,6 +254,7 @@ export function useAppLayoutController(): AppLayoutViewProps {
     setExtrusionDepth,
     setRotationOffset,
     activeRotationOffset,
+    rotationAxisKeyframes,
     setRotationAxisKeyframes,
     setPreviewRotationY,
     setObjectScale,
@@ -350,6 +352,7 @@ export function useAppLayoutController(): AppLayoutViewProps {
     moveKeyframes,
     setMoveKeyframes,
     setQualityKeyframes,
+    setInnerScaleKeyframes,
     selectedShapeFillStops,
     selectedShapeGradientType,
     activeMaterialSettings,
