@@ -117,6 +117,34 @@ export function useSvgCanvasProps({
   onModelReadyChange,
   markCustom,
 }: UseSvgCanvasPropsArgs): SvgCanvasProps {
+  const {
+    roughness,
+    metalness,
+    reflectance,
+    clearcoat,
+    clearcoatRoughness,
+    transmission,
+    thickness,
+    emissiveIntensity,
+  } = activeMaterialSettings
+  const innerScaleX = innerElementScale.x
+  const innerScaleY = innerElementScale.y
+  const innerScaleZ = innerElementScale.z
+  const wipeDirectionX = wipeDirection.x
+  const wipeDirectionY = wipeDirection.y
+  const rotationX = rotationOffset.x
+  const rotationY = rotationOffset.y
+  const rotationZ = rotationOffset.z
+  const objectScaleX = objectScaleAxes?.x
+  const objectScaleY = objectScaleAxes?.y
+  const objectScaleZ = objectScaleAxes?.z
+  const moveX = moveOffset.x
+  const moveY = moveOffset.y
+  const moveZ = moveOffset.z
+  const keyLightX = keyLightPosition.x
+  const keyLightY = keyLightPosition.y
+  const keyLightZ = keyLightPosition.z
+
   return useMemo(
     () => ({
       iconAContent,
@@ -130,14 +158,14 @@ export function useSvgCanvasProps({
       colorBStops,
       enableGradient,
       gradientType,
-      roughness: activeMaterialSettings.roughness,
-      metalness: activeMaterialSettings.metalness,
-      reflectance: activeMaterialSettings.reflectance,
-      clearcoat: activeMaterialSettings.clearcoat,
-      clearcoatRoughness: activeMaterialSettings.clearcoatRoughness,
-      transmission: activeMaterialSettings.transmission,
-      thickness: activeMaterialSettings.thickness,
-      emissiveIntensity: activeMaterialSettings.emissiveIntensity,
+      roughness,
+      metalness,
+      reflectance,
+      clearcoat,
+      clearcoatRoughness,
+      transmission,
+      thickness,
+      emissiveIntensity,
       wireframe,
       extrusionDepth,
       bevelEnabled,
@@ -200,7 +228,14 @@ export function useSvgCanvasProps({
       colorBStops,
       enableGradient,
       gradientType,
-      activeMaterialSettings,
+      roughness,
+      metalness,
+      reflectance,
+      clearcoat,
+      clearcoatRoughness,
+      transmission,
+      thickness,
+      emissiveIntensity,
       wireframe,
       extrusionDepth,
       bevelEnabled,
@@ -209,20 +244,31 @@ export function useSvgCanvasProps({
       bevelSegments,
       geometryQuality,
       layerSpacing,
-      innerElementScale,
+      innerScaleX,
+      innerScaleY,
+      innerScaleZ,
       transitionType,
-      wipeDirection,
+      wipeDirectionX,
+      wipeDirectionY,
       transitionProgress,
-      rotationOffset,
+      rotationX,
+      rotationY,
+      rotationZ,
       objectScale,
-      objectScaleAxes,
-      moveOffset,
+      objectScaleX,
+      objectScaleY,
+      objectScaleZ,
+      moveX,
+      moveY,
+      moveZ,
       isPlaying,
       ambientColor,
       ambientIntensity,
       keyLightColor,
       keyLightIntensity,
-      keyLightPosition,
+      keyLightX,
+      keyLightY,
+      keyLightZ,
       keyLightSoftness,
       rimLightColor,
       rimLightIntensity,

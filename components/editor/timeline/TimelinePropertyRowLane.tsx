@@ -64,9 +64,6 @@ export function TimelinePropertyRowLane({
   const times = row.keyframes.map((keyframe) => keyframe.time)
   const minTime = Math.min(...times)
   const maxTime = Math.max(...times)
-  const keyCountLabel = `${row.keyframes.length} ${
-    row.keyframes.length === 1 ? "key" : "keys"
-  }`
 
   return (
     <div
@@ -106,12 +103,9 @@ export function TimelinePropertyRowLane({
           />
           <div className="pointer-events-none absolute inset-y-0 left-2 flex items-center gap-1.5">
             <span
-              className="size-1.5 rounded-full"
+              className="size-2 rounded-full ring-1 ring-background/70"
               style={{ backgroundColor: row.color }}
             />
-            <span className="rounded-md border border-border/45 bg-background/80 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
-              {keyCountLabel}
-            </span>
           </div>
         </>
       )}

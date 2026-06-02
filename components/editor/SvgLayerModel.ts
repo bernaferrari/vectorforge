@@ -18,6 +18,8 @@ const DEFAULT_LAYER_COLOR = "#ffffff"
 const PATH_ELEMENT_PATTERN = /<path\b([^>]*)>/gi
 const ATTRIBUTE_PATTERN = /([\w:-]+)\s*=\s*["']([^"']*)["']/g
 const SUBPATH_PATTERN = /(^|[\s,])m\s*[-+.0-9]/gi
+const SVG_LAYER_CACHE_LIMIT = 80
+const svgLayerCache = new Map<string, SvgLayer[]>()
 
 export const svgLayerId = (pathIndex: number, shapeIndex: number) =>
   `${pathIndex}:${shapeIndex}`
@@ -55,7 +57,11 @@ const countPathSubpaths = (pathData: string) => {
 }
 
 export const extractSvgLayers = (svgContent: string): SvgLayer[] => {
-  if (!svgContent.trim()) return []
+  const cacheKey = svgContent.trim()
+  if (!cacheKey) return []
+
+  const cached = svgLayerCache.get(cacheKey)
+  if (cached) return cached
 
   const layers: SvgLayer[] = []
   PATH_ELEMENT_PATTERN.lastIndex = 0
@@ -91,5 +97,10 @@ export const extractSvgLayers = (svgContent: string): SvgLayer[] => {
     pathIndex += 1
   }
 
+  if (svgLayerCache.size >= SVG_LAYER_CACHE_LIMIT) {
+    const oldestKey = svgLayerCache.keys().next().value
+    if (oldestKey !== undefined) svgLayerCache.delete(oldestKey)
+  }
+  svgLayerCache.set(cacheKey, layers)
   return layers
 }

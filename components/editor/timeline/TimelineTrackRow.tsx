@@ -84,9 +84,6 @@ export function TimelineTrackRow({
   const firstKeyframe = sortedKeyframes[0]
   const lastKeyframe = sortedKeyframes[sortedKeyframes.length - 1]
   const firstEasing = track.keyframes[0]?.easing
-  const keyCountLabel = `${track.keyframes.length} ${
-    track.keyframes.length === 1 ? "key" : "keys"
-  }`
 
   return (
     <div
@@ -171,12 +168,9 @@ export function TimelineTrackRow({
       {animated && (
         <div className="pointer-events-none absolute inset-y-0 left-2 flex items-center gap-1.5">
           <span
-            className="size-1.5 rounded-full"
+            className="size-2 rounded-full ring-1 ring-background/70"
             style={{ backgroundColor: track.color }}
           />
-          <span className="rounded-md border border-border/45 bg-background/80 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
-            {keyCountLabel}
-          </span>
           {firstEasing ? (
             <span className="rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
               {firstEasing}
