@@ -1,5 +1,5 @@
 import * as THREE from "three"
-import { createThreeMaterial } from "./MaterialPresets"
+import { createThreeMaterial, isGraphiteCutPreset } from "./MaterialPresets"
 import type { SvgCanvasProps } from "./SvgTypes"
 
 export type SvgPathMaterialOptions = {
@@ -23,8 +23,14 @@ export const createSvgPathMaterial = ({
   isSlashOverlay,
   clippingPlanes,
 }: SvgPathMaterialOptions) => {
+  const forceGraphiteCut = isGraphiteCutPreset(props.materialPreset)
+  const materialUsesGradient = useGradientVertexColors && !forceGraphiteCut
   const material = createThreeMaterial(props.materialPreset, {
-    color: props.enableGradient ? "#ffffff" : color,
+    color: forceGraphiteCut
+      ? "#2f3031"
+      : props.enableGradient
+        ? "#ffffff"
+        : color,
     roughness: props.roughness,
     metalness: props.metalness,
     reflectance: props.reflectance,
@@ -41,7 +47,7 @@ export const createSvgPathMaterial = ({
       : isCrossfade
         ? props.transitionProgress
         : 1.0,
-    vertexColors: useGradientVertexColors,
+    vertexColors: materialUsesGradient,
   }) as THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial
 
   if (

@@ -50,11 +50,15 @@ export type UseInspectorSidebarPropsArgs = {
   extrusionDepth: number
   activeGeometryQuality: number
   bevelEnabled: boolean
+  bevelThickness: number
+  bevelSize: number
   bevelSegments: number
   renderKeyframeControl: (track: TimelineTrack, value: number) => ReactNode
   setSelectedMotionTrackId: (trackId: MotionTrackId) => void
   onDepthChange: (value: number) => void
   onBevelEnabledChange: (enabled: boolean) => void
+  onBevelThicknessChange: (value: number) => void
+  onBevelSizeChange: (value: number) => void
   onBevelSegmentsChange: (segments: number) => void
   onQualityChange: (value: number) => void
   onCustomEdit: () => void
@@ -134,11 +138,15 @@ export type GeometrySidebarPropsArgs = Pick<
   | "extrusionDepth"
   | "activeGeometryQuality"
   | "bevelEnabled"
+  | "bevelThickness"
+  | "bevelSize"
   | "bevelSegments"
   | "renderKeyframeControl"
   | "setSelectedMotionTrackId"
   | "onDepthChange"
   | "onBevelEnabledChange"
+  | "onBevelThicknessChange"
+  | "onBevelSizeChange"
   | "onBevelSegmentsChange"
   | "onQualityChange"
   | "onCustomEdit"

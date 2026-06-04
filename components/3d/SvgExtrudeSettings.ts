@@ -1,6 +1,7 @@
 import * as THREE from "three"
 import { MAX_BEVEL_SEGMENTS } from "./SvgSceneUtils"
 import { finiteNumber, minContourDimension } from "./SvgGeometry"
+import { isGraphiteCutPreset } from "./MaterialPresets"
 import type { SvgCanvasProps } from "./SvgTypes"
 
 export type SvgExtrudeBaseSettings = {
@@ -9,6 +10,10 @@ export type SvgExtrudeBaseSettings = {
   bevelThickness: number
   bevelSegments: number
   curveSegments: number
+  crownEnabled: boolean
+  crownHeight: number
+  crownWidth: number
+  crownInset: number
 }
 
 export type SafeShapeExtrudeSettings = {
@@ -20,27 +25,42 @@ export type SafeShapeExtrudeSettings = {
 
 export const svgExtrudeBaseSettings = (
   props: SvgCanvasProps
-): SvgExtrudeBaseSettings => ({
-  depth: Math.max(0.02, finiteNumber(props.extrusionDepth, 1)),
-  bevelSize: Math.max(0, finiteNumber(props.bevelSize, 0)),
-  bevelThickness: Math.max(0, finiteNumber(props.bevelThickness, 0)),
-  bevelSegments: Math.max(
-    0,
-    Math.min(
-      MAX_BEVEL_SEGMENTS,
-      Math.round(finiteNumber(props.bevelSegments, 1))
-    )
-  ),
-  curveSegments: Math.max(
-    8,
-    Math.min(
-      64,
-      Math.round(
-        1 / Math.max(0.015, finiteNumber(props.geometryQuality, 0.045))
+): SvgExtrudeBaseSettings => {
+  const forceCrown = isGraphiteCutPreset(props.materialPreset)
+  const bevelSize = Math.max(
+    forceCrown ? 0.12 : 0,
+    finiteNumber(props.bevelSize, 0)
+  )
+  const bevelThickness = Math.max(
+    forceCrown ? 0.2 : 0,
+    finiteNumber(props.bevelThickness, 0)
+  )
+  return {
+    depth: Math.max(0.02, finiteNumber(props.extrusionDepth, 1)),
+    bevelSize,
+    bevelThickness,
+    bevelSegments: Math.max(
+      forceCrown ? 3 : 0,
+      Math.min(
+        MAX_BEVEL_SEGMENTS,
+        Math.round(finiteNumber(props.bevelSegments, 1))
       )
-    )
-  ),
-})
+    ),
+    curveSegments: Math.max(
+      8,
+      Math.min(
+        64,
+        Math.round(
+          1 / Math.max(0.015, finiteNumber(props.geometryQuality, 0.045))
+        )
+      )
+    ),
+    crownEnabled: forceCrown,
+    crownHeight: forceCrown ? Math.max(0.14, bevelThickness * 0.9) : 0,
+    crownWidth: forceCrown ? Math.max(0.8, bevelSize * 8) : 0,
+    crownInset: forceCrown ? Math.max(0.04, Math.min(0.16, bevelSize * 0.85)) : 0,
+  }
+}
 
 export const safeShapeExtrudeSettings = ({
   shape,
@@ -68,23 +88,41 @@ export const safeShapeExtrudeSettings = ({
   const shapeDepth = isSlashOverlay
     ? Math.max(0.08, base.depth * slashDepthRatio)
     : Math.max(0.02, base.depth * depthMultiplier)
-  const bevelContourLimit = hasHoles
-    ? contourMinDim * 0.025
-    : shapeMinDim * 0.05
-  const bevelDepthLimit = hasHoles ? shapeDepth * 0.12 : shapeDepth * 0.18
-  const safeBevelSize = bevelEnabled
+  const bevelContourLimit = base.crownEnabled
+    ? hasHoles
+      ? Math.min(shapeMinDim * 0.08, contourMinDim * 0.22)
+      : shapeMinDim * 0.08
+    : hasHoles
+      ? contourMinDim * 0.025
+      : shapeMinDim * 0.05
+  const bevelDepthLimit = base.crownEnabled
+    ? shapeDepth * 0.32
+    : hasHoles
+      ? shapeDepth * 0.12
+      : shapeDepth * 0.18
+  const safeBevelSize = (bevelEnabled || base.bevelSize > 0)
     ? Math.max(
         0.001,
         Math.min(base.bevelSize, bevelContourLimit, bevelDepthLimit)
       )
     : 0
-  const safeBevelThickness = bevelEnabled
+  const safeBevelThickness = (bevelEnabled || base.bevelThickness > 0)
     ? Math.max(
         0.001,
         Math.min(
           base.bevelThickness,
-          hasHoles ? contourMinDim * 0.04 : shapeMinDim * 0.08,
-          hasHoles ? shapeDepth * 0.16 : shapeDepth * 0.25
+          base.crownEnabled
+            ? hasHoles
+              ? Math.min(shapeMinDim * 0.12, contourMinDim * 0.28)
+              : shapeMinDim * 0.12
+            : hasHoles
+              ? contourMinDim * 0.04
+              : shapeMinDim * 0.08,
+          base.crownEnabled
+            ? shapeDepth * 0.42
+            : hasHoles
+              ? shapeDepth * 0.16
+              : shapeDepth * 0.25
         )
       )
     : 0
@@ -94,6 +132,8 @@ export const safeShapeExtrudeSettings = ({
     bevelSize: safeBevelSize,
     bevelThickness: safeBevelThickness,
     bevelEnabled:
-      bevelEnabled && safeBevelSize > 0.001 && safeBevelThickness > 0.001,
+      (bevelEnabled || base.bevelSize > 0 || base.bevelThickness > 0) &&
+      safeBevelSize > 0.001 &&
+      safeBevelThickness > 0.001,
   }
 }

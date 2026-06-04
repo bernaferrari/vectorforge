@@ -103,6 +103,9 @@ export const createStudioEnvironmentTexture = () => {
 
   addSoftBox(20, 12, 190, 78, "#ffffff", 0.95)
   addSoftBox(342, 28, 140, 52, "#93c5fd", 0.7)
+  addSoftBox(40, 118, 180, 44, "#06b6d4", 0.62)
+  addSoftBox(286, 104, 168, 52, "#f97316", 0.52)
+  addSoftBox(230, 30, 120, 74, "#d946ef", 0.44)
   addSoftBox(160, 172, 190, 42, "#ffffff", 0.55)
 
   context.globalAlpha = 0.8
@@ -110,6 +113,10 @@ export const createStudioEnvironmentTexture = () => {
   context.fillRect(0, 104, canvas.width, 5)
   context.fillStyle = "rgba(96,165,250,0.42)"
   context.fillRect(0, 118, canvas.width, 3)
+  context.fillStyle = "rgba(34,211,238,0.48)"
+  context.fillRect(0, 132, canvas.width, 2)
+  context.fillStyle = "rgba(249,115,22,0.4)"
+  context.fillRect(0, 148, canvas.width, 3)
   context.globalAlpha = 1
 
   const texture = new THREE.CanvasTexture(canvas)

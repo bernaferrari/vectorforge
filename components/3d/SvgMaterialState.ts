@@ -1,5 +1,5 @@
 import * as THREE from "three"
-import type { MaterialPresetId } from "./MaterialPresets"
+import { isGraphiteCutPreset, type MaterialPresetId } from "./MaterialPresets"
 import { finiteNumber } from "./SvgGeometry"
 import type { SvgCanvasProps } from "./SvgTypes"
 
@@ -86,7 +86,19 @@ export const updateGroupMaterialSettings = (
 ) => {
   if (!group) return
   const envMapIntensity =
-    materialPreset === "chrome" ? Math.max(1.8, reflectance * 2.4) : reflectance
+    materialPreset === "prismChrome"
+      ? Math.max(2.6, reflectance * 3.2)
+      : materialPreset === "gelGlass"
+        ? Math.max(1.45, reflectance * 1.75)
+        : isGraphiteCutPreset(materialPreset)
+          ? Math.max(0.42, reflectance * 1.4)
+          : materialPreset === "chrome"
+            ? Math.max(1.8, reflectance * 2.4)
+            : materialPreset === "holo"
+              ? Math.max(0.9, reflectance * 1.15)
+              : materialPreset === "aura"
+                ? Math.max(1.05, reflectance * 1.3)
+                : reflectance
 
   group.traverse((object) => {
     const mesh = object as THREE.Mesh
@@ -113,7 +125,13 @@ export const updateGroupMaterialSettings = (
       if (writable.roughness !== undefined) writable.roughness = roughness
       if (writable.metalness !== undefined) {
         writable.metalness =
-          materialPreset === "chrome" ? Math.min(metalness, 0.52) : metalness
+          materialPreset === "prismChrome"
+            ? Math.min(metalness, 0.74)
+            : materialPreset === "chrome"
+              ? Math.min(metalness, 0.52)
+            : materialPreset === "holo"
+              ? Math.min(metalness, 0.08)
+              : metalness
       }
       if (writable.reflectivity !== undefined)
         writable.reflectivity = reflectance

@@ -15,11 +15,15 @@ export type GeometryInspectorSectionProps = {
   extrusionDepth: number
   activeGeometryQuality: number
   bevelEnabled: boolean
+  bevelThickness: number
+  bevelSize: number
   bevelSegments: number
   keyframeControl: ReactNode
   onActivate: () => void
   onDepthChange: (value: number) => void
   onBevelEnabledChange: (enabled: boolean) => void
+  onBevelThicknessChange: (value: number) => void
+  onBevelSizeChange: (value: number) => void
   onBevelSegmentsChange: (segments: number) => void
   onQualityChange: (value: number) => void
   onCustomEdit: () => void
@@ -33,11 +37,15 @@ export function GeometryInspectorSection({
   extrusionDepth,
   activeGeometryQuality,
   bevelEnabled,
+  bevelThickness,
+  bevelSize,
   bevelSegments,
   keyframeControl,
   onActivate,
   onDepthChange,
   onBevelEnabledChange,
+  onBevelThicknessChange,
+  onBevelSizeChange,
   onBevelSegmentsChange,
   onQualityChange,
   onCustomEdit,
@@ -46,6 +54,17 @@ export function GeometryInspectorSection({
     extrusionTrack.keyframes.length > 0 ? activeExtrusionDepth : extrusionDepth,
     EXTRUDE_DEFAULT
   )
+  const crownValue = bevelEnabled
+    ? Math.max(
+        0,
+        Math.min(
+          1,
+          (finiteNumber(bevelSize, 0) / 0.2 +
+            finiteNumber(bevelThickness, 0) / 0.36) /
+            2
+        )
+      )
+    : 0
 
   return (
     <InspectorSection title="SHAPE" action={keyframeControl}>
@@ -66,6 +85,27 @@ export function GeometryInspectorSection({
           precision={2}
           onChange={(value) => {
             onDepthChange(value)
+            onCustomEdit()
+          }}
+        />
+      </InspectorRow>
+
+      <InspectorRow label="Crown">
+        <InspectorSlider
+          value={crownValue}
+          min={0}
+          max={1}
+          sliderMax={1}
+          step={0.02}
+          precision={2}
+          onChange={(value) => {
+            const next = Math.max(0, Math.min(1, value))
+            onBevelEnabledChange(next > 0)
+            onBevelSizeChange(next * 0.2)
+            onBevelThicknessChange(next * 0.36)
+            if (next > 0 && bevelSegments < 2) {
+              onBevelSegmentsChange(3)
+            }
             onCustomEdit()
           }}
         />
