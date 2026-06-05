@@ -77,8 +77,62 @@ const countUniqueZ = (geometry: THREE.BufferGeometry) => {
   return values.size
 }
 
+const zStats = (geometry: THREE.BufferGeometry) => {
+  const position = geometry.getAttribute("position")
+  let min = Infinity
+  let max = -Infinity
+  for (let index = 0; index < position.count; index += 1) {
+    const z = position.getZ(index)
+    min = Math.min(min, z)
+    max = Math.max(max, z)
+  }
+  return { min, max }
+}
+
+const countElevatedVerticesNear = (
+  geometry: THREE.BufferGeometry,
+  point: THREE.Vector2,
+  radius: number,
+  minZ: number
+) => {
+  const position = geometry.getAttribute("position")
+  let count = 0
+  for (let index = 0; index < position.count; index += 1) {
+    const dx = position.getX(index) - point.x
+    const dy = position.getY(index) - point.y
+    if (Math.hypot(dx, dy) <= radius && position.getZ(index) > minZ) {
+      count += 1
+    }
+  }
+  return count
+}
+
+const countElevatedRingVertices = (
+  geometry: THREE.BufferGeometry,
+  center: THREE.Vector2,
+  minRadius: number,
+  maxRadius: number,
+  minZ: number
+) => {
+  const position = geometry.getAttribute("position")
+  let count = 0
+  for (let index = 0; index < position.count; index += 1) {
+    const dx = position.getX(index) - center.x
+    const dy = position.getY(index) - center.y
+    const radius = Math.hypot(dx, dy)
+    if (
+      radius >= minRadius &&
+      radius <= maxRadius &&
+      position.getZ(index) > minZ
+    ) {
+      count += 1
+    }
+  }
+  return count
+}
+
 describe("createSvgShapeGeometry", () => {
-  it("cut presets produce clean beveled extrusion geometry (Blender-style side chamfers + corner bevels)", () => {
+  it("cut presets raise compact solid shapes to a centered sharp point", () => {
     const result = createSvgShapeGeometry({
       shape: squareShape(),
       shapeSize: new THREE.Vector2(10, 10),
@@ -90,16 +144,23 @@ describe("createSvgShapeGeometry", () => {
     })
 
     expect(result).not.toBeNull()
-    // For cut modes we now use the standard beveled extrude path (no custom medial roof caps)
-    // so shapes like "2" get proper 3D side chamfers and corner bevels like the desired reference.
     expect(result!.extrude.bevelEnabled).toBe(true)
     expect(result!.extrude.bevelSegments).toBe(1)
-    // Beveled geo has multiple Z levels from the chamfer shoulders + front/back.
-    expect(countUniqueZ(result!.geometry)).toBeGreaterThanOrEqual(4)
+    const stats = zStats(result!.geometry)
+    expect(stats.max).toBeGreaterThan(result!.extrude.shapeDepth / 2 + 0.2)
+    expect(stats.min).toBeLessThan(-result!.extrude.shapeDepth / 2 - 0.2)
+    expect(
+      countElevatedVerticesNear(
+        result!.geometry,
+        new THREE.Vector2(5, 5),
+        0.001,
+        result!.extrude.shapeDepth / 2 + 0.2
+      )
+    ).toBeGreaterThan(2)
     result!.geometry.dispose()
   })
 
-  it("keeps native bevels valid on icons with counters", () => {
+  it("builds a centered radial ridge for one-hole ring icons", () => {
     const result = createSvgShapeGeometry({
       shape: holedCircleShape(),
       shapeSize: new THREE.Vector2(10, 10),
@@ -114,6 +175,18 @@ describe("createSvgShapeGeometry", () => {
     expect(result!.geometry.getAttribute("position").count).toBeGreaterThan(0)
     expect(result!.extrude.bevelEnabled).toBe(true)
     expect(result!.extrude.bevelSegments).toBe(1)
+    const stats = zStats(result!.geometry)
+    expect(stats.max).toBeGreaterThan(result!.extrude.shapeDepth / 2 + 0.2)
+    expect(stats.min).toBeLessThan(-result!.extrude.shapeDepth / 2 - 0.2)
+    expect(
+      countElevatedRingVertices(
+        result!.geometry,
+        new THREE.Vector2(5, 5),
+        2.8,
+        3.7,
+        result!.extrude.shapeDepth / 2 + 0.2
+      )
+    ).toBeGreaterThan(20)
     result!.geometry.dispose()
   })
 
@@ -166,9 +239,15 @@ describe("createSvgShapeGeometry", () => {
     expect(result).not.toBeNull()
     const position = result!.geometry.getAttribute("position")
     expect(position.count).toBeGreaterThan(30)
-    // Standard beveled extrude path for cut modes now gives clean 3D "2" with side chamfers
-    // to the corners + extended center, matching the desired reference photo.
     expect(countUniqueZ(result!.geometry)).toBeGreaterThanOrEqual(4)
+    expect(
+      countElevatedVerticesNear(
+        result!.geometry,
+        new THREE.Vector2(4.75, 4.75),
+        0.001,
+        result!.extrude.shapeDepth / 2 + 0.2
+      )
+    ).toBe(0)
     result!.geometry.dispose()
   })
 })
