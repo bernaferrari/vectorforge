@@ -21,7 +21,7 @@ export type SvgShapeGeometryOptions = {
   slashDepthRatio: number
 }
 
-const pointSegmentDistance = (
+const nearestPointOnSegment = (
   x: number,
   y: number,
   a: THREE.Vector2,
@@ -30,30 +30,37 @@ const pointSegmentDistance = (
   const dx = b.x - a.x
   const dy = b.y - a.y
   const lengthSq = dx * dx + dy * dy
-  if (lengthSq <= 0) return Math.hypot(x - a.x, y - a.y)
+  if (lengthSq <= 0)
+    return { x: a.x, y: a.y, distance: Math.hypot(x - a.x, y - a.y) }
 
   const t = Math.max(
     0,
     Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / lengthSq)
   )
-  return Math.hypot(x - (a.x + dx * t), y - (a.y + dy * t))
+  const projectedX = a.x + dx * t
+  const projectedY = a.y + dy * t
+  return {
+    x: projectedX,
+    y: projectedY,
+    distance: Math.hypot(x - projectedX, y - projectedY),
+  }
 }
 
-const contourDistance = (x: number, y: number, contours: THREE.Vector2[][]) => {
-  let nearest = Infinity
+const nearestContourPoint = (
+  x: number,
+  y: number,
+  contours: THREE.Vector2[][]
+) => {
+  let nearest = { x, y, distance: Infinity }
   contours.forEach((points) => {
     for (let index = 0; index < points.length; index += 1) {
       const a = points[index]
       const b = points[(index + 1) % points.length]
-      nearest = Math.min(nearest, pointSegmentDistance(x, y, a, b))
+      const candidate = nearestPointOnSegment(x, y, a, b)
+      if (candidate.distance < nearest.distance) nearest = candidate
     }
   })
   return nearest
-}
-
-const smoothstep = (edge0: number, edge1: number, value: number) => {
-  const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)))
-  return t * t * (3 - 2 * t)
 }
 
 const pointInContour = (x: number, y: number, contour: THREE.Vector2[]) => {
@@ -170,6 +177,8 @@ const createRaisedCenterCapGeometry = (
   const rows = Math.max(4, Math.round((boxSize.y / maxAxis) * targetCells))
   const stepX = boxSize.x / columns
   const stepY = boxSize.y / rows
+  const boundaryMargin = Math.max(stepX, stepY) * 0.32
+  const capLift = 0.08
 
   type CrownSample = {
     x: number
@@ -186,10 +195,18 @@ const createRaisedCenterCapGeometry = (
     const y = shapeBox.min.y + stepY * yIndex
     for (let xIndex = 0; xIndex <= columns; xIndex += 1) {
       const x = shapeBox.min.x + stepX * xIndex
-      const inside = pointInShapeFill(x, y, outerContour, holeContours)
-      const distance = inside ? contourDistance(x, y, contours) : 0
-      if (inside) maxDistance = Math.max(maxDistance, distance)
-      sampleRow.push({ x, y, inside, distance, vertexIndex: -1 })
+      const inFill = pointInShapeFill(x, y, outerContour, holeContours)
+      const nearestBoundary = nearestContourPoint(x, y, contours)
+      const inside = inFill || nearestBoundary.distance <= boundaryMargin
+      const distance = inFill ? nearestBoundary.distance : 0
+      if (inFill) maxDistance = Math.max(maxDistance, distance)
+      sampleRow.push({
+        x: inFill ? x : nearestBoundary.x,
+        y: inFill ? y : nearestBoundary.y,
+        inside,
+        distance,
+        vertexIndex: -1,
+      })
     }
     samples.push(sampleRow)
   }
@@ -201,8 +218,17 @@ const createRaisedCenterCapGeometry = (
       if (!sample.inside) return
       sample.vertexIndex = positions.length / 3
       const normalizedDistance = sample.distance / maxDistance
-      const ridge = Math.pow(smoothstep(0, 1, normalizedDistance), 1.35)
-      const z = shapeDepth + 0.002 + ridge * baseExtrude.crownHeight
+      const ridge = Math.pow(
+        Math.max(0, Math.min(1, normalizedDistance)),
+        baseExtrude.crownProfile === "outer" ? 0.72 : 0.88
+      )
+      const z =
+        baseExtrude.crownProfile === "inset"
+          ? shapeDepth +
+            capLift +
+            (1 - ridge) * baseExtrude.crownHeight * 0.48 -
+            ridge * baseExtrude.crownHeight * 0.14
+          : shapeDepth + capLift + ridge * baseExtrude.crownHeight
       positions.push(sample.x, sample.y, z)
     })
   })
@@ -222,6 +248,9 @@ const createRaisedCenterCapGeometry = (
     const centroidY = (a.y + b.y + c.y) / 3
     if (!pointInShapeFill(centroidX, centroidY, outerContour, holeContours))
       return
+    const area =
+      Math.abs((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)) * 0.5
+    if (area < 0.000001) return
     indices.push(a.vertexIndex, b.vertexIndex, c.vertexIndex)
   }
 

@@ -11,6 +11,7 @@ export type SvgExtrudeBaseSettings = {
   bevelSegments: number
   curveSegments: number
   crownEnabled: boolean
+  crownProfile: "center" | "inset" | "outer"
   crownHeight: number
   crownWidth: number
   crownInset: number
@@ -27,6 +28,12 @@ export const svgExtrudeBaseSettings = (
   props: SvgCanvasProps
 ): SvgExtrudeBaseSettings => {
   const forceCrown = isGraphiteCutPreset(props.materialPreset)
+  const crownProfile =
+    props.materialPreset === "cutInner"
+      ? "inset"
+      : props.materialPreset === "cutOuter"
+        ? "outer"
+        : "center"
   const bevelSize = Math.max(
     forceCrown ? 0.2 : 0,
     finiteNumber(props.bevelSize, 0)
@@ -56,8 +63,9 @@ export const svgExtrudeBaseSettings = (
       )
     ),
     crownEnabled: forceCrown,
+    crownProfile,
     crownHeight: forceCrown
-      ? Math.max(0.55, bevelThickness * 2.1, bevelSize * 2.4)
+      ? Math.max(0.9, bevelThickness * 3.1, bevelSize * 3.4)
       : 0,
     crownWidth: forceCrown ? Math.max(0.9, bevelSize * 7) : 0,
     crownInset: forceCrown

@@ -31,6 +31,7 @@ const baseSettings = (crownEnabled: boolean): SvgExtrudeBaseSettings => ({
   bevelSegments: 4,
   curveSegments: 24,
   crownEnabled,
+  crownProfile: "outer",
   crownHeight: crownEnabled ? 0.36 : 0,
   crownWidth: crownEnabled ? 1.6 : 0,
   crownInset: crownEnabled ? 0.1 : 0,
