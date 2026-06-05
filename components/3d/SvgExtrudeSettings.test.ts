@@ -68,4 +68,28 @@ describe("safeShapeExtrudeSettings", () => {
       normal.bevelThickness * 4
     )
   })
+
+  it("lets cut bevels approach the contour medial limit", () => {
+    const shape = createHoledIconShape()
+    const shapeSize = new THREE.Vector2(24, 24)
+
+    const graphiteCut = safeShapeExtrudeSettings({
+      shape,
+      shapeSize,
+      base: {
+        ...baseSettings(true),
+        depth: 10,
+        bevelSize: 10,
+        bevelThickness: 10,
+      },
+      depthMultiplier: 1,
+      bevelEnabled: true,
+      slashDepthRatio: 0.35,
+      isSlashOverlay: false,
+    })
+
+    expect(graphiteCut.bevelSize).toBeCloseTo(0.98)
+    expect(graphiteCut.bevelThickness).toBeCloseTo(0.98)
+    expect(graphiteCut.bevelSegments).toBe(1)
+  })
 })

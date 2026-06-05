@@ -48,11 +48,11 @@ export const svgExtrudeBaseSettings = (
       )
     : 0
   const bevelSize = Math.max(
-    forceCrown ? 0.85 + crownAmount * 1.15 : 0,
+    forceCrown ? 1.8 + crownAmount * 4.2 : 0,
     requestedBevelSize
   )
   const bevelThickness = Math.max(
-    forceCrown ? 0.52 + crownAmount * 0.92 : 0,
+    forceCrown ? 0.85 + crownAmount * 1.65 : 0,
     requestedBevelThickness
   )
   const crownHeight = forceCrown
@@ -125,10 +125,12 @@ export const safeShapeExtrudeSettings = ({
   const shapeDepth = isSlashOverlay
     ? Math.max(0.08, base.depth * slashDepthRatio)
     : Math.max(0.02, base.depth * depthMultiplier)
+  const medialContourLimit = Math.max(0.001, contourMinDim * 0.49)
+  const medialShapeLimit = Math.max(0.001, shapeMinDim * 0.49)
   const bevelContourLimit = useCrownBevel
     ? hasHoles
-      ? Math.min(shapeMinDim * 0.12, contourMinDim * 0.32)
-      : shapeMinDim * 0.12
+      ? Math.min(medialShapeLimit, medialContourLimit)
+      : medialShapeLimit
     : hasHoles
       ? contourMinDim * 0.025
       : shapeMinDim * 0.05
@@ -152,8 +154,8 @@ export const safeShapeExtrudeSettings = ({
             base.bevelThickness,
             useCrownBevel
               ? hasHoles
-                ? Math.min(shapeMinDim * 0.16, contourMinDim * 0.38)
-                : shapeMinDim * 0.16
+                ? Math.min(medialShapeLimit, medialContourLimit)
+                : medialShapeLimit
               : hasHoles
                 ? contourMinDim * 0.04
                 : shapeMinDim * 0.08,
