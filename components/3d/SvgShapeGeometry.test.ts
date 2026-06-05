@@ -275,44 +275,6 @@ const elevatedRoofTrianglesStayInsideFill = (
   return true
 }
 
-const maxElevatedTriangleEdgeLength = (
-  geometry: THREE.BufferGeometry,
-  shapeDepth: number
-) => {
-  const position = geometry.getAttribute("position")
-  const capThreshold = shapeDepth / 2 + 0.01
-  let maxEdgeLength = 0
-
-  for (let index = 0; index < position.count; index += 3) {
-    const vertices = [0, 1, 2].map(
-      (offset) =>
-        new THREE.Vector3(
-          position.getX(index + offset),
-          position.getY(index + offset),
-          position.getZ(index + offset)
-        )
-    )
-    if (!vertices.some((vertex) => Math.abs(vertex.z) > capThreshold)) {
-      continue
-    }
-
-    ;(
-      [
-        [0, 1],
-        [1, 2],
-        [2, 0],
-      ] as const
-    ).forEach(([a, b]) => {
-      maxEdgeLength = Math.max(
-        maxEdgeLength,
-        Math.hypot(vertices[a].x - vertices[b].x, vertices[a].y - vertices[b].y)
-      )
-    })
-  }
-
-  return maxEdgeLength
-}
-
 describe("createSvgShapeGeometry", () => {
   it("cut presets raise compact solid shapes to a centered sharp point", () => {
     const result = createSvgShapeGeometry({
@@ -342,7 +304,7 @@ describe("createSvgShapeGeometry", () => {
     result!.geometry.dispose()
   })
 
-  it("builds a centered radial ridge for one-hole ring icons", () => {
+  it("uses the native triangular bevel for one-hole ring icons", () => {
     const result = createSvgShapeGeometry({
       shape: holedCircleShape(),
       shapeSize: new THREE.Vector2(10, 10),
@@ -358,8 +320,12 @@ describe("createSvgShapeGeometry", () => {
     expect(result!.extrude.bevelEnabled).toBe(true)
     expect(result!.extrude.bevelSegments).toBe(1)
     const stats = zStats(result!.geometry)
-    expect(stats.max).toBeGreaterThan(result!.extrude.shapeDepth / 2 + 0.2)
-    expect(stats.min).toBeLessThan(-result!.extrude.shapeDepth / 2 - 0.2)
+    expect(stats.max).toBeLessThanOrEqual(
+      result!.extrude.shapeDepth / 2 + result!.extrude.bevelThickness + 0.05
+    )
+    expect(stats.min).toBeGreaterThanOrEqual(
+      -result!.extrude.shapeDepth / 2 - result!.extrude.bevelThickness - 0.05
+    )
     expect(
       countElevatedRingVertices(
         result!.geometry,
@@ -368,7 +334,7 @@ describe("createSvgShapeGeometry", () => {
         3.7,
         result!.extrude.shapeDepth / 2 + 0.2
       )
-    ).toBeGreaterThan(20)
+    ).toBe(0)
     result!.geometry.dispose()
   })
 
@@ -415,7 +381,7 @@ describe("createSvgShapeGeometry", () => {
     result!.geometry.dispose()
   })
 
-  it("builds clean radial triangular roofs for one-hole gear icons", () => {
+  it("keeps one-hole gear icons watertight on the native bevel path", () => {
     const shape = settingsGearShape()
     const result = createSvgShapeGeometry({
       shape,
@@ -428,20 +394,15 @@ describe("createSvgShapeGeometry", () => {
     })
 
     expect(result).not.toBeNull()
-    expect(result!.geometry.getAttribute("position").count).toBeGreaterThan(500)
-    expect(
-      elevatedRoofTrianglesStayInsideFill(
-        result!.geometry,
-        shape,
-        result!.extrude.shapeDepth
-      )
-    ).toBe(true)
-    expect(
-      maxElevatedTriangleEdgeLength(
-        result!.geometry,
-        result!.extrude.shapeDepth
-      )
-    ).toBeLessThan(4.75)
+    expect(result!.geometry.getAttribute("position").count).toBeGreaterThan(200)
+    expect(result!.extrude.bevelEnabled).toBe(true)
+    const stats = zStats(result!.geometry)
+    expect(stats.max).toBeLessThanOrEqual(
+      result!.extrude.shapeDepth / 2 + result!.extrude.bevelThickness + 0.05
+    )
+    expect(stats.min).toBeGreaterThanOrEqual(
+      -result!.extrude.shapeDepth / 2 - result!.extrude.bevelThickness - 0.05
+    )
     result!.geometry.dispose()
   })
 

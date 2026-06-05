@@ -122,15 +122,6 @@ const averagePoint = (points: THREE.Vector2[]) => {
   return point.divideScalar(points.length)
 }
 
-const median = (values: number[]) => {
-  if (values.length === 0) return 0
-  const sorted = [...values].sort((a, b) => a - b)
-  const middle = Math.floor(sorted.length / 2)
-  return sorted.length % 2 === 0
-    ? (sorted[middle - 1] + sorted[middle]) / 2
-    : sorted[middle]
-}
-
 const cross2 = (a: THREE.Vector2, b: THREE.Vector2) => a.x * b.y - a.y * b.x
 
 const rayContourHit = (
@@ -373,126 +364,6 @@ const createBoundaryRoofCaps = (
   return positions
 }
 
-const createRadialHoleRoofCaps = (
-  outerContour: THREE.Vector2[],
-  hole: THREE.Vector2[],
-  depth: number,
-  lift: number,
-  profileSign: number
-) => {
-  const positions: number[] = []
-  const holeBox = new THREE.Box2().setFromPoints(hole)
-  const origin = holeBox.getCenter(new THREE.Vector2())
-  const sampleCount = Math.max(72, Math.min(128, outerContour.length))
-  const ridgeHeight = lift * 0.54
-  const radialHits: Array<{
-    direction: THREE.Vector2
-    innerHit: NonNullable<ReturnType<typeof rayContourHit>>
-    outerHit: NonNullable<ReturnType<typeof rayContourHit>>
-  }> = []
-  const outer: CapPoint[] = []
-  const inner: CapPoint[] = []
-  const ridge: CapPoint[] = []
-
-  for (let index = 0; index < sampleCount; index += 1) {
-    const angle = (index / sampleCount) * Math.PI * 2
-    const direction = new THREE.Vector2(Math.cos(angle), Math.sin(angle))
-    const innerHit = rayContourHit(origin, direction, hole)
-    const outerHit = rayContourHit(origin, direction, outerContour)
-    if (!innerHit || !outerHit || outerHit.distance <= innerHit.distance) {
-      continue
-    }
-    radialHits.push({ direction, innerHit, outerHit })
-  }
-
-  const medianBandWidth = median(
-    radialHits.map((hit) => hit.outerHit.distance - hit.innerHit.distance)
-  )
-
-  radialHits.forEach(({ direction, innerHit, outerHit }) => {
-    const bandWidth = outerHit.distance - innerHit.distance
-    const ridgeBandWidth = Math.min(bandWidth, medianBandWidth * 1.08)
-    const ridgePoint = origin
-      .clone()
-      .addScaledVector(direction, innerHit.distance + ridgeBandWidth * 0.5)
-    if (!pointInShapeFill(ridgePoint, outerContour, [hole])) return
-
-    inner.push({ point: innerHit.point, height: 0 })
-    outer.push({ point: outerHit.point, height: 0 })
-    ridge.push({ point: ridgePoint, height: ridgeHeight })
-  })
-
-  const count = Math.min(outer.length, inner.length, ridge.length)
-  if (count < 3) return null
-
-  for (let index = 0; index < count; index += 1) {
-    const next = (index + 1) % count
-    if (
-      !roofQuadIsClean(
-        outer[index].point,
-        outer[next].point,
-        ridge[index].point,
-        ridge[next].point,
-        outerContour,
-        [hole]
-      ) ||
-      !roofQuadIsClean(
-        inner[index].point,
-        inner[next].point,
-        ridge[index].point,
-        ridge[next].point,
-        outerContour,
-        [hole]
-      )
-    ) {
-      continue
-    }
-
-    pushCapQuad(
-      positions,
-      outer[index],
-      outer[next],
-      ridge[next],
-      ridge[index],
-      depth,
-      profileSign,
-      true
-    )
-    pushCapQuad(
-      positions,
-      inner[index],
-      ridge[index],
-      ridge[next],
-      inner[next],
-      depth,
-      profileSign,
-      true
-    )
-    pushCapQuad(
-      positions,
-      outer[index],
-      ridge[index],
-      ridge[next],
-      outer[next],
-      0,
-      -profileSign,
-      false
-    )
-    pushCapQuad(
-      positions,
-      inner[index],
-      inner[next],
-      ridge[next],
-      ridge[index],
-      0,
-      -profileSign,
-      false
-    )
-  }
-
-  return positions.length > 0 ? positions : null
-}
-
 const createSolidRoofCaps = (
   outerContour: THREE.Vector2[],
   depth: number,
@@ -636,35 +507,27 @@ const createCenteredRoofCaps = (
     )
   )
   const positions =
-    holeContours.length === 1
-      ? createRadialHoleRoofCaps(
+    holeContours.length > 0
+      ? createBoundaryRoofCaps(
           outerContour,
-          holeContours[0],
+          holeContours,
           extrude.shapeDepth,
           lift,
           profileSign
         )
-      : holeContours.length > 0
-        ? createBoundaryRoofCaps(
+      : isCompactConvexContour(outerContour)
+        ? createPointRoofCaps(
             outerContour,
-            holeContours,
             extrude.shapeDepth,
             lift,
             profileSign
           )
-        : isCompactConvexContour(outerContour)
-          ? createPointRoofCaps(
-              outerContour,
-              extrude.shapeDepth,
-              lift,
-              profileSign
-            )
-          : createSolidRoofCaps(
-              outerContour,
-              extrude.shapeDepth,
-              lift,
-              profileSign
-            )
+        : createSolidRoofCaps(
+            outerContour,
+            extrude.shapeDepth,
+            lift,
+            profileSign
+          )
   if (!positions) return null
 
   const caps = new THREE.BufferGeometry()
@@ -706,7 +569,8 @@ export const createSvgShapeGeometry = ({
   isSlashOverlay,
   slashDepthRatio,
 }: SvgShapeGeometryOptions): SvgShapeGeometryResult | null => {
-  const useCenteredRoof = baseExtrude.crownEnabled && !isSlashOverlay
+  const useCenteredRoof =
+    baseExtrude.crownEnabled && !isSlashOverlay && shape.holes.length !== 1
   const extrude = safeShapeExtrudeSettings({
     shape,
     shapeSize,
