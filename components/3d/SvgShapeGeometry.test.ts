@@ -24,6 +24,21 @@ const holedCircleShape = () => {
   return shape
 }
 
+const doubleHoledCircleShape = () => {
+  const shape = new THREE.Shape()
+  shape.absarc(10, 10, 10, 0, Math.PI * 2, false)
+
+  const upperHole = new THREE.Path()
+  upperHole.absarc(10, 7, 3, 0, Math.PI * 2, true)
+  shape.holes.push(upperHole)
+
+  const lowerHole = new THREE.Path()
+  lowerHole.absarc(10, 15, 2.4, 0, Math.PI * 2, true)
+  shape.holes.push(lowerHole)
+
+  return shape
+}
+
 const twoShape = () => {
   // Rough polygonal outline of a "2" (no holes, varying stroke, diagonal, curves approximated)
   const s = new THREE.Shape()
@@ -187,6 +202,25 @@ describe("createSvgShapeGeometry", () => {
         result!.extrude.shapeDepth / 2 + 0.2
       )
     ).toBeGreaterThan(20)
+    result!.geometry.dispose()
+  })
+
+  it("builds sharp medial ridges for multi-hole account-style icons", () => {
+    const result = createSvgShapeGeometry({
+      shape: doubleHoledCircleShape(),
+      shapeSize: new THREE.Vector2(20, 20),
+      baseExtrude: cutBase(),
+      depthMultiplier: 1,
+      bevelEnabled: true,
+      isSlashOverlay: false,
+      slashDepthRatio: 0.35,
+    })
+
+    expect(result).not.toBeNull()
+    expect(result!.geometry.getAttribute("position").count).toBeGreaterThan(200)
+    const stats = zStats(result!.geometry)
+    expect(stats.max).toBeGreaterThan(result!.extrude.shapeDepth / 2 + 0.2)
+    expect(stats.min).toBeLessThan(-result!.extrude.shapeDepth / 2 - 0.2)
     result!.geometry.dispose()
   })
 
