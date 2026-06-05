@@ -122,6 +122,15 @@ const averagePoint = (points: THREE.Vector2[]) => {
   return point.divideScalar(points.length)
 }
 
+const median = (values: number[]) => {
+  if (values.length === 0) return 0
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle]
+}
+
 const cross2 = (a: THREE.Vector2, b: THREE.Vector2) => a.x * b.y - a.y * b.x
 
 const rayContourHit = (
@@ -375,6 +384,12 @@ const createRadialHoleRoofCaps = (
   const holeBox = new THREE.Box2().setFromPoints(hole)
   const origin = holeBox.getCenter(new THREE.Vector2())
   const sampleCount = Math.max(72, Math.min(128, outerContour.length))
+  const ridgeHeight = lift * 0.54
+  const radialHits: Array<{
+    direction: THREE.Vector2
+    innerHit: NonNullable<ReturnType<typeof rayContourHit>>
+    outerHit: NonNullable<ReturnType<typeof rayContourHit>>
+  }> = []
   const outer: CapPoint[] = []
   const inner: CapPoint[] = []
   const ridge: CapPoint[] = []
@@ -387,16 +402,25 @@ const createRadialHoleRoofCaps = (
     if (!innerHit || !outerHit || outerHit.distance <= innerHit.distance) {
       continue
     }
+    radialHits.push({ direction, innerHit, outerHit })
+  }
 
+  const medianBandWidth = median(
+    radialHits.map((hit) => hit.outerHit.distance - hit.innerHit.distance)
+  )
+
+  radialHits.forEach(({ direction, innerHit, outerHit }) => {
+    const bandWidth = outerHit.distance - innerHit.distance
+    const ridgeBandWidth = Math.min(bandWidth, medianBandWidth * 1.08)
     const ridgePoint = origin
       .clone()
-      .addScaledVector(direction, (innerHit.distance + outerHit.distance) / 2)
-    if (!pointInShapeFill(ridgePoint, outerContour, [hole])) continue
+      .addScaledVector(direction, innerHit.distance + ridgeBandWidth * 0.5)
+    if (!pointInShapeFill(ridgePoint, outerContour, [hole])) return
 
     inner.push({ point: innerHit.point, height: 0 })
     outer.push({ point: outerHit.point, height: 0 })
-    ridge.push({ point: ridgePoint, height: lift })
-  }
+    ridge.push({ point: ridgePoint, height: ridgeHeight })
+  })
 
   const count = Math.min(outer.length, inner.length, ridge.length)
   if (count < 3) return null
