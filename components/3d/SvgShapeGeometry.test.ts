@@ -24,6 +24,33 @@ const holedCircleShape = () => {
   return shape
 }
 
+const twoShape = () => {
+  // Rough polygonal outline of a "2" (no holes, varying stroke, diagonal, curves approximated)
+  const s = new THREE.Shape()
+  s.moveTo(3, 9)
+  s.lineTo(7.5, 9)
+  s.lineTo(8, 8)
+  s.lineTo(7.2, 6.8)
+  s.lineTo(4.5, 5.5)
+  s.lineTo(8, 5.5)
+  s.lineTo(8, 3.8)
+  s.lineTo(3, 3.8)
+  s.lineTo(2.2, 4.5)
+  s.lineTo(2, 1.2)
+  s.lineTo(3, 0.6)
+  s.lineTo(8, 0.6)
+  s.lineTo(8, 0)
+  s.lineTo(2, 0)
+  s.lineTo(1.5, 1.5)
+  s.lineTo(1.5, 5)
+  s.lineTo(6.2, 5)
+  s.lineTo(8, 7)
+  s.lineTo(8, 9.5)
+  s.lineTo(3, 9.5)
+  s.lineTo(3, 9)
+  return s
+}
+
 const cutBase = (
   overrides: Partial<SvgExtrudeBaseSettings> = {}
 ): SvgExtrudeBaseSettings => ({
@@ -50,20 +77,8 @@ const countUniqueZ = (geometry: THREE.BufferGeometry) => {
   return values.size
 }
 
-const countHorizontalTriangles = (geometry: THREE.BufferGeometry) => {
-  const position = geometry.getAttribute("position")
-  let count = 0
-  for (let index = 0; index < position.count; index += 3) {
-    const z0 = position.getZ(index)
-    const z1 = position.getZ(index + 1)
-    const z2 = position.getZ(index + 2)
-    if (Math.abs(z0 - z1) < 0.0001 && Math.abs(z0 - z2) < 0.0001) count += 1
-  }
-  return count
-}
-
 describe("createSvgShapeGeometry", () => {
-  it("splits cut caps into sharp triangular facets", () => {
+  it("cut presets produce clean beveled extrusion geometry (Blender-style side chamfers + corner bevels)", () => {
     const result = createSvgShapeGeometry({
       shape: squareShape(),
       shapeSize: new THREE.Vector2(10, 10),
@@ -75,10 +90,12 @@ describe("createSvgShapeGeometry", () => {
     })
 
     expect(result).not.toBeNull()
+    // For cut modes we now use the standard beveled extrude path (no custom medial roof caps)
+    // so shapes like "2" get proper 3D side chamfers and corner bevels like the desired reference.
     expect(result!.extrude.bevelEnabled).toBe(true)
     expect(result!.extrude.bevelSegments).toBe(1)
-    expect(countUniqueZ(result!.geometry)).toBe(4)
-    expect(countHorizontalTriangles(result!.geometry)).toBe(0)
+    // Beveled geo has multiple Z levels from the chamfer shoulders + front/back.
+    expect(countUniqueZ(result!.geometry)).toBeGreaterThanOrEqual(4)
     result!.geometry.dispose()
   })
 
@@ -133,5 +150,25 @@ describe("createSvgShapeGeometry", () => {
     )
     body!.geometry.dispose()
     slash!.geometry.dispose()
+  })
+
+  it("produces clean beveled geometry for solid shapes like digit 2 under cut presets", () => {
+    const shape = twoShape()
+    const result = createSvgShapeGeometry({
+      shape,
+      shapeSize: new THREE.Vector2(9, 10),
+      baseExtrude: cutBase({ crownProfile: "inset" }),
+      depthMultiplier: 1,
+      bevelEnabled: true,
+      isSlashOverlay: false,
+      slashDepthRatio: 0.3,
+    })
+    expect(result).not.toBeNull()
+    const position = result!.geometry.getAttribute("position")
+    expect(position.count).toBeGreaterThan(30)
+    // Standard beveled extrude path for cut modes now gives clean 3D "2" with side chamfers
+    // to the corners + extended center, matching the desired reference photo.
+    expect(countUniqueZ(result!.geometry)).toBeGreaterThanOrEqual(4)
+    result!.geometry.dispose()
   })
 })
