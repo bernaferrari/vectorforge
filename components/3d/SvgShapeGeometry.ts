@@ -364,6 +364,111 @@ const createBoundaryRoofCaps = (
   return positions
 }
 
+const createRadialHoleRoofCaps = (
+  outerContour: THREE.Vector2[],
+  hole: THREE.Vector2[],
+  depth: number,
+  lift: number,
+  profileSign: number
+) => {
+  const positions: number[] = []
+  const holeBox = new THREE.Box2().setFromPoints(hole)
+  const origin = holeBox.getCenter(new THREE.Vector2())
+  const sampleCount = Math.max(72, Math.min(128, outerContour.length))
+  const outer: CapPoint[] = []
+  const inner: CapPoint[] = []
+  const ridge: CapPoint[] = []
+
+  for (let index = 0; index < sampleCount; index += 1) {
+    const angle = (index / sampleCount) * Math.PI * 2
+    const direction = new THREE.Vector2(Math.cos(angle), Math.sin(angle))
+    const innerHit = rayContourHit(origin, direction, hole)
+    const outerHit = rayContourHit(origin, direction, outerContour)
+    if (!innerHit || !outerHit || outerHit.distance <= innerHit.distance) {
+      continue
+    }
+
+    const ridgePoint = origin
+      .clone()
+      .addScaledVector(direction, (innerHit.distance + outerHit.distance) / 2)
+    if (!pointInShapeFill(ridgePoint, outerContour, [hole])) continue
+
+    inner.push({ point: innerHit.point, height: 0 })
+    outer.push({ point: outerHit.point, height: 0 })
+    ridge.push({ point: ridgePoint, height: lift })
+  }
+
+  const count = Math.min(outer.length, inner.length, ridge.length)
+  if (count < 3) return null
+
+  for (let index = 0; index < count; index += 1) {
+    const next = (index + 1) % count
+    if (
+      !roofQuadIsClean(
+        outer[index].point,
+        outer[next].point,
+        ridge[index].point,
+        ridge[next].point,
+        outerContour,
+        [hole]
+      ) ||
+      !roofQuadIsClean(
+        inner[index].point,
+        inner[next].point,
+        ridge[index].point,
+        ridge[next].point,
+        outerContour,
+        [hole]
+      )
+    ) {
+      continue
+    }
+
+    pushCapQuad(
+      positions,
+      outer[index],
+      outer[next],
+      ridge[next],
+      ridge[index],
+      depth,
+      profileSign,
+      true
+    )
+    pushCapQuad(
+      positions,
+      inner[index],
+      ridge[index],
+      ridge[next],
+      inner[next],
+      depth,
+      profileSign,
+      true
+    )
+    pushCapQuad(
+      positions,
+      outer[index],
+      ridge[index],
+      ridge[next],
+      outer[next],
+      0,
+      -profileSign,
+      false
+    )
+    pushCapQuad(
+      positions,
+      inner[index],
+      inner[next],
+      ridge[next],
+      ridge[index],
+      0,
+      -profileSign,
+      false
+    )
+  }
+
+  return positions.length > 0 ? positions : null
+}
+
 const createSolidRoofCaps = (
   outerContour: THREE.Vector2[],
   depth: number,
@@ -507,27 +612,35 @@ const createCenteredRoofCaps = (
     )
   )
   const positions =
-    holeContours.length > 0
-      ? createBoundaryRoofCaps(
+    holeContours.length === 1
+      ? createRadialHoleRoofCaps(
           outerContour,
-          holeContours,
+          holeContours[0],
           extrude.shapeDepth,
           lift,
           profileSign
         )
-      : isCompactConvexContour(outerContour)
-        ? createPointRoofCaps(
+      : holeContours.length > 0
+        ? createBoundaryRoofCaps(
             outerContour,
+            holeContours,
             extrude.shapeDepth,
             lift,
             profileSign
           )
-        : createSolidRoofCaps(
-            outerContour,
-            extrude.shapeDepth,
-            lift,
-            profileSign
-          )
+        : isCompactConvexContour(outerContour)
+          ? createPointRoofCaps(
+              outerContour,
+              extrude.shapeDepth,
+              lift,
+              profileSign
+            )
+          : createSolidRoofCaps(
+              outerContour,
+              extrude.shapeDepth,
+              lift,
+              profileSign
+            )
   if (!positions) return null
 
   const caps = new THREE.BufferGeometry()

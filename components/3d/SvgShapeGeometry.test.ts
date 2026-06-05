@@ -56,6 +56,34 @@ const pinchedAccountMouthShape = () => {
   return shape
 }
 
+const settingsGearShape = () => {
+  const shape = new THREE.Shape()
+  const center = new THREE.Vector2(10, 10)
+  const toothCount = 10
+  const pointsPerTooth = 4
+  for (let index = 0; index < toothCount * pointsPerTooth; index += 1) {
+    const angle = (index / (toothCount * pointsPerTooth)) * Math.PI * 2
+    const phase = index % pointsPerTooth
+    const radius = phase === 0 || phase === 1 ? 10 : 7.25
+    const point = new THREE.Vector2(
+      center.x + Math.cos(angle) * radius,
+      center.y + Math.sin(angle) * radius
+    )
+    if (index === 0) {
+      shape.moveTo(point.x, point.y)
+    } else {
+      shape.lineTo(point.x, point.y)
+    }
+  }
+  shape.closePath()
+
+  const hole = new THREE.Path()
+  hole.absarc(center.x, center.y, 3.2, 0, Math.PI * 2, true)
+  shape.holes.push(hole)
+
+  return shape
+}
+
 const twoShape = () => {
   // Rough polygonal outline of a "2" (no holes, varying stroke, diagonal, curves approximated)
   const s = new THREE.Shape()
@@ -247,6 +275,44 @@ const elevatedRoofTrianglesStayInsideFill = (
   return true
 }
 
+const maxElevatedTriangleEdgeLength = (
+  geometry: THREE.BufferGeometry,
+  shapeDepth: number
+) => {
+  const position = geometry.getAttribute("position")
+  const capThreshold = shapeDepth / 2 + 0.01
+  let maxEdgeLength = 0
+
+  for (let index = 0; index < position.count; index += 3) {
+    const vertices = [0, 1, 2].map(
+      (offset) =>
+        new THREE.Vector3(
+          position.getX(index + offset),
+          position.getY(index + offset),
+          position.getZ(index + offset)
+        )
+    )
+    if (!vertices.some((vertex) => Math.abs(vertex.z) > capThreshold)) {
+      continue
+    }
+
+    ;(
+      [
+        [0, 1],
+        [1, 2],
+        [2, 0],
+      ] as const
+    ).forEach(([a, b]) => {
+      maxEdgeLength = Math.max(
+        maxEdgeLength,
+        Math.hypot(vertices[a].x - vertices[b].x, vertices[a].y - vertices[b].y)
+      )
+    })
+  }
+
+  return maxEdgeLength
+}
+
 describe("createSvgShapeGeometry", () => {
   it("cut presets raise compact solid shapes to a centered sharp point", () => {
     const result = createSvgShapeGeometry({
@@ -346,6 +412,36 @@ describe("createSvgShapeGeometry", () => {
         result!.extrude.shapeDepth
       )
     ).toBe(true)
+    result!.geometry.dispose()
+  })
+
+  it("builds clean radial triangular roofs for one-hole gear icons", () => {
+    const shape = settingsGearShape()
+    const result = createSvgShapeGeometry({
+      shape,
+      shapeSize: new THREE.Vector2(20, 20),
+      baseExtrude: cutBase(),
+      depthMultiplier: 1,
+      bevelEnabled: true,
+      isSlashOverlay: false,
+      slashDepthRatio: 0.35,
+    })
+
+    expect(result).not.toBeNull()
+    expect(result!.geometry.getAttribute("position").count).toBeGreaterThan(500)
+    expect(
+      elevatedRoofTrianglesStayInsideFill(
+        result!.geometry,
+        shape,
+        result!.extrude.shapeDepth
+      )
+    ).toBe(true)
+    expect(
+      maxElevatedTriangleEdgeLength(
+        result!.geometry,
+        result!.extrude.shapeDepth
+      )
+    ).toBeLessThan(4.75)
     result!.geometry.dispose()
   })
 
