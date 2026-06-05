@@ -24,9 +24,7 @@ const createHoledIconShape = () => {
   return shape
 }
 
-const baseSettings = (
-  crownEnabled: boolean
-): SvgExtrudeBaseSettings => ({
+const baseSettings = (crownEnabled: boolean): SvgExtrudeBaseSettings => ({
   depth: 1,
   bevelSize: 0.4,
   bevelThickness: 0.4,

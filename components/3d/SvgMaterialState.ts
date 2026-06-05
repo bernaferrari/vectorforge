@@ -129,9 +129,9 @@ export const updateGroupMaterialSettings = (
             ? Math.min(metalness, 0.74)
             : materialPreset === "chrome"
               ? Math.min(metalness, 0.52)
-            : materialPreset === "holo"
-              ? Math.min(metalness, 0.08)
-              : metalness
+              : materialPreset === "holo"
+                ? Math.min(metalness, 0.08)
+                : metalness
       }
       if (writable.reflectivity !== undefined)
         writable.reflectivity = reflectance

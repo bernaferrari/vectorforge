@@ -20,7 +20,6 @@ import {
   cacheInnerGeometryElements,
 } from "./SvgGeometryScale"
 import { svgExtrudeBaseSettings } from "./SvgExtrudeSettings"
-import { isGraphiteCutPreset } from "./MaterialPresets"
 import { createSvgPathMaterial } from "./SvgPathMaterial"
 import { createSvgShapeGeometry } from "./SvgShapeGeometry"
 import { parseSvgShapes, type ParsedSvgShapes } from "./SvgParsing"
@@ -106,7 +105,6 @@ export const buildSvgIconGroup = ({
       : props.colorBSecondary || props.colorB
   )
   const useGradientVertexColors = Boolean(props.enableGradient)
-  const usesGraphiteCut = isGraphiteCutPreset(props.materialPreset)
 
   paths.forEach((path, pathIndex) => {
     const isSlashOverlay =
@@ -206,38 +204,6 @@ export const buildSvgIconGroup = ({
       }
 
       group.add(mesh)
-
-      if (usesGraphiteCut && !isSlashOverlay) {
-        const crownGeometry = geometry.clone()
-        const shapeCenter = new THREE.Vector2()
-        shapeBox.getCenter(shapeCenter)
-        const insetScale =
-          props.materialPreset === "cutInner"
-            ? 0.78
-            : props.materialPreset === "cutOuter"
-              ? 0.88
-              : 0.84
-        crownGeometry.translate(-shapeCenter.x, -shapeCenter.y, 0)
-        crownGeometry.scale(insetScale, insetScale, 0.08)
-        crownGeometry.translate(
-          shapeCenter.x,
-          shapeCenter.y,
-          extrude.shapeDepth * 0.54
-        )
-        crownGeometry.computeVertexNormals()
-
-        const crownMaterial = pathMaterial.clone()
-        crownMaterial.polygonOffset = true
-        crownMaterial.polygonOffsetFactor = -100 - layerOrder * 2
-        crownMaterial.polygonOffsetUnits = -100 - layerOrder * 2
-        const crownMesh = new THREE.Mesh(crownGeometry, crownMaterial)
-        crownMesh.userData.pathLayerId = `${layerId}:crown`
-        crownMesh.position.z = mesh.position.z + extrude.shapeDepth * 0.06
-        crownMesh.renderOrder = mesh.renderOrder + 0.5
-        crownMesh.castShadow = true
-        crownMesh.receiveShadow = true
-        group.add(crownMesh)
-      }
       layerOrder += 1
     })
   })

@@ -85,7 +85,8 @@ const addElevatedReflectionBands = <T extends THREE.Material>(
   variant: "prism" | "gel" | "cut" | "cutInner" | "cutOuter"
 ): T =>
   chainBeforeCompile(material, `elevated-${variant}`, (shader) => {
-    const isCut = variant === "cut" || variant === "cutInner" || variant === "cutOuter"
+    const isCut =
+      variant === "cut" || variant === "cutInner" || variant === "cutOuter"
     const bandStrength =
       variant === "prism" ? "1.25" : variant === "gel" ? "0.72" : "0.0"
     const rimStrength =
@@ -98,13 +99,10 @@ const addElevatedReflectionBands = <T extends THREE.Material>(
             : variant === "cutInner"
               ? "0.2"
               : "0.34"
-    const sideStrength =
-      isCut ? "0.28" : variant === "prism" ? "0.22" : "0.16"
-    const rimColor =
-      isCut ? "vec3(0.72, 0.74, 0.76)" : "elevatedColor"
-    const faceShade =
-      isCut
-        ? `float graphiteFace = abs(normal.z);
+    const sideStrength = isCut ? "0.28" : variant === "prism" ? "0.22" : "0.16"
+    const rimColor = isCut ? "vec3(0.72, 0.74, 0.76)" : "elevatedColor"
+    const faceShade = isCut
+      ? `float graphiteFace = abs(normal.z);
 float graphiteTop = smoothstep(0.08, 0.92, normal.y * 0.5 + 0.5);
 float graphiteInset = smoothstep(0.12, 0.82, 1.0 - graphiteFace);
 float graphiteGrain = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
@@ -112,7 +110,7 @@ diffuseColor.rgb = mix(vec3(0.12), vec3(0.34), graphiteFace * 0.58 + graphiteTop
 ${variant === "cutInner" ? "diffuseColor.rgb += vec3(0.18) * graphiteInset;" : ""}
 ${variant === "cutOuter" ? "diffuseColor.rgb += vec3(0.2) * elevatedRim + vec3(0.1) * graphiteTop;" : ""}
 diffuseColor.rgb += (graphiteGrain - 0.5) * 0.035;`
-        : ""
+      : ""
 
     shader.fragmentShader = shader.fragmentShader
       .replace(
