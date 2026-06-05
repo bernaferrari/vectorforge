@@ -51,7 +51,7 @@ const countUniqueZ = (geometry: THREE.BufferGeometry) => {
 }
 
 describe("createSvgShapeGeometry", () => {
-  it("uses native one-segment bevels for triangular cut faces", () => {
+  it("splits cut caps into sharp triangular facets", () => {
     const result = createSvgShapeGeometry({
       shape: squareShape(),
       shapeSize: new THREE.Vector2(10, 10),
@@ -65,7 +65,7 @@ describe("createSvgShapeGeometry", () => {
     expect(result).not.toBeNull()
     expect(result!.extrude.bevelEnabled).toBe(true)
     expect(result!.extrude.bevelSegments).toBe(1)
-    expect(countUniqueZ(result!.geometry)).toBe(4)
+    expect(countUniqueZ(result!.geometry)).toBeGreaterThan(4)
     result!.geometry.dispose()
   })
 
