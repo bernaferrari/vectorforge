@@ -26,6 +26,18 @@ type CapPoint = {
   height: number
 }
 
+type BoundaryHit = {
+  contourIndex: number
+  distance: number
+  point: THREE.Vector2
+}
+
+type RidgeHit = {
+  opposite: THREE.Vector2
+  ridge: THREE.Vector2
+  targetContourIndex: number
+}
+
 const withoutClosingPoint = (points: THREE.Vector2[]) => {
   if (points.length < 2) return points
   const first = points[0]
@@ -101,14 +113,24 @@ const pointInShapeFill = (
   pointInContour(point, outerContour) &&
   !holeContours.some((hole) => pointInContour(point, hole))
 
+const midpoint = (a: THREE.Vector2, b: THREE.Vector2) =>
+  new THREE.Vector2((a.x + b.x) / 2, (a.y + b.y) / 2)
+
+const averagePoint = (points: THREE.Vector2[]) => {
+  const point = new THREE.Vector2()
+  points.forEach((item) => point.add(item))
+  return point.divideScalar(points.length)
+}
+
 const cross2 = (a: THREE.Vector2, b: THREE.Vector2) => a.x * b.y - a.y * b.x
 
-const rayContourDistance = (
+const rayContourHit = (
   origin: THREE.Vector2,
   direction: THREE.Vector2,
   contour: THREE.Vector2[]
 ) => {
   let nearest = Infinity
+  let nearestPoint: THREE.Vector2 | null = null
   for (let index = 0; index < contour.length; index += 1) {
     const a = contour[index]
     const b = contour[(index + 1) % contour.length]
@@ -124,10 +146,31 @@ const rayContourDistance = (
       segmentDistance >= -0.0001 &&
       segmentDistance <= 1.0001
     ) {
-      nearest = Math.min(nearest, rayDistance)
+      if (rayDistance < nearest) {
+        nearest = rayDistance
+        nearestPoint = origin.clone().addScaledVector(direction, rayDistance)
+      }
     }
   }
-  return Number.isFinite(nearest) ? nearest : null
+  return nearestPoint && Number.isFinite(nearest)
+    ? { distance: nearest, point: nearestPoint }
+    : null
+}
+
+const rayBoundaryHit = (
+  origin: THREE.Vector2,
+  direction: THREE.Vector2,
+  contours: THREE.Vector2[][]
+): BoundaryHit | null => {
+  let nearest: BoundaryHit | null = null
+  contours.forEach((contour, contourIndex) => {
+    const hit = rayContourHit(origin, direction, contour)
+    if (!hit) return
+    if (!nearest || hit.distance < nearest.distance) {
+      nearest = { ...hit, contourIndex }
+    }
+  })
+  return nearest
 }
 
 const inwardNormalAt = (
@@ -154,33 +197,68 @@ const inwardNormalAt = (
   return null
 }
 
-const ridgePointAt = (
+const ridgeHitAt = (
   outerContour: THREE.Vector2[],
   holeContours: THREE.Vector2[][],
   contours: THREE.Vector2[][],
   contour: THREE.Vector2[],
   index: number
-) => {
+): RidgeHit | null => {
   const normal = inwardNormalAt(contour, index, outerContour, holeContours)
   if (!normal) return null
 
   const point = contour[index]
   const probeOffset = 0.012
   const probe = point.clone().addScaledVector(normal, probeOffset)
-  let nearest = Infinity
-  contours.forEach((boundary) => {
-    const distance = rayContourDistance(probe, normal, boundary)
-    if (distance !== null && distance > 0.001) {
-      nearest = Math.min(nearest, distance)
-    }
-  })
-  if (!Number.isFinite(nearest) || nearest < 0.03) return null
+  const hit = rayBoundaryHit(probe, normal, contours)
+  if (!hit || hit.distance < 0.03) return null
 
   const ridge = point
     .clone()
-    .addScaledVector(normal, probeOffset + nearest * 0.5)
+    .addScaledVector(normal, probeOffset + hit.distance * 0.5)
   if (!pointInShapeFill(ridge, outerContour, holeContours)) return null
-  return ridge
+  if (!pointInShapeFill(hit.point, outerContour, holeContours)) {
+    const inwardHit = hit.point.clone().addScaledVector(normal, -probeOffset)
+    if (!pointInShapeFill(inwardHit, outerContour, holeContours)) return null
+  }
+
+  return {
+    opposite: hit.point,
+    ridge,
+    targetContourIndex: hit.contourIndex,
+  }
+}
+
+const roofQuadIsClean = (
+  boundaryA: THREE.Vector2,
+  boundaryB: THREE.Vector2,
+  ridgeA: THREE.Vector2,
+  ridgeB: THREE.Vector2,
+  outerContour: THREE.Vector2[],
+  holeContours: THREE.Vector2[][]
+) => {
+  const widthA = boundaryA.distanceTo(ridgeA)
+  const widthB = boundaryB.distanceTo(ridgeB)
+  const maxWidth = Math.max(widthA, widthB, 0.001)
+  const boundaryLength = boundaryA.distanceTo(boundaryB)
+  const ridgeLength = ridgeA.distanceTo(ridgeB)
+
+  if (ridgeLength > boundaryLength + maxWidth * 1.2) return false
+
+  const boundaryMid = midpoint(boundaryA, boundaryB)
+  const ridgeMid = midpoint(ridgeA, ridgeB)
+  const samples = [
+    ridgeMid,
+    midpoint(boundaryA, ridgeA),
+    midpoint(boundaryB, ridgeB),
+    midpoint(boundaryMid, ridgeMid),
+    averagePoint([boundaryA, boundaryB, ridgeB]),
+    averagePoint([boundaryA, ridgeB, ridgeA]),
+  ]
+
+  return samples.every((sample) =>
+    pointInShapeFill(sample, outerContour, holeContours)
+  )
 }
 
 const createBoundaryRoofCaps = (
@@ -193,21 +271,51 @@ const createBoundaryRoofCaps = (
   const positions: number[] = []
   const contours = [outerContour, ...holeContours]
 
-  contours.forEach((contour) => {
-    const ridges = contour.map((_, index) =>
-      ridgePointAt(outerContour, holeContours, contours, contour, index)
+  contours.forEach((contour, sourceContourIndex) => {
+    const ridgeHits = contour.map((_, index) =>
+      ridgeHitAt(outerContour, holeContours, contours, contour, index)
     )
 
     for (let index = 0; index < contour.length; index += 1) {
       const next = (index + 1) % contour.length
-      const ridgeA = ridges[index]
-      const ridgeB = ridges[next]
-      if (!ridgeA || !ridgeB) continue
+      const hitA = ridgeHits[index]
+      const hitB = ridgeHits[next]
+      if (!hitA || !hitB) continue
+      if (hitA.targetContourIndex !== hitB.targetContourIndex) continue
+      if (
+        sourceContourIndex !== hitA.targetContourIndex &&
+        sourceContourIndex > hitA.targetContourIndex
+      ) {
+        continue
+      }
+
+      if (
+        !roofQuadIsClean(
+          contour[index],
+          contour[next],
+          hitA.ridge,
+          hitB.ridge,
+          outerContour,
+          holeContours
+        ) ||
+        !roofQuadIsClean(
+          hitA.opposite,
+          hitB.opposite,
+          hitA.ridge,
+          hitB.ridge,
+          outerContour,
+          holeContours
+        )
+      ) {
+        continue
+      }
 
       const boundaryA = { point: contour[index], height: 0 }
       const boundaryB = { point: contour[next], height: 0 }
-      const medialA = { point: ridgeA, height: lift }
-      const medialB = { point: ridgeB, height: lift }
+      const oppositeA = { point: hitA.opposite, height: 0 }
+      const oppositeB = { point: hitB.opposite, height: 0 }
+      const medialA = { point: hitA.ridge, height: lift }
+      const medialB = { point: hitB.ridge, height: lift }
 
       pushCapQuad(
         positions,
@@ -221,10 +329,30 @@ const createBoundaryRoofCaps = (
       )
       pushCapQuad(
         positions,
+        oppositeA,
+        medialA,
+        medialB,
+        oppositeB,
+        depth,
+        profileSign,
+        true
+      )
+      pushCapQuad(
+        positions,
         boundaryA,
         medialA,
         medialB,
         boundaryB,
+        0,
+        -profileSign,
+        false
+      )
+      pushCapQuad(
+        positions,
+        oppositeA,
+        oppositeB,
+        medialB,
+        medialA,
         0,
         -profileSign,
         false

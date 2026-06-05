@@ -39,6 +39,23 @@ const doubleHoledCircleShape = () => {
   return shape
 }
 
+const pinchedAccountMouthShape = () => {
+  const shape = new THREE.Shape()
+  shape.absarc(10, 10, 10, 0, Math.PI * 2, false)
+
+  const headHole = new THREE.Path()
+  headHole.absarc(10, 7, 2.8, 0, Math.PI * 2, true)
+  shape.holes.push(headHole)
+
+  const mouthHole = new THREE.Path()
+  mouthHole.moveTo(2.8, 15.2)
+  mouthHole.quadraticCurveTo(10, 11.6, 17.2, 15.2)
+  mouthHole.quadraticCurveTo(10, 18.5, 2.8, 15.2)
+  shape.holes.push(mouthHole)
+
+  return shape
+}
+
 const twoShape = () => {
   // Rough polygonal outline of a "2" (no holes, varying stroke, diagonal, curves approximated)
   const s = new THREE.Shape()
@@ -146,6 +163,90 @@ const countElevatedRingVertices = (
   return count
 }
 
+const pointInContour = (point: THREE.Vector2, contour: THREE.Vector2[]) => {
+  let inside = false
+  for (
+    let current = 0, previous = contour.length - 1;
+    current < contour.length;
+    previous = current, current += 1
+  ) {
+    const currentPoint = contour[current]
+    const previousPoint = contour[previous]
+    const crosses =
+      currentPoint.y > point.y !== previousPoint.y > point.y &&
+      point.x <
+        ((previousPoint.x - currentPoint.x) * (point.y - currentPoint.y)) /
+          (previousPoint.y - currentPoint.y) +
+          currentPoint.x
+    if (crosses) inside = !inside
+  }
+  return inside
+}
+
+const midpoint = (a: THREE.Vector2, b: THREE.Vector2) =>
+  new THREE.Vector2((a.x + b.x) / 2, (a.y + b.y) / 2)
+
+const elevatedRoofTrianglesStayInsideFill = (
+  geometry: THREE.BufferGeometry,
+  shape: THREE.Shape,
+  shapeDepth: number
+) => {
+  const extracted = shape.extractPoints(24)
+  const outer = extracted.shape
+  const holes = extracted.holes
+  const position = geometry.getAttribute("position")
+  const capThreshold = shapeDepth / 2 + 0.01
+
+  for (let index = 0; index < position.count; index += 3) {
+    const vertices = [0, 1, 2].map(
+      (offset) =>
+        new THREE.Vector3(
+          position.getX(index + offset),
+          position.getY(index + offset),
+          position.getZ(index + offset)
+        )
+    )
+    if (!vertices.some((vertex) => Math.abs(vertex.z) > capThreshold)) {
+      continue
+    }
+
+    const samples = [
+      new THREE.Vector2(
+        (vertices[0].x + vertices[1].x + vertices[2].x) / 3,
+        (vertices[0].y + vertices[1].y + vertices[2].y) / 3
+      ),
+    ]
+    ;(
+      [
+        [0, 1],
+        [1, 2],
+        [2, 0],
+      ] as const
+    ).forEach(([a, b]) => {
+      if (
+        Math.abs(vertices[a].z) > capThreshold ||
+        Math.abs(vertices[b].z) > capThreshold
+      ) {
+        samples.push(
+          midpoint(
+            new THREE.Vector2(vertices[a].x, vertices[a].y),
+            new THREE.Vector2(vertices[b].x, vertices[b].y)
+          )
+        )
+      }
+    })
+
+    const staysInside = samples.every(
+      (sample) =>
+        pointInContour(sample, outer) &&
+        !holes.some((hole) => pointInContour(sample, hole))
+    )
+    if (!staysInside) return false
+  }
+
+  return true
+}
+
 describe("createSvgShapeGeometry", () => {
   it("cut presets raise compact solid shapes to a centered sharp point", () => {
     const result = createSvgShapeGeometry({
@@ -221,6 +322,30 @@ describe("createSvgShapeGeometry", () => {
     const stats = zStats(result!.geometry)
     expect(stats.max).toBeGreaterThan(result!.extrude.shapeDepth / 2 + 0.2)
     expect(stats.min).toBeLessThan(-result!.extrude.shapeDepth / 2 - 0.2)
+    result!.geometry.dispose()
+  })
+
+  it("does not bridge sharp roof triangles across pinched hole endpoints", () => {
+    const shape = pinchedAccountMouthShape()
+    const result = createSvgShapeGeometry({
+      shape,
+      shapeSize: new THREE.Vector2(20, 20),
+      baseExtrude: cutBase(),
+      depthMultiplier: 1,
+      bevelEnabled: true,
+      isSlashOverlay: false,
+      slashDepthRatio: 0.35,
+    })
+
+    expect(result).not.toBeNull()
+    expect(result!.geometry.getAttribute("position").count).toBeGreaterThan(200)
+    expect(
+      elevatedRoofTrianglesStayInsideFill(
+        result!.geometry,
+        shape,
+        result!.extrude.shapeDepth
+      )
+    ).toBe(true)
     result!.geometry.dispose()
   })
 
