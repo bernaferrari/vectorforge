@@ -50,6 +50,18 @@ const countUniqueZ = (geometry: THREE.BufferGeometry) => {
   return values.size
 }
 
+const countHorizontalTriangles = (geometry: THREE.BufferGeometry) => {
+  const position = geometry.getAttribute("position")
+  let count = 0
+  for (let index = 0; index < position.count; index += 3) {
+    const z0 = position.getZ(index)
+    const z1 = position.getZ(index + 1)
+    const z2 = position.getZ(index + 2)
+    if (Math.abs(z0 - z1) < 0.0001 && Math.abs(z0 - z2) < 0.0001) count += 1
+  }
+  return count
+}
+
 describe("createSvgShapeGeometry", () => {
   it("splits cut caps into sharp triangular facets", () => {
     const result = createSvgShapeGeometry({
@@ -65,7 +77,8 @@ describe("createSvgShapeGeometry", () => {
     expect(result).not.toBeNull()
     expect(result!.extrude.bevelEnabled).toBe(true)
     expect(result!.extrude.bevelSegments).toBe(1)
-    expect(countUniqueZ(result!.geometry)).toBeGreaterThan(4)
+    expect(countUniqueZ(result!.geometry)).toBe(4)
+    expect(countHorizontalTriangles(result!.geometry)).toBe(0)
     result!.geometry.dispose()
   })
 
