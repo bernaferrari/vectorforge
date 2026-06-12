@@ -27,6 +27,12 @@ export type SkeletonSubtree = {
 export type RoofVertex = { x: number; y: number; h: number }
 
 const EPSILON = 0.00001
+// Cone-membership tests (normalized cross products) get a much looser
+// epsilon: a split point can sit exactly on the boundary between two
+// adjacent edges' swept regions, and a knife's-edge rejection on both sides
+// loses the event entirely. Accepting marginal candidates is safe — the
+// split handler re-verifies against the live wavefront before committing.
+const CONE_EPSILON = 0.005
 const WORKING_SIZE = 200
 
 type V = SkeletonPoint
@@ -103,6 +109,12 @@ class LAVertex {
   valid = true
   isReflex: boolean
   bisector: Ray
+  /**
+   * Opposite edges whose split event already failed to locate a live
+   * wavefront segment. Excluded from future event searches so the vertex can
+   * fall back to its edge events instead of stalling the wavefront.
+   */
+  failedSplitEdges: Set<Edge> = new Set()
 
   constructor(
     point: V,
@@ -142,7 +154,8 @@ class LAVertex {
       for (const original of slav.originalEdges) {
         if (
           original.edge === this.edgeLeft ||
-          original.edge === this.edgeRight
+          original.edge === this.edgeRight ||
+          this.failedSplitEdges.has(original.edge)
         ) {
           continue
         }
@@ -170,35 +183,46 @@ class LAVertex {
         const lineVector = normalize(sub(this.point, i))
         let edgeVector = oppositeNorm
         if (dot(lineVector, edgeVector) < 0) edgeVector = mul(edgeVector, -1)
-        const bisectorVector = addV(edgeVector, lineVector)
-        if (vectorLength(bisectorVector) < 1e-9) continue
 
-        const b = lineRayIntersect(i, bisectorVector, this.bisector)
-        if (!b) continue
+        // The locus of points equidistant from our edge line and the
+        // opposite edge line is BOTH angle bisectors at their intersection
+        // (two perpendicular lines). The classic construction only tries
+        // edge+line; for near-parallel self edges the real split point lies
+        // on the other branch, so evaluate both and let the cone tests pick.
+        for (const bisectorVector of [
+          addV(edgeVector, lineVector),
+          sub(edgeVector, lineVector),
+        ]) {
+          if (vectorLength(bisectorVector) < 1e-9) continue
 
-        // The candidate must lie inside the region swept by the opposite
-        // edge: between the bisectors of its endpoints and in front of it.
-        const xleft =
-          cross(
-            normalize(original.bisectorLeft.v),
-            normalize(sub(b, original.bisectorLeft.p))
-          ) > -EPSILON
-        const xright =
-          cross(
-            normalize(original.bisectorRight.v),
-            normalize(sub(b, original.bisectorRight.p))
-          ) < EPSILON
-        const xedge =
-          cross(oppositeNorm, normalize(sub(b, original.edge.p))) < EPSILON
-        if (!(xleft && xright && xedge)) continue
+          const b = lineRayIntersect(i, bisectorVector, this.bisector)
+          if (!b) continue
 
-        events.push({
-          kind: "split",
-          distance: distanceToLine(original.edge.p, original.edge.v, b),
-          point: b,
-          vertex: this,
-          oppositeEdge: original.edge,
-        })
+          // The candidate must lie inside the region swept by the opposite
+          // edge: between the bisectors of its endpoints and in front of it.
+          const xleft =
+            cross(
+              normalize(original.bisectorLeft.v),
+              normalize(sub(b, original.bisectorLeft.p))
+            ) > -CONE_EPSILON
+          const xright =
+            cross(
+              normalize(original.bisectorRight.v),
+              normalize(sub(b, original.bisectorRight.p))
+            ) < CONE_EPSILON
+          const xedge =
+            cross(oppositeNorm, normalize(sub(b, original.edge.p))) <
+            CONE_EPSILON
+          if (!(xleft && xright && xedge)) continue
+
+          events.push({
+            kind: "split",
+            distance: distanceToLine(original.edge.p, original.edge.v, b),
+            point: b,
+            vertex: this,
+            oppositeEdge: original.edge,
+          })
+        }
       }
     }
 
@@ -409,12 +433,12 @@ class SLAV {
             cross(
               normalize(y.bisector.v),
               normalize(sub(event.point, y.point))
-            ) >= -EPSILON
+            ) >= -CONE_EPSILON
           const xright =
             cross(
               normalize(x.bisector.v),
               normalize(sub(event.point, x.point))
-            ) <= EPSILON
+            ) <= CONE_EPSILON
           if (xleft && xright) break
           x = null
           y = null
@@ -432,7 +456,12 @@ class SLAV {
           event.distance.toFixed(4)
         )
       }
-      return [null, []]
+      // Do not strand the vertex: exclude this opposite edge and requeue its
+      // next-best event, otherwise its loop never collapses and the skeleton
+      // comes out corrupted.
+      event.vertex.failedSplitEdges.add(event.oppositeEdge)
+      const retryEvent = event.vertex.nextEvent()
+      return [null, retryEvent ? [retryEvent] : []]
     }
 
     const v1 = new LAVertex(
@@ -579,7 +608,10 @@ const dedupeContour = (points: V[], minDistance: number): V[] => {
   return result
 }
 
-const removeDegenerateVertices = (points: V[]): V[] => {
+// Only exact turnbacks count as cusps by default; retry rungs loosen this.
+const EXACT_CUSP_DOT = -0.9999995
+
+const removeDegenerateVertices = (points: V[], cuspDot: number): V[] => {
   const result: V[] = []
   const count = points.length
   for (let index = 0; index < count; index += 1) {
@@ -588,18 +620,28 @@ const removeDegenerateVertices = (points: V[]): V[] => {
     const next = points[(index + 1) % count]
     const incoming = normalize(sub(point, prev))
     const outgoing = normalize(sub(next, point))
+    const turn = cross(incoming, outgoing)
     // Drop exactly-collinear vertices (zero bisector) and zero-width spikes.
-    if (Math.abs(cross(incoming, outgoing)) < 1e-9) continue
+    if (Math.abs(turn) < 1e-9) continue
+    // Blunt cusp tips (e.g. crescent hole endpoints): a vertex that doubles
+    // back on itself fires wavefront events at near-zero distances and
+    // derails the skeleton. Each normalization pass removes the current tip,
+    // roughly doubling the wedge, until it clears the threshold.
+    if (dot(incoming, outgoing) < cuspDot) continue
     result.push(point)
   }
   return result
 }
 
-const normalizeContour = (points: V[], minDistance: number): V[] => {
+const normalizeContour = (
+  points: V[],
+  minDistance: number,
+  cuspDot = EXACT_CUSP_DOT
+): V[] => {
   let result = dedupeContour(points, minDistance)
-  for (let pass = 0; pass < 4; pass += 1) {
+  for (let pass = 0; pass < 6; pass += 1) {
     const cleaned = dedupeContour(
-      removeDegenerateVertices(result),
+      removeDegenerateVertices(result, cuspDot),
       minDistance
     )
     if (cleaned.length === result.length) return cleaned
@@ -624,7 +666,7 @@ const simplifyClosedContour = (points: V[], tolerance: number): V[] => {
   let result = points
   for (let pass = 0; pass < 6 && result.length > 4; pass += 1) {
     const count = result.length
-    const keep: boolean[] = new Array(count).fill(true)
+    const keep = Array.from({ length: count }, () => true)
     let removed = false
     for (let index = 0; index < count; index += 1) {
       const prevIndex = (index - 1 + count) % count
@@ -857,6 +899,131 @@ const buildRoofFacesFromContours = (contours: V[][]): RoofVertex[][] | null => {
   return faces
 }
 
+const pointInContour = (point: V, contour: V[]) => {
+  let inside = false
+  for (
+    let current = 0, previous = contour.length - 1;
+    current < contour.length;
+    previous = current, current += 1
+  ) {
+    const a = contour[current]
+    const b = contour[previous]
+    if (
+      a.y > point.y !== b.y > point.y &&
+      point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x
+    ) {
+      inside = !inside
+    }
+  }
+  return inside
+}
+
+const distanceToContour = (point: V, contour: V[]) => {
+  let best = Infinity
+  for (let index = 0; index < contour.length; index += 1) {
+    const a = contour[index]
+    const b = contour[(index + 1) % contour.length]
+    const edge = sub(b, a)
+    const lengthSq = dot(edge, edge)
+    const t =
+      lengthSq > 0
+        ? Math.max(0, Math.min(1, dot(sub(point, a), edge) / lengthSq))
+        : 0
+    best = Math.min(best, pointDistance(point, addV(a, mul(edge, t))))
+  }
+  return best
+}
+
+/**
+ * Sanity check for a completed roof attempt (working units): every ridge
+ * node must lie inside the fill (or hug its boundary) and arrival times can
+ * never exceed the polygon inradius.
+ */
+const roofNodesStayInsideFill = (
+  faces: RoofVertex[][],
+  outer: V[],
+  holes: V[][]
+): boolean => {
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const point of outer) {
+    minX = Math.min(minX, point.x)
+    minY = Math.min(minY, point.y)
+    maxX = Math.max(maxX, point.x)
+    maxY = Math.max(maxY, point.y)
+  }
+  const margin = WORKING_SIZE * 0.002
+  const maxArrival = Math.min(maxX - minX, maxY - minY) * 0.51
+
+  const insideOrNearBoundary = (point: V) => {
+    const inFill =
+      pointInContour(point, outer) &&
+      !holes.some((hole) => pointInContour(point, hole))
+    if (inFill) return true
+    const boundaryDistance = Math.min(
+      distanceToContour(point, outer),
+      ...holes.map((hole) => distanceToContour(point, hole))
+    )
+    return boundaryDistance <= margin
+  }
+
+  const debug = (globalThis as any).__SKEL_DEBUG
+  let valid = true
+  const reject = (kind: string, point: V, h: number) => {
+    valid = false
+    if (debug)
+      console.log(
+        "skel validate reject",
+        kind,
+        point.x.toFixed(3),
+        point.y.toFixed(3),
+        "h",
+        h.toFixed(3)
+      )
+    return debug
+  }
+  for (const face of faces) {
+    let centroidX = 0
+    let centroidY = 0
+    for (let index = 0; index < face.length; index += 1) {
+      const vertex = face[index]
+      if (vertex.h > maxArrival && !reject("arrival", vertex, vertex.h))
+        return false
+      centroidX += vertex.x
+      centroidY += vertex.y
+      if (
+        vertex.h > margin &&
+        !insideOrNearBoundary(vertex) &&
+        !reject("node", vertex, vertex.h)
+      )
+        return false
+      // A face can bridge a hole even when all its nodes are valid, so probe
+      // the interior too via edge midpoints (and the centroid below).
+      const next = face[(index + 1) % face.length]
+      if (vertex.h > margin || next.h > margin) {
+        const midpoint = {
+          x: (vertex.x + next.x) / 2,
+          y: (vertex.y + next.y) / 2,
+        }
+        if (
+          !insideOrNearBoundary(midpoint) &&
+          !reject("midpoint", midpoint, Math.max(vertex.h, next.h))
+        )
+          return false
+      }
+    }
+    const centroid = { x: centroidX / face.length, y: centroidY / face.length }
+    if (
+      !insideOrNearBoundary(centroid) &&
+      !reject("centroid", centroid, 0)
+    )
+      return false
+  }
+  return valid
+}
+
 /**
  * Computes the straight-skeleton roof of a polygon with holes. Returns one
  * planar face polygon per boundary edge, each vertex carrying its skeleton
@@ -900,55 +1067,85 @@ export const computeSkeletonRoof = (
     .map((hole) => normalizeContour(hole.map(scalePoint), minEdge))
     .filter((hole) => hole.length >= 3)
 
-  const tolerances = [
-    0,
-    WORKING_SIZE * 0.0015,
-    WORKING_SIZE * 0.0035,
-    WORKING_SIZE * 0.0075,
+  // Deterministic micro-perturbation. Perfectly symmetric icons fire exactly
+  // simultaneous mirrored wavefront events — the classic degenerate case for
+  // the algorithm — so retry rungs nudge vertices by a hash-based epsilon to
+  // break the ties without visibly moving the contour.
+  const jitterContour = (points: V[], contourIndex: number, amount: number) =>
+    amount <= 0
+      ? points
+      : points.map((point, index) => {
+          const seed = Math.sin(
+            (index + 1) * 12.9898 + (contourIndex + 1) * 78.233
+          )
+          const angle = seed * 43758.5453
+          return {
+            x: point.x + Math.cos(angle) * amount,
+            y: point.y + Math.sin(angle) * amount,
+          }
+        })
+
+  // Each retry rung decimates harder, treats wider wedges as cusps to blunt
+  // (cos thresholds ≈ 180°, 169°, 160°, 154° turnbacks), and jitters more.
+  const rungs = [
+    { tolerance: 0, cuspDot: EXACT_CUSP_DOT, jitter: 0 },
+    {
+      tolerance: WORKING_SIZE * 0.0015,
+      cuspDot: -0.98,
+      jitter: WORKING_SIZE * 0.0004,
+    },
+    {
+      tolerance: WORKING_SIZE * 0.0035,
+      cuspDot: -0.94,
+      jitter: WORKING_SIZE * 0.001,
+    },
+    {
+      tolerance: WORKING_SIZE * 0.0075,
+      cuspDot: -0.9,
+      jitter: WORKING_SIZE * 0.002,
+    },
   ]
-  for (const tolerance of tolerances) {
+  for (const { tolerance, cuspDot, jitter } of rungs) {
     const outer = orientContour(
-      normalizeContour(simplifyClosedContour(baseOuter, tolerance), minEdge),
+      normalizeContour(
+        jitterContour(simplifyClosedContour(baseOuter, tolerance), 0, jitter),
+        minEdge,
+        cuspDot
+      ),
       true
     )
     if (outer.length < 3) continue
     const holes = baseHoles
-      .map((hole) =>
-        normalizeContour(simplifyClosedContour(hole, tolerance), minEdge)
+      .map((hole, holeIndex) =>
+        normalizeContour(
+          jitterContour(
+            simplifyClosedContour(hole, tolerance),
+            holeIndex + 1,
+            jitter
+          ),
+          minEdge,
+          cuspDot
+        )
       )
       .filter((hole) => hole.length >= 3)
       .map((hole) => orientContour(hole, false))
 
     const faces = buildRoofFacesFromContours([outer, ...holes])
-    if (!faces) continue
-    // The wavefront can mis-order degenerate simultaneous events and emit a
-    // rogue far-away peak node. A valid skeleton stays inside its polygon and
-    // its arrival times never exceed the inradius, so treat any outlier as a
-    // failed attempt and retry with stronger decimation.
-    let attemptMinX = Infinity
-    let attemptMinY = Infinity
-    let attemptMaxX = -Infinity
-    let attemptMaxY = -Infinity
-    for (const point of outer) {
-      attemptMinX = Math.min(attemptMinX, point.x)
-      attemptMinY = Math.min(attemptMinY, point.y)
-      attemptMaxX = Math.max(attemptMaxX, point.x)
-      attemptMaxY = Math.max(attemptMaxY, point.y)
+    if (!faces) {
+      if ((globalThis as any).__SKEL_DEBUG)
+        console.log("skel attempt failed (build)", tolerance)
+      continue
     }
-    const margin = WORKING_SIZE * 0.002
-    const maxArrival =
-      Math.min(attemptMaxX - attemptMinX, attemptMaxY - attemptMinY) * 0.51
-    const valid = faces.every((face) =>
-      face.every(
-        (vertex) =>
-          vertex.x >= attemptMinX - margin &&
-          vertex.x <= attemptMaxX + margin &&
-          vertex.y >= attemptMinY - margin &&
-          vertex.y <= attemptMaxY + margin &&
-          vertex.h <= maxArrival
-      )
-    )
-    if (!valid) continue
+    // The wavefront can mis-order degenerate simultaneous events and emit
+    // rogue nodes outside the polygon (or absurdly far away). A valid
+    // skeleton keeps every ridge node inside the fill and its arrival times
+    // below the inradius, so treat any outlier as a failed attempt and retry
+    // with stronger decimation.
+    if (!roofNodesStayInsideFill(faces, outer, holes)) {
+      if ((globalThis as any).__SKEL_DEBUG)
+        console.log("skel attempt failed (validate)", tolerance)
+      continue
+    }
 
     const descalePoint = (p: V): SkeletonPoint => ({
       x: p.x / factor,

@@ -658,7 +658,7 @@ describe("createSvgShapeGeometry", () => {
     expect(wide).not.toBeNull()
 
     const combined = medialRoofPitchFromHeights(
-      [...collectRoofRidgeHeights(thin!), ...collectRoofRidgeHeights(wide!)],
+      [collectRoofRidgeHeights(thin!), collectRoofRidgeHeights(wide!)],
       baseExtrude,
       baseExtrude.depth
     )

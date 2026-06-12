@@ -161,29 +161,52 @@ export const collectRoofRidgeHeights = (roof: SkeletonRoofResult): number[] => {
 }
 
 /**
- * Derives the chisel pitch from ridge statistics: the dominant stroke
- * half-width (85th percentile of ridge arrival times) reaches the full crown
- * lift, and anything wider flattens into a mansard plateau at `clipH` instead
- * of spiking. Pass ridge heights collected across every shape of an icon to
- * get one coherent pitch for the whole glyph set.
+ * Derives the chisel pitch from per-shape ridge statistics. The reference is
+ * the THIN stroke half-width (20th percentile per shape, minimum across
+ * shapes): that stroke rises to the full crown lift in a knife ridge, and
+ * everything wider — fat strokes, blobs, and especially the pockets where
+ * strokes join — clips onto the same flat level. Referencing the thin strokes
+ * gives a constant-width chamfer band along every outline and keeps joints
+ * flush instead of doming forward where a thin stroke meets a wide one.
  */
 export const medialRoofPitchFromHeights = (
-  ridgeHeights: number[],
+  ridgeHeightsByShape: number[][],
   baseExtrude: SvgExtrudeBaseSettings,
   depth: number
 ): MedialRoofPitch | null => {
-  if (!ridgeHeights.length) return null
-  const sorted = [...ridgeHeights].sort((a, b) => a - b)
-  const reference =
-    sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.85))]
+  const combined = ridgeHeightsByShape.flat()
+  if (!combined.length) return null
+  const sortedCombined = [...combined].sort((a, b) => a - b)
+  const dominant =
+    sortedCombined[
+      Math.min(
+        sortedCombined.length - 1,
+        Math.floor(sortedCombined.length * 0.85)
+      )
+    ]
+  let thin = Infinity
+  for (const heights of ridgeHeightsByShape) {
+    if (!heights.length) continue
+    const sorted = [...heights].sort((a, b) => a - b)
+    thin = Math.min(
+      thin,
+      sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.2))]
+    )
+  }
+  // Floor the reference so a degenerate sliver shape cannot collapse the
+  // chamfer band to a razor edge across the whole icon.
+  const reference = Math.min(dominant, Math.max(thin, dominant * 0.15))
   if (!(reference > 0.000001)) return null
+  // Chisel relief is tied to the stroke width (a ~45° cut, nudged by the
+  // bevel-derived crown amount), NOT to the extrusion depth — a deep extrude
+  // keeps the same crisp chamfer instead of scaling the relief with it. The
+  // depth only caps the relief so shallow extrudes aren't overwhelmed.
+  const pitchScale =
+    0.85 + Math.max(0, Math.min(1, baseExtrude.crownAmount)) * 0.4
   const lift = Math.max(
     0.06,
-    Math.min(depth * 0.48, Math.max(baseExtrude.crownHeight, depth * 0.34))
+    Math.min(reference * pitchScale, depth * 0.48)
   )
-  // Cap just above the dominant lift: strokes wider than the dominant one
-  // flatten onto (nearly) the same level instead of rising further, so
-  // stacked strokes of slightly different widths read as one coherent relief.
   const maxLift =
     baseExtrude.crownProfile === "inset"
       ? Math.min(lift * 1.05, depth * 0.42)
@@ -373,7 +396,7 @@ export const createSvgShapeGeometry = ({
       roof = computeShapeMedialRoof(shape, baseExtrude.curveSegments)
       pitch = roof
         ? medialRoofPitchFromHeights(
-            collectRoofRidgeHeights(roof),
+            [collectRoofRidgeHeights(roof)],
             baseExtrude,
             extrude.shapeDepth
           )

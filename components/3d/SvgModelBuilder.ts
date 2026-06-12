@@ -119,7 +119,7 @@ export const buildSvgIconGroup = ({
   const medialRoofByShape = new Map<THREE.Shape, SkeletonRoofResult | null>()
   let sharedRoofPitch: MedialRoofPitch | null = null
   if (wantsMedialRoof) {
-    const ridgeHeights: number[] = []
+    const ridgeHeightsByShape: number[][] = []
     paths.forEach((path, pathIndex) => {
       const isSlashOverlay =
         path.userData?.node?.getAttribute?.("data-vectorforge-slash") === "true"
@@ -129,11 +129,11 @@ export const buildSvgIconGroup = ({
         if (override && !override.visible) return
         const roof = computeShapeMedialRoof(shape, baseExtrude.curveSegments)
         medialRoofByShape.set(shape, roof)
-        if (roof) ridgeHeights.push(...collectRoofRidgeHeights(roof))
+        if (roof) ridgeHeightsByShape.push(collectRoofRidgeHeights(roof))
       })
     })
     sharedRoofPitch = medialRoofPitchFromHeights(
-      ridgeHeights,
+      ridgeHeightsByShape,
       baseExtrude,
       baseExtrude.depth
     )
