@@ -197,20 +197,25 @@ export const medialRoofPitchFromHeights = (
   // chamfer band to a razor edge across the whole icon.
   const reference = Math.min(dominant, Math.max(thin, dominant * 0.15))
   if (!(reference > 0.000001)) return null
-  // Chisel relief is tied to the stroke width (a ~45° cut, nudged by the
-  // bevel-derived crown amount), NOT to the extrusion depth — a deep extrude
-  // keeps the same crisp chamfer instead of scaling the relief with it. The
-  // depth only caps the relief so shallow extrudes aren't overwhelmed.
-  const pitchScale =
-    0.85 + Math.max(0, Math.min(1, baseExtrude.crownAmount)) * 0.4
+  // Roof elevation is slope × local-distance-to-outline, so the ridge height
+  // tracks the local stroke width. Past ~63° the slope amplifies every small
+  // width variation into a visible spike on the side silhouette, so the
+  // relief follows the extrusion depth only until it hits that angle, then
+  // stays proportional to stroke width like a real chisel cut.
+  const MAX_CHISEL_SLOPE = 2
   const lift = Math.max(
     0.06,
-    Math.min(reference * pitchScale, depth * 0.48)
+    Math.min(
+      depth * 0.48,
+      Math.max(baseExtrude.crownHeight, depth * 0.34),
+      reference * MAX_CHISEL_SLOPE
+    )
   )
+  // The plateau sits at EXACTLY the reference-stroke ridge height: where a
+  // stroke flows into a wider region (joints), its ridge line continues
+  // seamlessly into the plateau boundary instead of dying against a step.
   const maxLift =
-    baseExtrude.crownProfile === "inset"
-      ? Math.min(lift * 1.05, depth * 0.42)
-      : lift * 1.05
+    baseExtrude.crownProfile === "inset" ? Math.min(lift, depth * 0.42) : lift
   const slope = lift / reference
   return { slope, clipH: maxLift / slope }
 }

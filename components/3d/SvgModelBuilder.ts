@@ -68,11 +68,20 @@ export const buildSvgIconGroup = ({
   }> = []
   const baseExtrude = svgExtrudeBaseSettings(props)
   const layerSpacing = finiteNumber(props.layerSpacing, 0)
+  // Each layer is nudged forward by layerOrder * gap to avoid z-fighting
+  // between stacked coplanar shapes. The depth-proportional term exists for
+  // layered/colored looks, but under cut finishes the icon must read as ONE
+  // carved solid — scaling the gap with extrusion depth visibly pushes upper
+  // shapes (e.g. a database icon's top ring) in front of the body, so cut
+  // finishes keep only the constant anti-z-fight epsilon. Explicit layer
+  // spacing still applies.
   const pathLayerGap =
     layerCount > 1
       ? Math.max(
           SVG_PATH_LAYER_GAP_MIN,
-          baseExtrude.depth * SVG_PATH_LAYER_GAP_RATIO,
+          baseExtrude.crownEnabled
+            ? 0
+            : baseExtrude.depth * SVG_PATH_LAYER_GAP_RATIO,
           layerSpacing * 0.06
         )
       : 0
