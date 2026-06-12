@@ -65,40 +65,6 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Development
-
-```bash
-pnpm dev           # Start the local Next.js editor
-pnpm build         # Build for production
-pnpm start         # Serve the production build
-pnpm typecheck     # Run TypeScript validation
-pnpm lint          # Run oxlint
-pnpm lint:fix      # Apply safe lint fixes
-pnpm format        # Format with oxfmt
-pnpm format:check  # Check formatting
-pnpm test          # Run Vitest tests
-```
-
-The main quality gates are:
-
-```bash
-pnpm typecheck
-pnpm lint
-pnpm test
-```
-
-`pnpm build` may need network access because `next/font` can fetch Google font
-assets during the production build.
-
-## Tech Stack
-
-- **Next.js 16** and **React 19**
-- **Three.js** for SVG parsing, geometry, rendering, recording, and GLB export
-- **Tailwind CSS 4** with shadcn-style UI primitives
-- **Base UI** for interaction primitives
-- **TypeScript** for editor, timeline, export, and renderer logic
-- **Vitest**, **oxlint**, and **oxfmt** for tests, linting, and formatting
-
 ## Architecture
 
 ```text
