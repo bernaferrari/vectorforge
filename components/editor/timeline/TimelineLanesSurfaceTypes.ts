@@ -79,6 +79,7 @@ export type TimelineShapeLaneProps = {
 
 export type TimelinePropertyLaneProps = {
   visiblePropertyRows: TimelinePropertyRow[]
+  revealedRowId: string | null
   selectedKeyframe: SelectedTimelineKeyframe
   onActivePropertyRowChange?: (rowId: string) => void
   onRemovePropertyKeyframe?: (rowId: string, keyframeId: string) => void
@@ -99,6 +100,7 @@ export type TimelinePropertyLaneProps = {
 
 export type TimelineTrackLaneProps = {
   tracks: TimelineTrack[]
+  revealedRowId: string | null
   activeTrackId?: string | null
   selectedKeyframe: SelectedTimelineKeyframe
   timeEditor: TrackTimeEditor | null

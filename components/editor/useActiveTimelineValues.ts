@@ -14,7 +14,7 @@ type ActiveTimelineValuesInput = {
   extrusionDepth: number
   rotationOffset: LightPosition
   rotationAxisKeyframes: Vector3Keyframe[]
-  previewRotationY: number | null
+  previewRotationOffset: LightPosition | null
   objectScale: number
   moveOffset: LightPosition
   moveKeyframes: Vector3Keyframe[]
@@ -33,7 +33,7 @@ export const useActiveTimelineValues = ({
   extrusionDepth,
   rotationOffset,
   rotationAxisKeyframes,
-  previewRotationY,
+  previewRotationOffset,
   objectScale,
   moveOffset,
   moveKeyframes,
@@ -49,8 +49,10 @@ export const useActiveTimelineValues = ({
       rotationOffset,
       rotationAxisKeyframes
     )
-    if (previewRotationY !== null) {
-      activeRotationOffset.y = previewRotationY
+    if (previewRotationOffset !== null) {
+      activeRotationOffset.x = previewRotationOffset.x
+      activeRotationOffset.y = previewRotationOffset.y
+      activeRotationOffset.z = previewRotationOffset.z
     }
 
     return {
@@ -91,7 +93,7 @@ export const useActiveTimelineValues = ({
     extrusionDepth,
     rotationOffset,
     rotationAxisKeyframes,
-    previewRotationY,
+    previewRotationOffset,
     objectScale,
     moveOffset,
     moveKeyframes,

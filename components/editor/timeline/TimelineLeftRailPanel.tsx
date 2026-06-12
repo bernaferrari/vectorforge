@@ -22,6 +22,8 @@ type TimelineLeftRailPanelProps = {
   selectedShapeId: string | null
   snapEnabled: boolean
   tracks: TimelineTrack[]
+  hiddenTracks: TimelineTrack[]
+  revealedRowId: string | null
   visiblePropertyRows: TimelinePropertyRow[]
   onActivePropertyRowChange?: (rowId: string) => void
   onAddShape: () => void
@@ -67,6 +69,8 @@ export function TimelineLeftRailPanel({
   selectedShapeId,
   snapEnabled,
   tracks,
+  hiddenTracks,
+  revealedRowId,
   visiblePropertyRows,
   onActivePropertyRowChange,
   onAddShape,
@@ -116,6 +120,8 @@ export function TimelineLeftRailPanel({
           isPreviewLoading={isPreviewLoading}
           visiblePropertyRows={visiblePropertyRows}
           tracks={tracks}
+          hiddenTracks={hiddenTracks}
+          revealedRowId={revealedRowId}
           activeTrackId={activeTrackId}
           currentTime={currentTime}
           onAddShape={onAddShape}

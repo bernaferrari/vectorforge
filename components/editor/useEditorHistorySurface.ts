@@ -13,7 +13,8 @@ export function useEditorHistorySurface({
   onPlayPause,
   ...historyArgs
 }: UseEditorHistorySurfaceArgs) {
-  const { undo, redo } = useEditorSnapshotHistory(historyArgs)
+  const { undo, redo, openProjectFile, saveProjectFile } =
+    useEditorSnapshotHistory(historyArgs)
 
   useEditorShortcuts({
     onUndo: undo,
@@ -21,5 +22,5 @@ export function useEditorHistorySurface({
     onPlayPause,
   })
 
-  return { undo, redo }
+  return { undo, redo, openProjectFile, saveProjectFile }
 }

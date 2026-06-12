@@ -1,5 +1,7 @@
 import * as THREE from "three"
 import { isGraphiteCutPreset, type MaterialPresetId } from "./MaterialPresets"
+import { applyGradientVertexColors, gradientStopsFromFill } from "./SvgColor"
+import { ICON_VIEWBOX_SIZE } from "./SvgSceneUtils"
 import { finiteNumber } from "./SvgGeometry"
 import type { SvgCanvasProps } from "./SvgTypes"
 
@@ -156,6 +158,76 @@ export const updateGroupMaterialSettings = (
       if (writable.wireframe !== wireframe) {
         writable.wireframe = wireframe
         needsUpdate = true
+      }
+      if (needsUpdate) material.needsUpdate = true
+    })
+  })
+}
+
+export const updateGroupFillColors = (
+  group: THREE.Group | null,
+  {
+    color,
+    colorSecondary,
+    colorStops,
+    enableGradient,
+    gradientType,
+    materialPreset,
+    emissiveIntensity,
+  }: {
+    color: string
+    colorSecondary?: string
+    colorStops?: SvgCanvasProps["colorAStops"]
+    enableGradient?: boolean
+    gradientType?: SvgCanvasProps["gradientType"]
+    materialPreset: MaterialPresetId
+    emissiveIntensity: number
+  }
+) => {
+  if (!group) return
+  const forceGraphiteCut = isGraphiteCutPreset(materialPreset)
+  const useVertexColors = Boolean(enableGradient && !forceGraphiteCut)
+  const stops = gradientStopsFromFill(colorStops, color, colorSecondary ?? color)
+  const iconBounds = new THREE.Box2(
+    new THREE.Vector2(0, 0),
+    new THREE.Vector2(ICON_VIEWBOX_SIZE, ICON_VIEWBOX_SIZE)
+  )
+
+  group.traverse((object) => {
+    const mesh = object as THREE.Mesh
+    if (!mesh.isMesh || !mesh.geometry || !mesh.material) return
+
+    if (useVertexColors) {
+      applyGradientVertexColors(
+        mesh.geometry,
+        gradientType ?? "linear",
+        stops,
+        iconBounds
+      )
+      const colorAttribute = mesh.geometry.getAttribute("color")
+      if (colorAttribute) colorAttribute.needsUpdate = true
+    }
+
+    const materials = Array.isArray(mesh.material)
+      ? mesh.material
+      : [mesh.material]
+    materials.forEach((material) => {
+      const writable = material as THREE.Material & {
+        color?: THREE.Color
+        emissive?: THREE.Color
+        emissiveIntensity?: number
+        vertexColors?: boolean
+      }
+      let needsUpdate = false
+      if (writable.vertexColors !== undefined && writable.vertexColors !== useVertexColors) {
+        writable.vertexColors = useVertexColors
+        needsUpdate = true
+      }
+      if (writable.color) {
+        writable.color.set(forceGraphiteCut ? "#2f3031" : useVertexColors ? "#ffffff" : color)
+      }
+      if (writable.emissive && emissiveIntensity > 0 && !useVertexColors) {
+        writable.emissive.set(color)
       }
       if (needsUpdate) material.needsUpdate = true
     })

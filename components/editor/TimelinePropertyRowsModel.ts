@@ -1,5 +1,6 @@
 import type { MaterialKeyframe, Vector3Keyframe } from "./EditorModel"
 import { MOVE_COLOR, ROTATION_COLOR, clampNumber } from "./EditorModel"
+import { keyframeTimeMatches } from "./EditorKeyframeModel"
 import type { FillKeyframe, TimelinePropertyRow } from "./TimelineModel"
 
 export const createStyleTimelineKeyframeTimes = ({
@@ -53,11 +54,11 @@ export const createTimelinePropertyRows = ({
               time,
               label: "Style",
               easing:
-                fillKeyframes.find(
-                  (keyframe) => Math.abs(keyframe.time - time) < 0.04
+                fillKeyframes.find((keyframe) =>
+                  keyframeTimeMatches(keyframe.time, time)
                 )?.easing ??
-                materialKeyframes.find(
-                  (keyframe) => Math.abs(keyframe.time - time) < 0.04
+                materialKeyframes.find((keyframe) =>
+                  keyframeTimeMatches(keyframe.time, time)
                 )?.easing,
             })),
           },

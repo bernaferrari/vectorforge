@@ -1,6 +1,12 @@
 "use client"
 
 import React from "react"
+import { Plus } from "lucide-react"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import type { TimelinePropertyRow, TimelineTrack } from "../TimelineModel"
 import type { EasingType } from "../TimelineModel"
 import {
@@ -15,6 +21,8 @@ type TimelineLeftRailProps = {
   isPreviewLoading: boolean
   visiblePropertyRows: TimelinePropertyRow[]
   tracks: TimelineTrack[]
+  hiddenTracks: TimelineTrack[]
+  revealedRowId: string | null
   activeTrackId?: string | null
   currentTime: number
   onAddShape: () => void
@@ -56,6 +64,8 @@ export const TimelineLeftRail = React.forwardRef<
       isPreviewLoading,
       visiblePropertyRows,
       tracks,
+      hiddenTracks,
+      revealedRowId,
       activeTrackId,
       currentTime,
       onAddShape,
@@ -73,6 +83,7 @@ export const TimelineLeftRail = React.forwardRef<
     },
     ref
   ) => {
+    const [addPropertyOpen, setAddPropertyOpen] = React.useState(false)
     const menu = {
       currentTime,
       onOpenContextMenu,
@@ -91,6 +102,7 @@ export const TimelineLeftRail = React.forwardRef<
           <TimelinePropertyRailRow
             key={row.id}
             row={row}
+            isRevealed={revealedRowId === `property:${row.id}`}
             menu={menu}
             onClearSelection={onClearSelection}
             onActivePropertyRowChange={onActivePropertyRowChange}
@@ -104,6 +116,7 @@ export const TimelineLeftRail = React.forwardRef<
           <TimelineTrackRailRow
             key={track.id}
             track={track}
+            isRevealed={revealedRowId === `track:${track.id}`}
             activeTrackId={activeTrackId}
             menu={menu}
             onClearSelection={onClearSelection}
@@ -113,6 +126,51 @@ export const TimelineLeftRail = React.forwardRef<
             onSetTrackEasing={onSetTrackEasing}
           />
         ))}
+
+        {hiddenTracks.length > 0 && (
+          <Popover open={addPropertyOpen} onOpenChange={setAddPropertyOpen}>
+            <PopoverTrigger
+              render={
+                <button
+                  type="button"
+                  className="flex h-9 w-full items-center gap-2 border-b border-border px-3 text-left text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:outline-none focus-visible:ring-inset"
+                />
+              }
+            >
+              <Plus className="size-3.5" />
+              Add property
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              side="right"
+              sideOffset={8}
+              className="w-44 gap-1 rounded-lg border-border bg-popover p-1.5"
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="px-2 pt-0.5 pb-1 text-[10px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
+                Add property
+              </div>
+              {hiddenTracks.map((track) => (
+                <button
+                  key={track.id}
+                  type="button"
+                  onClick={() => {
+                    onSelectTrack(track.id)
+                    setAddPropertyOpen(false)
+                  }}
+                  className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[11px] font-medium text-foreground transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:outline-none"
+                >
+                  <span
+                    className="size-2 rounded-full"
+                    style={{ backgroundColor: track.color }}
+                  />
+                  <span className="min-w-0 flex-1 truncate">{track.name}</span>
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
+        )}
       </div>
     )
   }

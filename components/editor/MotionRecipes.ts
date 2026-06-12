@@ -1,6 +1,10 @@
 import { MaterialPresetId } from "../3d/MaterialPresets"
 import type { Vector3Keyframe } from "./EditorModel"
-import type { FillGradientType, TimelineTrack } from "./TimelineModel"
+import type {
+  FillGradientType,
+  TimelineTrack,
+  TransitionType,
+} from "./TimelineModel"
 
 export interface MotionRecipe {
   id: string
@@ -38,7 +42,7 @@ export interface MotionRecipe {
   translateY?: number
   translateZ?: number
 
-  transitionType: "none" | "wipe"
+  transitionType: TransitionType
   wipeDirection: { x: number; y: number }
 
   keyLightIntensity: number
@@ -84,7 +88,7 @@ export const MOTION_RECIPES: MotionRecipe[] = [
     tracks: [
       {
         id: "transition",
-        name: "Morph",
+        name: "Transition",
         color: "#4285F4",
         min: 0,
         max: 1.0,
@@ -161,13 +165,13 @@ export const MOTION_RECIPES: MotionRecipe[] = [
     bevelSize: 0.07,
     bevelSegments: 4,
     layerSpacing: 0.7,
-    transitionType: "wipe",
-    wipeDirection: { x: 0, y: 0 }, // Cinematic cross-fade
+    transitionType: "fade",
+    wipeDirection: { x: 0, y: 0 },
     keyLightIntensity: 1.3,
     tracks: [
       {
         id: "transition",
-        name: "Morph",
+        name: "Transition",
         color: "#ff5c93",
         min: 0,
         max: 1.0,
@@ -250,7 +254,7 @@ export const MOTION_RECIPES: MotionRecipe[] = [
     tracks: [
       {
         id: "transition",
-        name: "Morph",
+        name: "Transition",
         color: "#ff007f",
         min: 0,
         max: 1.0,
@@ -330,7 +334,7 @@ export const MOTION_RECIPES: MotionRecipe[] = [
     tracks: [
       {
         id: "transition",
-        name: "Morph",
+        name: "Transition",
         color: "#d8b4fe",
         min: 0,
         max: 1.0,

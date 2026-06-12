@@ -1,7 +1,7 @@
 import * as THREE from "three"
 import { MAX_BEVEL_SEGMENTS } from "./SvgSceneUtils"
 import { finiteNumber, minContourDimension } from "./SvgGeometry"
-import { isGraphiteCutPreset } from "./MaterialPresets"
+import { isGraphiteCutPreset, isSoftCutPreset } from "./MaterialPresets"
 import type { SvgCanvasProps } from "./SvgTypes"
 
 export type SvgExtrudeBaseSettings = {
@@ -16,6 +16,7 @@ export type SvgExtrudeBaseSettings = {
   crownHeight: number
   crownWidth: number
   crownInset: number
+  crownMode: "medial" | "native"
 }
 
 export type SafeShapeExtrudeSettings = {
@@ -48,22 +49,22 @@ export const svgExtrudeBaseSettings = (
       )
     : 0
   const bevelSize = Math.max(
-    forceCrown ? 1.8 + crownAmount * 4.2 : 0,
+    forceCrown ? 0.4 + crownAmount * 1.5 : 0,
     requestedBevelSize
   )
   const bevelThickness = Math.max(
-    forceCrown ? 0.85 + crownAmount * 1.65 : 0,
+    forceCrown ? 0.25 + crownAmount * 0.9 : 0,
     requestedBevelThickness
   )
   const crownHeight = forceCrown
     ? crownProfile === "outer"
-      ? Math.max(0.9, crownAmount * 2.2, bevelThickness * 2.8)
+      ? Math.max(0.3, crownAmount * 0.8, bevelThickness * 1.2)
       : crownProfile === "inset"
-        ? Math.max(0.82, crownAmount * 1.9, bevelThickness * 2.5)
-        : Math.max(0.72, crownAmount * 1.65, bevelThickness * 2.2)
+        ? Math.max(0.28, crownAmount * 0.7, bevelThickness * 1.1)
+        : Math.max(0.25, crownAmount * 0.6, bevelThickness * 1.0)
     : 0
   const crownWidth = forceCrown
-    ? Math.max(1.25, 0.9 + crownAmount * 4.2, bevelSize * 8)
+    ? Math.max(0.5, 0.3 + crownAmount * 1.5, bevelSize * 3)
     : 0
   return {
     depth: Math.max(0.02, finiteNumber(props.extrusionDepth, 1)),
@@ -93,8 +94,9 @@ export const svgExtrudeBaseSettings = (
     crownHeight,
     crownWidth,
     crownInset: forceCrown
-      ? Math.max(0.06, Math.min(0.16, bevelSize * 0.7))
+      ? Math.max(0.06, Math.min(1.25, bevelSize * 0.55))
       : 0,
+    crownMode: isSoftCutPreset(props.materialPreset) ? "native" : "medial",
   }
 }
 
@@ -125,8 +127,18 @@ export const safeShapeExtrudeSettings = ({
   const shapeDepth = isSlashOverlay
     ? Math.max(0.08, base.depth * slashDepthRatio)
     : Math.max(0.02, base.depth * depthMultiplier)
-  const medialContourLimit = Math.max(0.001, contourMinDim * 0.49)
-  const medialShapeLimit = Math.max(0.001, shapeMinDim * 0.49)
+
+  // Elongated/thin contours (database layers, ribbons, slots) must not receive the full
+  // aggressive crown bevel; a large 1-segment bevel relative to their short dimension
+  // collapses the top face at the curved ends/joints and produces the visible "holes"
+  // and broken joints under cut finishes.
+  const aspect = Math.max(shapeSize.x, shapeSize.y) / Math.max(0.001, Math.min(shapeSize.x, shapeSize.y))
+  const isElongated = aspect > 1.7
+  const crownBevelFactor = useCrownBevel
+    ? (isElongated ? 0.22 : 0.49)
+    : 0.49
+  const medialContourLimit = Math.max(0.001, contourMinDim * crownBevelFactor)
+  const medialShapeLimit = Math.max(0.001, shapeMinDim * crownBevelFactor)
   const bevelContourLimit = useCrownBevel
     ? hasHoles
       ? Math.min(medialShapeLimit, medialContourLimit)
@@ -135,7 +147,7 @@ export const safeShapeExtrudeSettings = ({
       ? contourMinDim * 0.025
       : shapeMinDim * 0.05
   const bevelDepthLimit = useCrownBevel
-    ? shapeDepth * 0.38
+    ? shapeDepth * (isElongated ? 0.28 : 0.38)
     : hasHoles
       ? shapeDepth * 0.12
       : shapeDepth * 0.18
@@ -160,7 +172,7 @@ export const safeShapeExtrudeSettings = ({
                 ? contourMinDim * 0.04
                 : shapeMinDim * 0.08,
             useCrownBevel
-              ? shapeDepth * 0.45
+              ? shapeDepth * (isElongated ? 0.32 : 0.45)
               : hasHoles
                 ? shapeDepth * 0.16
                 : shapeDepth * 0.25

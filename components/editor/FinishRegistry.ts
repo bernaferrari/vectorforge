@@ -110,6 +110,13 @@ export const MATERIAL_METADATA: Record<
       "A graphite cut that emphasizes the outside bevel and rim for a raised, machined edge.",
     glowColor: "rgba(203, 213, 225, 0.2)",
   },
+  softCut: {
+    name: "Soft Cut",
+    subtitle: "Soft Chamfer",
+    description:
+      "A softer graphite cut that keeps closed caps and uses a calmer rounded bevel instead of raised roof sheets.",
+    glowColor: "rgba(203, 213, 225, 0.16)",
+  },
   custom: {
     name: "Custom",
     subtitle: "Advanced",
@@ -146,6 +153,8 @@ export const MATERIAL_PREVIEW: Record<MaterialPresetId, string> = {
     "radial-gradient(circle at 50% 45%, #9ca3af 0%, #374151 24%, #111827 54%, #020617 100%)",
   cutOuter:
     "linear-gradient(135deg, #cbd5e1 0%, #4b5563 18%, #050505 38%, #111827 66%, #94a3b8 100%)",
+  softCut:
+    "radial-gradient(circle at 32% 24%, #f8fafc 0%, #71717a 22%, #27272a 44%, #0a0a0a 70%, #a1a1aa 100%)",
   custom: "radial-gradient(circle at 34% 28%, #ede9fe, #a78bfa 45%, #6d28d9)",
 }
 
@@ -165,6 +174,7 @@ export const FINISH_PRESETS: MaterialPresetId[] = [
   "cutInk",
   "cutInner",
   "cutOuter",
+  "softCut",
 ]
 
 export const MATERIAL_DEFAULT_SETTINGS: Record<
@@ -320,6 +330,16 @@ export const MATERIAL_DEFAULT_SETTINGS: Record<
     transmission: 0,
     thickness: 0.4,
     emissiveIntensity: 0.05,
+  },
+  softCut: {
+    roughness: 0.82,
+    metalness: 0,
+    reflectance: 0.42,
+    clearcoat: 0.08,
+    clearcoatRoughness: 0.7,
+    transmission: 0,
+    thickness: 0.4,
+    emissiveIntensity: 0.035,
   },
 }
 

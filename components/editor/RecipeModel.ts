@@ -76,7 +76,7 @@ export const transformSettingsForRecipe = (
     y: recipe.translateY ?? DEFAULT_TRANSFORM_SETTINGS.moveOffset.y,
     z: recipe.translateZ ?? DEFAULT_TRANSFORM_SETTINGS.moveOffset.z,
   },
-  previewRotationY: null,
+  previewRotationOffset: null,
 })
 
 export const lightSettingsForRecipe = (

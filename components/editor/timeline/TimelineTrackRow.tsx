@@ -12,6 +12,7 @@ import type { SelectedTimelineKeyframe, TrackTimeEditor } from "./TimelineTypes"
 export type TimelineTrackRowProps = {
   duration: number
   track: TimelineTrack
+  isRevealed: boolean
   isActive: boolean
   selectedKeyframe: SelectedTimelineKeyframe
   timeEditor: TrackTimeEditor | null
@@ -58,6 +59,7 @@ export type TimelineTrackRowProps = {
 export function TimelineTrackRow({
   duration,
   track,
+  isRevealed,
   isActive,
   selectedKeyframe,
   timeEditor,
@@ -88,7 +90,11 @@ export function TimelineTrackRow({
   return (
     <div
       className={`relative h-9 border-b border-border transition-colors ${
-        isActive ? "bg-muted/45" : "hover:bg-muted/35"
+        isRevealed
+          ? "bg-primary/10 ring-1 ring-primary/20 ring-inset"
+          : isActive
+            ? "bg-muted/45"
+            : "hover:bg-muted/35"
       }`}
       onMouseDown={(event) => {
         if (event.button !== 0) return

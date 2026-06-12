@@ -36,6 +36,7 @@ const baseSettings = (crownEnabled: boolean): SvgExtrudeBaseSettings => ({
   crownHeight: crownEnabled ? 0.36 : 0,
   crownWidth: crownEnabled ? 1.6 : 0,
   crownInset: crownEnabled ? 0.1 : 0,
+  crownMode: "medial",
 })
 
 describe("safeShapeExtrudeSettings", () => {

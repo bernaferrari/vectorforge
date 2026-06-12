@@ -11,6 +11,7 @@ import {
   ShapeStop,
   applyEasing,
   interpolateFillKeyframes,
+  shapeTransitionType,
 } from "./TimelineModel"
 
 type FillRenderValue = {
@@ -51,7 +52,7 @@ const EMPTY_SHAPE: ShapeStop = {
   fillKeyframes: [],
   pathOverrides: [],
   easing: "ease-in-out",
-  transitionType: "wipe",
+  transitionType: "fade",
   wipeDirection: { x: 0, y: 0 },
 }
 
@@ -106,9 +107,10 @@ const deriveMorph = (
         ? 1
         : (gapProgress - start) / Math.max(1e-6, end - start)
 
+  const transitionType = shapeTransitionType(from)
   const progress =
-    from.transitionType === "none"
-      ? windowProgress < 0.5
+    transitionType === "cut"
+      ? gapProgress < start
         ? 0
         : 1
       : clampNumber(applyEasing(from.easing, windowProgress), 0, 1)
@@ -135,6 +137,28 @@ const getRenderFill = (
     gradientType: isSolid ? ("linear" as GradientType) : gradientType,
   }
 }
+
+const shapeFillValue = ({
+  shape,
+  currentTime,
+  fallback,
+  fillKeyframes,
+}: {
+  shape: ShapeStop
+  currentTime: number
+  fallback: FillRenderValue
+  fillKeyframes: FillKeyframe[]
+}) =>
+  interpolateFillKeyframes(
+    currentTime,
+    {
+      color: shape.color || fallback.color,
+      colorSecondary: shape.colorSecondary || fallback.colorSecondary,
+      gradientType: shape.fillGradientType ?? fallback.gradientType,
+      stops: shape.fillStops ?? fallback.stops,
+    },
+    shape.fillKeyframes?.length ? shape.fillKeyframes : fillKeyframes
+  )
 
 export const useMorphRenderState = ({
   shapes,
@@ -180,11 +204,27 @@ export const useMorphRenderState = ({
       fillMode === "solid"
     )
 
-  const fillA = selectedShapeFillValue
-  const fillB = selectedShapeFillValue
+  const fallbackFill = {
+    color: fillColor,
+    colorSecondary: fillColorSecondary,
+    gradientType: fillGradientType,
+    stops: fillStops,
+  }
+  const fillA = shapeFillValue({
+    shape: morph.from,
+    currentTime,
+    fallback: fallbackFill,
+    fillKeyframes,
+  })
+  const fillB = shapeFillValue({
+    shape: morph.to,
+    currentTime,
+    fallback: fallbackFill,
+    fillKeyframes,
+  })
   const renderA = getRenderFill(fillA, fillMode, fillGradientType)
   const renderB = getRenderFill(fillB, fillMode, fillGradientType)
-  const transitionType = morph.from.transitionType
+  const transitionType = shapeTransitionType(morph.from)
   const shareOutgoingFillDuringWipe =
     transitionType === "wipe" && morph.from.id !== morph.to.id
   const renderColorB = shareOutgoingFillDuringWipe

@@ -45,13 +45,14 @@ export type MotionTrackId =
   | "scale"
   | "move"
   | "lighting"
-export type LightPosition = { x: number; y: number; z: number }
+export type Vec3 = { x: number; y: number; z: number }
+export type LightPosition = Vec3
 export const ROTATION_COLOR = "#ffd23f"
 
 export type Vector3Keyframe = {
   id: string
   time: number
-  value: LightPosition
+  value: Vec3
   easing: EasingType
 }
 
@@ -92,22 +93,22 @@ export type GeometrySettings = {
   bevelSegments: number
   geometryQuality: number
   layerSpacing: number
-  innerElementScale: LightPosition
+  innerElementScale: Vec3
 }
 
 export type LightSettings = {
   keyLightColor: string
   keyLightIntensity: number
-  keyLightPosition: LightPosition
+  keyLightPosition: Vec3
   keyLightSoftness: number
 }
 
 export type TransformSettings = {
   objectScale: number
-  objectScaleAxes: LightPosition
-  moveOffset: LightPosition
-  rotationOffset: LightPosition
-  previewRotationY: number | null
+  objectScaleAxes: Vec3
+  moveOffset: Vec3
+  rotationOffset: Vec3
+  previewRotationOffset: Vec3 | null
   isScaleLocked: boolean
 }
 
@@ -128,11 +129,11 @@ export type EditorSnapshot = {
   geometryQuality: number
   qualityKeyframes: ScalarKeyframe[]
   layerSpacing: number
-  innerElementScale: LightPosition
+  innerElementScale: Vec3
   innerScaleKeyframes: Vector3Keyframe[]
   objectScale: number
-  objectScaleAxes: LightPosition
-  moveOffset: LightPosition
+  objectScaleAxes: Vec3
+  moveOffset: Vec3
   moveKeyframes: Vector3Keyframe[]
   enableGradient: boolean
   fillMode: FillMode
@@ -141,11 +142,11 @@ export type EditorSnapshot = {
   fillGradientType: FillGradientType
   fillStops?: FillStop[]
   fillKeyframes: FillKeyframe[]
-  rotationOffset: LightPosition
+  rotationOffset: Vec3
   rotationAxisKeyframes: Vector3Keyframe[]
   keyLightColor: string
   keyLightIntensity: number
-  keyLightPosition: LightPosition
+  keyLightPosition: Vec3
   keyLightSoftness: number
   keyLightPositionKeyframes: LightPositionKeyframe[]
   tracks: TimelineTrack[]
@@ -186,7 +187,7 @@ export const DEFAULT_TRANSFORM_SETTINGS: TransformSettings = {
   objectScaleAxes: { x: 1, y: 1, z: 1 },
   moveOffset: { x: 0, y: 0, z: 0 },
   rotationOffset: { x: 0, y: 0, z: 0 },
-  previewRotationY: null,
+  previewRotationOffset: null,
   isScaleLocked: true,
 }
 
@@ -204,7 +205,7 @@ export const AXIS_COLORS: Record<string, string> = {
 }
 
 export const MOTION_TRACK_NAMES: Record<MotionTrackId, string> = {
-  extrusion: "Geometry",
+  extrusion: "Depth",
   rotation: "Rotation",
   scale: "Scale",
   move: "Move",

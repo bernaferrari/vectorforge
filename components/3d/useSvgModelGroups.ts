@@ -1,6 +1,7 @@
 import { useEffect, type Dispatch, type MutableRefObject } from "react"
 import * as THREE from "three"
 import { buildSvgIconGroup } from "./SvgModelBuilder"
+import { updateGroupFillColors } from "./SvgMaterialState"
 import { disposeObjectTree } from "./SvgSceneUtils"
 import type { SvgCanvasProps } from "./SvgTypes"
 
@@ -81,14 +82,6 @@ export const useSvgModelGroups = ({
     props.geometryQuality,
     props.layerSpacing,
     props.materialPreset,
-    props.colorA,
-    props.colorB,
-    props.colorASecondary,
-    props.colorBSecondary,
-    colorAStopsKey,
-    colorBStopsKey,
-    props.enableGradient,
-    props.gradientType,
     props.transitionType,
     wipeDirectionX,
     wipeDirectionY,
@@ -100,5 +93,39 @@ export const useSvgModelGroups = ({
     clipPlaneARef,
     clipPlaneBRef,
     setModelReady,
+  ])
+
+  useEffect(() => {
+    updateGroupFillColors(iconAGroupRef.current, {
+      color: props.colorA,
+      colorSecondary: props.colorASecondary,
+      colorStops: props.colorAStops,
+      enableGradient: props.enableGradient,
+      gradientType: props.gradientType,
+      materialPreset: props.materialPreset,
+      emissiveIntensity: props.emissiveIntensity,
+    })
+    updateGroupFillColors(iconBGroupRef.current, {
+      color: props.colorB,
+      colorSecondary: props.colorBSecondary,
+      colorStops: props.colorBStops,
+      enableGradient: props.enableGradient,
+      gradientType: props.gradientType,
+      materialPreset: props.materialPreset,
+      emissiveIntensity: props.emissiveIntensity,
+    })
+  }, [
+    props.colorA,
+    props.colorB,
+    props.colorASecondary,
+    props.colorBSecondary,
+    colorAStopsKey,
+    colorBStopsKey,
+    props.enableGradient,
+    props.gradientType,
+    props.materialPreset,
+    props.emissiveIntensity,
+    iconAGroupRef,
+    iconBGroupRef,
   ])
 }

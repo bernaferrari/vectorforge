@@ -18,6 +18,7 @@ import { TimelineRailKeyframeButton } from "./TimelineRailKeyframeButton"
 
 export function TimelinePropertyRailRow({
   row,
+  isRevealed,
   menu,
   onClearSelection,
   onActivePropertyRowChange,
@@ -26,6 +27,7 @@ export function TimelinePropertyRailRow({
   onSetPropertyEasing,
 }: {
   row: TimelinePropertyRow
+  isRevealed: boolean
   menu: TimelineLeftRailMenuProps
   onClearSelection: () => void
   onActivePropertyRowChange?: (rowId: string) => void
@@ -72,7 +74,9 @@ export function TimelinePropertyRailRow({
           selectRow()
         }
       }}
-      className="group flex h-9 items-center gap-2 border-b border-border px-3 transition-colors hover:bg-muted/40"
+      className={`group flex h-9 items-center gap-2 border-b border-border px-3 transition-colors hover:bg-muted/40 ${
+        isRevealed ? "bg-primary/10 ring-1 ring-primary/25 ring-inset" : ""
+      }`}
     >
       <span
         className="size-2 shrink-0 rounded-full"
@@ -90,6 +94,7 @@ export function TimelinePropertyRailRow({
             value={row.keyframes[0]?.easing ?? "ease-in-out"}
             onChange={(easing) => onSetPropertyEasing(row.id, null, easing)}
             color={row.color}
+            scopeLabel={`All ${row.name} keyframes easing`}
           />
         )}
         {onTogglePropertyKeyframe && (
@@ -111,6 +116,7 @@ export function TimelinePropertyRailRow({
 
 export function TimelineTrackRailRow({
   track,
+  isRevealed,
   activeTrackId,
   menu,
   onClearSelection,
@@ -120,6 +126,7 @@ export function TimelineTrackRailRow({
   onSetTrackEasing,
 }: {
   track: TimelineTrack
+  isRevealed: boolean
   activeTrackId?: string | null
   menu: TimelineLeftRailMenuProps
   onClearSelection: () => void
@@ -168,7 +175,11 @@ export function TimelineTrackRailRow({
         }
       }}
       className={`group flex h-9 items-center gap-2 border-b border-border px-3 transition-colors focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:outline-none focus-visible:ring-inset ${
-        isActive ? "bg-muted/70" : "hover:bg-muted/40"
+        isRevealed
+          ? "bg-primary/10 ring-1 ring-primary/25 ring-inset"
+          : isActive
+            ? "bg-muted/70"
+            : "hover:bg-muted/40"
       }`}
     >
       <span
@@ -186,6 +197,7 @@ export function TimelineTrackRailRow({
             value={track.keyframes[0]?.easing ?? "ease-in-out"}
             onChange={(easing) => onSetTrackEasing(track.id, easing)}
             color={track.color}
+            scopeLabel={`All ${track.name} keyframes easing`}
           />
         )}
         <TimelineRailKeyframeButton

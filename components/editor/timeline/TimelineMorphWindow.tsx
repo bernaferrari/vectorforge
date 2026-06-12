@@ -6,13 +6,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { cn } from "@/lib/utils"
 import type { EasingType, ShapeStop } from "../TimelineModel"
 import { easingMenuItems } from "./TimelineEasingControls"
 import { widthForSpan, xForFrac } from "./TimelineGeometry"
 import type { MorphWindow } from "./TimelineLayoutModel"
 import type { TimelineMenuItem } from "./TimelineMenuModel"
 import {
-  type MorphEdge,
+  type TransitionEdge,
   transitionIconForMode,
   transitionModeForShape,
 } from "./TimelineTransitionModel"
@@ -33,7 +34,7 @@ export type TimelineMorphWindowProps = {
   onMorphEdgeDrag: (
     event: React.PointerEvent<HTMLElement>,
     shapeId: string,
-    edge: MorphEdge,
+    edge: TransitionEdge,
     fromTime: number,
     toTime: number
   ) => void
@@ -68,8 +69,9 @@ export function TimelineMorphWindow({
   shapeLabel,
   timeFromClientX,
 }: TimelineMorphWindowProps) {
-  const { stop, next, mStart, mEnd } = window
+  const { stop, next, startTime, endTime } = window
   const mode = transitionModeForShape(stop)
+  const isCut = mode === "cut"
   const BlockIcon = transitionIconForMode(mode)
 
   return (
@@ -82,8 +84,6 @@ export function TimelineMorphWindow({
           title={`Transition: ${mode} - drag edges to set duration, click to edit`}
           onMouseDown={(event) => event.stopPropagation()}
           onContextMenu={(event) => {
-            const isFade =
-              stop.wipeDirection.x === 0 && stop.wipeDirection.y === 0
             const time = timeFromClientX(event.clientX, {
               bypass: event.altKey,
             })
@@ -100,8 +100,7 @@ export function TimelineMorphWindow({
                 label: "Fade",
                 onSelect: () =>
                   onShapeBlendChange(stop.id, {
-                    transitionType: "wipe",
-                    wipeDirection: { x: 0, y: 0 },
+                    transitionType: "fade",
                   }),
               },
               {
@@ -109,14 +108,17 @@ export function TimelineMorphWindow({
                 onSelect: () =>
                   onShapeBlendChange(stop.id, {
                     transitionType: "wipe",
-                    wipeDirection: isFade ? { x: 1, y: 0 } : stop.wipeDirection,
+                    wipeDirection:
+                      stop.wipeDirection.x === 0 && stop.wipeDirection.y === 0
+                        ? { x: 1, y: 0 }
+                        : stop.wipeDirection,
                   }),
               },
               {
-                label: "None",
+                label: "Cut",
                 onSelect: () =>
                   onShapeBlendChange(stop.id, {
-                    transitionType: "none",
+                    transitionType: "cut",
                   }),
               },
               ...easingMenuItems(stop.easing, (easing) =>
@@ -124,16 +126,25 @@ export function TimelineMorphWindow({
               ),
             ])
           }}
-          className="group/morph absolute top-1/2 flex h-7 -translate-y-1/2 cursor-pointer items-center justify-center overflow-hidden border-y border-border transition-[filter] hover:brightness-125 focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:outline-none focus-visible:ring-inset"
+          className={cn(
+            "group/transition absolute top-1/2 flex h-7 -translate-y-1/2 cursor-pointer items-center justify-center transition-[filter] hover:brightness-125 focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:outline-none focus-visible:ring-inset",
+            isCut
+              ? "-translate-x-1/2 rounded-md border border-border bg-muted/70"
+              : "overflow-hidden border-y border-border"
+          )}
           style={{
-            left: xForFrac(mStart / duration),
-            width: widthForSpan(Math.max(0, mEnd - mStart) / duration),
-            minWidth: 20,
-            background: `linear-gradient(90deg, ${stop.color}26, ${next.color}26)`,
+            left: xForFrac(startTime / duration),
+            width: isCut
+              ? 20
+              : widthForSpan(Math.max(0, endTime - startTime) / duration),
+            minWidth: isCut ? 20 : 20,
+            background: isCut
+              ? undefined
+              : `linear-gradient(90deg, ${stop.color}26, ${next.color}26)`,
           }}
         >
           <BlockIcon
-            className="size-3 text-foreground/65 transition-colors group-hover/morph:text-foreground"
+            className="size-3 text-foreground/65 transition-colors group-hover/transition:text-foreground"
             strokeWidth={2.25}
           />
         </PopoverTrigger>
@@ -157,25 +168,31 @@ export function TimelineMorphWindow({
         </PopoverContent>
       </Popover>
 
-      <MorphEdgeHandle
-        title="Drag to set when the morph starts"
-        left={xForFrac(mStart / duration)}
+      <TransitionEdgeHandle
+        title={
+          isCut
+            ? "Drag to set the cut point"
+            : "Drag to set when the transition starts"
+        }
+        left={xForFrac(startTime / duration)}
         onPointerDown={(event) =>
           onMorphEdgeDrag(event, stop.id, "start", stop.time, next.time)
         }
       />
-      <MorphEdgeHandle
-        title="Drag to set when the morph ends"
-        left={xForFrac(mEnd / duration)}
-        onPointerDown={(event) =>
-          onMorphEdgeDrag(event, stop.id, "end", stop.time, next.time)
-        }
-      />
+      {!isCut && (
+        <TransitionEdgeHandle
+          title="Drag to set when the transition ends"
+          left={xForFrac(endTime / duration)}
+          onPointerDown={(event) =>
+            onMorphEdgeDrag(event, stop.id, "end", stop.time, next.time)
+          }
+        />
+      )}
     </React.Fragment>
   )
 }
 
-function MorphEdgeHandle({
+function TransitionEdgeHandle({
   title,
   left,
   onPointerDown,

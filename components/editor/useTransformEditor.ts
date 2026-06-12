@@ -54,9 +54,9 @@ export function useTransformEditor() {
       (value) => setTransformSetting("rotationOffset", value),
       [setTransformSetting]
     )
-  const setPreviewRotationY: Dispatch<SetStateAction<number | null>> =
+  const setPreviewRotationOffset: Dispatch<SetStateAction<LightPosition | null>> =
     useCallback(
-      (value) => setTransformSetting("previewRotationY", value),
+      (value) => setTransformSetting("previewRotationOffset", value),
       [setTransformSetting]
     )
   const setIsScaleLocked: Dispatch<SetStateAction<boolean>> = useCallback(
@@ -78,8 +78,8 @@ export function useTransformEditor() {
     setRotationOffset,
     rotationAxisKeyframes,
     setRotationAxisKeyframes,
-    previewRotationY: baseTransformSettings.previewRotationY,
-    setPreviewRotationY,
+    previewRotationOffset: baseTransformSettings.previewRotationOffset,
+    setPreviewRotationOffset,
     isScaleLocked: baseTransformSettings.isScaleLocked,
     setIsScaleLocked,
   }

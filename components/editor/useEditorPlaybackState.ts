@@ -16,6 +16,8 @@ export function useEditorPlaybackState() {
 
   const {
     isVideoExportPendingRef,
+    isVideoExporting,
+    videoExportProgress,
     exportTimelineVideo,
     stopVideoExportRecording,
   } = useVideoExport({
@@ -71,6 +73,8 @@ export function useEditorPlaybackState() {
     setLoop,
     isPreviewModelReady,
     setIsPreviewModelReady,
+    isVideoExporting,
+    videoExportProgress,
     exportTimelineVideo,
     stopPlayback,
     togglePlayback,

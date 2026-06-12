@@ -18,9 +18,11 @@ export const isExportTab = (value: string): value is ExportTab =>
 export function useExportModalController({
   scene,
   onExportVideo,
+  isVideoExporting,
 }: {
   scene: ExportSceneSnapshot
   onExportVideo: () => Promise<void>
+  isVideoExporting: boolean
 }) {
   const [activeTab, setActiveTab] = useState<ExportTab>("options")
   const [isRecording, setIsRecording] = useState(false)
@@ -58,7 +60,7 @@ export function useExportModalController({
   }, [])
 
   const handleVideoExport = useCallback(async () => {
-    if (isRecording) return
+    if (isRecording || isVideoExporting) return
     try {
       setIsRecording(true)
       await onExportVideo()
@@ -71,7 +73,7 @@ export function useExportModalController({
     } finally {
       setIsRecording(false)
     }
-  }, [isRecording, onExportVideo])
+  }, [isRecording, isVideoExporting, onExportVideo])
 
   return {
     activeTab,
@@ -81,7 +83,7 @@ export function useExportModalController({
     handleTabChange,
     handleVideoExport,
     isCopied,
-    isRecording,
+    isRecording: isRecording || isVideoExporting,
     r3fCode,
   }
 }

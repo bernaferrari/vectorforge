@@ -18,7 +18,7 @@ export function FinishPresetPicker({
   onChange,
 }: FinishPresetPickerProps) {
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-2.5">
+    <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
       {FINISH_PRESETS.map((preset) => {
         const isActive = value === preset
         const name = MATERIAL_METADATA[preset].name

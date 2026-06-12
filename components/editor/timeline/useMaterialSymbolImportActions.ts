@@ -16,15 +16,14 @@ const errorMessageFromUnknown = (error: unknown, fallback: string) =>
 export const useMaterialSymbolImportActions = ({
   shapeSearchQuery,
   materialSymbolStyle,
-  wipePairMode,
   onShapeIconChange,
   onShapeWipePairChange,
   onSearchQueryChange,
   onOpenShapePicker,
+  onSymbolImported,
 }: {
   shapeSearchQuery: string
   materialSymbolStyle: MaterialSymbolStyle
-  wipePairMode: "slash" | "morph"
   onShapeIconChange: (id: string, option: ShapeOption) => void
   onShapeWipePairChange: (
     id: string,
@@ -33,6 +32,7 @@ export const useMaterialSymbolImportActions = ({
   ) => void
   onSearchQueryChange: (value: string) => void
   onOpenShapePicker: (id: string | null) => void
+  onSymbolImported?: (symbolName: string) => void
 }) => {
   const [materialSymbolStatus, setMaterialSymbolStatus] =
     useState<MaterialSymbolStatus>({ state: "idle" })
@@ -52,6 +52,7 @@ export const useMaterialSymbolImportActions = ({
           materialSymbolStyle
         )
         onShapeIconChange(shapeId, icon)
+        onSymbolImported?.(normalizedName)
         onSearchQueryChange("")
         setMaterialSymbolStatus({ state: "idle" })
         onOpenShapePicker(null)
@@ -82,11 +83,11 @@ export const useMaterialSymbolImportActions = ({
       try {
         const [enabled, disabled] = await Promise.all([
           fetchMaterialSymbolIcon(pair.enabled, materialSymbolStyle),
-          fetchMaterialSymbolIcon(pair.disabled, materialSymbolStyle, {
-            syntheticOffSlash: wipePairMode === "slash",
-          }),
+          fetchMaterialSymbolIcon(pair.disabled, materialSymbolStyle),
         ])
         onShapeWipePairChange(shapeId, enabled, disabled)
+        onSymbolImported?.(pair.enabled)
+        onSymbolImported?.(pair.disabled)
         onSearchQueryChange("")
         setMaterialSymbolStatus({ state: "idle" })
         onOpenShapePicker(null)

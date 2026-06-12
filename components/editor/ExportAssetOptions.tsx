@@ -5,15 +5,20 @@ import { Button } from "@/components/ui/button"
 
 type ExportAssetOptionsProps = {
   isRecording: boolean
+  progress: number
   onExportGltf: () => void
   onExportVideo: () => void
 }
 
 export function ExportAssetOptions({
   isRecording,
+  progress,
   onExportGltf,
   onExportVideo,
 }: ExportAssetOptionsProps) {
+  const safeProgress = Math.max(0, Math.min(1, progress))
+  const progressLabel = `${Math.round(safeProgress * 100)}%`
+
   return (
     <div className="flex flex-col divide-y divide-border overflow-hidden rounded-lg border border-border bg-muted/35">
       <div className="flex items-center gap-3 p-3">
@@ -49,17 +54,25 @@ export function ExportAssetOptions({
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-medium text-foreground">Video</h3>
           <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-            Render the full timeline from 0s to the end as a WebM video.
+            Render fixed timeline frames from 0s to the end as a WebM video.
           </p>
         </div>
         <Button
           variant="secondary"
           disabled={isRecording}
           onClick={onExportVideo}
-          className="shrink-0 gap-1.5"
+          className="relative shrink-0 gap-1.5 overflow-hidden disabled:opacity-100"
         >
-          <Video className="size-3.5" />
-          {isRecording ? "Rendering" : "WebM"}
+          {isRecording ? (
+            <span
+              className="absolute inset-y-0 left-0 bg-primary/20 transition-[width] duration-150 ease-out"
+              style={{ width: `${safeProgress * 100}%` }}
+            />
+          ) : null}
+          <span className="relative flex items-center gap-1.5">
+            <Video className="size-3.5" />
+            {isRecording ? progressLabel : "WebM"}
+          </span>
         </Button>
       </div>
     </div>

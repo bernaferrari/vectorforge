@@ -1,5 +1,6 @@
 import { Dispatch, SetStateAction, useEffect } from "react"
 import { ScalarKeyframe } from "./EditorModel"
+import { keyframeTimeMatches } from "./EditorKeyframeModel"
 import { TimelineTrack } from "./TimelineModel"
 
 const keyframesAreEqual = (
@@ -41,7 +42,7 @@ export const useLinkedQualityKeyframes = ({
         const linkedId = `quality-${keyframe.id}`
         const existing =
           previousByLinkedId.get(linkedId) ??
-          previous.find((item) => Math.abs(item.time - keyframe.time) < 0.04)
+          previous.find((item) => keyframeTimeMatches(item.time, keyframe.time))
 
         return {
           id: linkedId,

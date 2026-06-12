@@ -1,5 +1,6 @@
 import { type TimelineTrack } from "./TimelineModel"
 import { clampNumber, createEditorId, quantizeTimeToFrame } from "./EditorModel"
+import { keyframeTimeMatches } from "./EditorKeyframeModel"
 
 const previousEasingForTrack = (track: TimelineTrack, time: number) => {
   let previous: (typeof track.keyframes)[number] | undefined
@@ -17,12 +18,14 @@ export const setScalarTrackValueAtTime = ({
   value,
   time,
   duration,
+  createIfMissing = false,
 }: {
   tracks: TimelineTrack[]
   trackId: string
   value: number
   time: number
   duration: number
+  createIfMissing?: boolean
 }) => {
   const sourceTrack = tracks.find((track) => track.id === trackId)
   const nextValue = sourceTrack
@@ -37,11 +40,25 @@ export const setScalarTrackValueAtTime = ({
 
       if (track.keyframes.length === 0) {
         if (track.defaultValue === nextValue) return track
+        if (createIfMissing) {
+          return {
+            ...track,
+            defaultValue: nextValue,
+            keyframes: [
+              {
+                id: createEditorId(track.id),
+                time: playheadTime,
+                value: nextValue,
+                easing: "ease-in-out" as const,
+              },
+            ],
+          }
+        }
         return { ...track, defaultValue: nextValue }
       }
 
-      const exactKeyframe = track.keyframes.find(
-        (keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04
+      const exactKeyframe = track.keyframes.find((keyframe) =>
+        keyframeTimeMatches(keyframe.time, playheadTime)
       )
 
       if (exactKeyframe) {
@@ -60,6 +77,10 @@ export const setScalarTrackValueAtTime = ({
               : keyframe
           ),
         }
+      }
+
+      if (!createIfMissing) {
+        return { ...track, defaultValue: nextValue }
       }
 
       return {

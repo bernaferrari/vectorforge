@@ -1,6 +1,6 @@
 "use client"
 
-import { Dispatch, SetStateAction, useMemo } from "react"
+import { Dispatch, SetStateAction, useEffect, useMemo, useRef } from "react"
 import {
   clampNumber,
   DEFAULT_GEOMETRY_SETTINGS,
@@ -18,6 +18,12 @@ import {
   TransformSettings,
   Vector3Keyframe,
 } from "./EditorModel"
+import {
+  downloadProjectSnapshot,
+  parseEditorDocumentSnapshot,
+  readPersistedEditorSnapshot,
+  writePersistedEditorSnapshot,
+} from "./EditorDocumentModel"
 import type { MaterialPresetId } from "../3d/MaterialPresets"
 import type {
   FillGradientType,
@@ -110,7 +116,7 @@ const transformSettingsFromSnapshot = (
     snapshot.objectScaleAxes ?? DEFAULT_TRANSFORM_SETTINGS.objectScaleAxes,
   moveOffset: snapshot.moveOffset,
   rotationOffset: snapshot.rotationOffset,
-  previewRotationY: null,
+  previewRotationOffset: null,
 })
 
 const lightSettingsFromSnapshot = (
@@ -285,11 +291,87 @@ export function useEditorSnapshotHistory({
     setIsPlaying(false)
   }
 
-  return useEditorHistory({
+  const saveProjectFile = () => {
+    if (typeof window === "undefined") return
+    downloadProjectSnapshot(snapshot)
+  }
+
+  const openProjectFile = () => {
+    if (typeof window === "undefined") return
+
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = "application/json,.json"
+    input.className = "hidden"
+    input.onchange = () => {
+      const file = input.files?.[0]
+      input.remove()
+      if (!file) return
+
+      void file
+        .text()
+        .then((text) => {
+          const nextSnapshot = parseEditorDocumentSnapshot(JSON.parse(text))
+          if (!nextSnapshot) {
+            throw new Error("Invalid VectorForge project file.")
+          }
+          restoreSnapshot(nextSnapshot)
+          writePersistedEditorSnapshot(nextSnapshot)
+        })
+        .catch((error) => {
+          console.error("Could not open project file:", error)
+          window.alert("Could not open that project file.")
+        })
+    }
+    document.body.appendChild(input)
+    input.click()
+  }
+
+  const persistenceReadyRef = useRef(false)
+  const skipNextPersistRef = useRef(false)
+  const canRecord = shapes.length > 0
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const persistedSnapshot = readPersistedEditorSnapshot()
+    if (persistedSnapshot) {
+      skipNextPersistRef.current = true
+      restoreSnapshot(persistedSnapshot)
+    }
+    persistenceReadyRef.current = true
+    // Restore should run once during editor boot. State setters are stable here,
+    // and repeated restores would overwrite the user's current document.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      !canRecord ||
+      !persistenceReadyRef.current
+    ) {
+      return
+    }
+
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      writePersistedEditorSnapshot(snapshot)
+    }, 350)
+
+    return () => window.clearTimeout(timeout)
+  }, [canRecord, snapshot])
+
+  const history = useEditorHistory({
     snapshot,
-    canRecord: shapes.length > 0,
+    canRecord,
     maxSize: MAX_UNDO_STEPS,
     isInputDragActive,
     onRestore: restoreSnapshot,
   })
+
+  return { ...history, openProjectFile, saveProjectFile }
 }

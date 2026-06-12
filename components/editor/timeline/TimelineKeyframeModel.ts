@@ -36,7 +36,7 @@ export const toggleTrackKeyframeAtTime = ({
   let selected: SelectedTimelineKeyframe = null
   const nextTracks = updateTimelineTrack(tracks, trackId, (track) => {
     const existing = track.keyframes.find((keyframe) =>
-      keyframeTimeMatches(keyframe.time, time, 0.05)
+      keyframeTimeMatches(keyframe.time, time)
     )
     if (existing) {
       return {
@@ -82,7 +82,7 @@ export const addTrackKeyframeAtTime = ({
   let selected: SelectedTimelineKeyframe = null
   const nextTracks = updateTimelineTrack(tracks, trackId, (track) => {
     const existing = track.keyframes.find((keyframe) =>
-      keyframeTimeMatches(keyframe.time, nextTime, 0.05)
+      keyframeTimeMatches(keyframe.time, nextTime)
     )
     if (existing) {
       selected = { type: "track", trackId, kfId: existing.id }

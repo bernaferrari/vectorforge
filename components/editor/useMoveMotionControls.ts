@@ -16,6 +16,7 @@ type MoveMotionControlsOptions = Pick<
   | "activeMoveOffset"
   | "setMoveOffset"
   | "setMoveKeyframes"
+  | "autoKeyEnabled"
 > & {
   markCustom: MarkCustom
 }
@@ -27,25 +28,24 @@ export function useMoveMotionControls({
   activeMoveOffset,
   setMoveOffset,
   setMoveKeyframes,
+  autoKeyEnabled,
   markCustom,
 }: MoveMotionControlsOptions) {
   const applyMove = useCallback(
     (nextMove: LightPosition) => {
       setMoveOffset(nextMove)
       setMoveKeyframes((prev) =>
-        prev.length === 0
-          ? prev
-          : upsertVectorKeyframeAtTime({
-              keyframes: prev,
-              idPrefix: "move",
-              value: nextMove,
-              time: currentTime,
-              duration,
-              createIfMissing: true,
-            })
+        upsertVectorKeyframeAtTime({
+          keyframes: prev,
+          idPrefix: "move",
+          value: nextMove,
+          time: currentTime,
+          duration,
+          createIfMissing: autoKeyEnabled,
+        })
       )
     },
-    [currentTime, duration, setMoveKeyframes, setMoveOffset]
+    [autoKeyEnabled, currentTime, duration, setMoveKeyframes, setMoveOffset]
   )
 
   const updateMoveAxis = useCallback(

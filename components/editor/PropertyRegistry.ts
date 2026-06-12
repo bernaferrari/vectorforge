@@ -22,7 +22,7 @@ export type TimelineTrackDefinition = {
 export const TIMELINE_TRACK_DEFINITIONS: TimelineTrackDefinition[] = [
   {
     id: "extrusion",
-    name: "Geometry",
+    name: "Depth",
     color: "#4ee2a3",
     min: 0.2,
     max: EXTRUDE_MAX,

@@ -8,7 +8,7 @@ const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value))
 
 const SHAPE_MIN_GAP = 0.05
-const MORPH_MIN_FRACTION = 0.04
+const TRANSITION_MIN_FRACTION = 0.04
 
 export const clampShapeStopTime = ({
   shapes,
@@ -78,13 +78,18 @@ export const setShapeTransitionFraction = ({
       ? {
           ...shape,
           transitionStart: Number(
-            Math.min(nextFraction, currentEnd - MORPH_MIN_FRACTION).toFixed(3)
+            Math.min(nextFraction, currentEnd - TRANSITION_MIN_FRACTION).toFixed(
+              3
+            )
           ),
         }
       : {
           ...shape,
           transitionEnd: Number(
-            Math.max(nextFraction, currentStart + MORPH_MIN_FRACTION).toFixed(3)
+            Math.max(
+              nextFraction,
+              currentStart + TRANSITION_MIN_FRACTION
+            ).toFixed(3)
           ),
         }
   })

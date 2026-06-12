@@ -22,6 +22,7 @@ import {
 } from "./TimelinePropertyKeyframeModel"
 import type { TimelinePropertyKeyframeSetters } from "./TimelinePropertyKeyframeModel"
 import { createTimelinePropertyRows } from "./TimelinePropertyRowsModel"
+import { KEYFRAME_TIME_EPSILON } from "./EditorKeyframeModel"
 import {
   clampTimelineDuration,
   scaleShapeStopTimes,
@@ -296,8 +297,8 @@ export function useTimelineDockController({
     timelinePropertyRows,
     previousBreakpoint,
     nextBreakpoint,
-    atTimelineStart: currentTime <= 0.04,
-    atTimelineEnd: currentTime >= duration - 0.04,
+    atTimelineStart: currentTime <= KEYFRAME_TIME_EPSILON,
+    atTimelineEnd: currentTime >= duration - KEYFRAME_TIME_EPSILON,
     playbackProgress:
       duration > 0 ? clampNumber(currentTime / duration, 0, 1) : 0,
     goToPreviousBreakpoint: () => {

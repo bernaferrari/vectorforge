@@ -21,9 +21,9 @@ type RotationMotionControlsOptions = Pick<
   | "setSelectedMotionTrackId"
   | "setRotationOffset"
   | "activeRotationOffset"
-  | "rotationAxisKeyframes"
   | "setRotationAxisKeyframes"
-  | "setPreviewRotationY"
+  | "setPreviewRotationOffset"
+  | "autoKeyEnabled"
 > & {
   markCustom: MarkCustom
 }
@@ -51,9 +51,9 @@ export function useRotationMotionControls({
   setSelectedMotionTrackId,
   setRotationOffset,
   activeRotationOffset,
-  rotationAxisKeyframes,
   setRotationAxisKeyframes,
-  setPreviewRotationY,
+  setPreviewRotationOffset,
+  autoKeyEnabled,
   markCustom,
 }: RotationMotionControlsOptions) {
   const playheadTime = useCallback(
@@ -70,11 +70,11 @@ export function useRotationMotionControls({
           value: nextRotation,
           time,
           duration,
-          createIfMissing: keyframes.length > 0,
+          createIfMissing: autoKeyEnabled || keyframes.length > 0,
         })
       )
     },
-    [duration, setRotationAxisKeyframes]
+    [autoKeyEnabled, duration, setRotationAxisKeyframes]
   )
 
   const applyRotation = useCallback(
@@ -89,7 +89,7 @@ export function useRotationMotionControls({
     (axis: keyof LightPosition, newValue: number) => {
       setSelectedMotionTrackId("rotation")
       markCustom()
-      setPreviewRotationY(null)
+      setPreviewRotationOffset(null)
       const nextRotation = {
         ...activeRotationOffset,
         [axis]: clampNumber(newValue, ROTATION_MIN, ROTATION_MAX),
@@ -101,7 +101,7 @@ export function useRotationMotionControls({
       applyRotation,
       currentTime,
       markCustom,
-      setPreviewRotationY,
+      setPreviewRotationOffset,
       setSelectedMotionTrackId,
     ]
   )
@@ -110,57 +110,35 @@ export function useRotationMotionControls({
     (delta: { x: number; y: number; z: number }) => {
       setSelectedMotionTrackId("rotation")
       markCustom()
-      setPreviewRotationY(null)
+      setPreviewRotationOffset(null)
 
-      if (rotationAxisKeyframes.length === 0) {
-        setRotationOffset((currentRotation) => ({
-          x: clampNumber(
-            currentRotation.x + delta.x,
-            ROTATION_MIN,
-            ROTATION_MAX
-          ),
-          y: clampNumber(
-            currentRotation.y + delta.y,
-            ROTATION_MIN,
-            ROTATION_MAX
-          ),
-          z: clampNumber(
-            currentRotation.z + delta.z,
-            ROTATION_MIN,
-            ROTATION_MAX
-          ),
-        }))
-        return
+      const nextRotation = {
+        x: clampNumber(
+          activeRotationOffset.x + delta.x,
+          ROTATION_MIN,
+          ROTATION_MAX
+        ),
+        y: clampNumber(
+          activeRotationOffset.y + delta.y,
+          ROTATION_MIN,
+          ROTATION_MAX
+        ),
+        z: clampNumber(
+          activeRotationOffset.z + delta.z,
+          ROTATION_MIN,
+          ROTATION_MAX
+        ),
       }
 
-      commitRotationKeyframe(
-        {
-          x: clampNumber(
-            activeRotationOffset.x + delta.x,
-            ROTATION_MIN,
-            ROTATION_MAX
-          ),
-          y: clampNumber(
-            activeRotationOffset.y + delta.y,
-            ROTATION_MIN,
-            ROTATION_MAX
-          ),
-          z: clampNumber(
-            activeRotationOffset.z + delta.z,
-            ROTATION_MIN,
-            ROTATION_MAX
-          ),
-        },
-        playheadTime()
-      )
+      setRotationOffset(nextRotation)
+      commitRotationKeyframe(nextRotation, playheadTime())
     },
     [
       activeRotationOffset,
       commitRotationKeyframe,
       markCustom,
       playheadTime,
-      rotationAxisKeyframes.length,
-      setPreviewRotationY,
+      setPreviewRotationOffset,
       setRotationOffset,
       setSelectedMotionTrackId,
     ]
@@ -182,19 +160,12 @@ export function useRotationMotionControls({
       }
       setRotationOffset(nextRotation)
 
-      if (options.updateTimeline === false) {
-        if (clampedTarget.y !== undefined) {
-          setPreviewRotationY(clampedTarget.y)
-        }
+      if (options.updateTimeline === false || options.commit === false) {
+        setPreviewRotationOffset(nextRotation)
         return
       }
 
-      if (clampedTarget.y !== undefined && options.commit === false) {
-        setPreviewRotationY(clampedTarget.y)
-        return
-      }
-
-      setPreviewRotationY(null)
+      setPreviewRotationOffset(null)
       applyRotation(nextRotation, playheadTime())
     },
     [
@@ -202,7 +173,7 @@ export function useRotationMotionControls({
       applyRotation,
       markCustom,
       playheadTime,
-      setPreviewRotationY,
+      setPreviewRotationOffset,
       setRotationOffset,
       setSelectedMotionTrackId,
     ]

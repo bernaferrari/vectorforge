@@ -1,7 +1,14 @@
 import * as THREE from "three"
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js"
 import { containsInvalidPositions, finiteNumber } from "./SvgGeometry"
-import type { GradientType, SvgCanvasProps, Vector3Value } from "./SvgTypes"
+import type {
+  GradientType,
+  SvgCanvasProps,
+  SvgExportAnimation,
+  SvgExportEasing,
+  SvgExportVectorKeyframe,
+  Vector3Value,
+} from "./SvgTypes"
 
 type FilamentExportProps = {
   materialPreset: string
@@ -9,8 +16,189 @@ type FilamentExportProps = {
   gradientType?: GradientType
   rotationOffset: Vector3Value
   objectScale: number
+  objectScaleAxes?: Vector3Value
   moveOffset: Vector3Value
   transitionProgress: number
+}
+
+const GEOMETRY_EXPORT_GROUP_NAME = "VectorForgeGeometry"
+
+const applyExportEasing = (easing: SvgExportEasing, t: number) => {
+  if (easing === "ease-in-out") return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+  if (easing === "spring") {
+    if (t === 0 || t === 1) return t
+    const c4 = (2 * Math.PI) / 3
+    return Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1
+  }
+  if (easing === "bounce") {
+    const n1 = 7.5625
+    const d1 = 2.75
+    if (t < 1 / d1) return n1 * t * t
+    if (t < 2 / d1) return n1 * (t -= 1.5 / d1) * t + 0.75
+    if (t < 2.5 / d1) return n1 * (t -= 2.25 / d1) * t + 0.9375
+    return n1 * (t -= 2.625 / d1) * t + 0.984375
+  }
+  return t
+}
+
+const keyframePair = <T extends { time: number }>(
+  time: number,
+  keyframes: T[]
+) => {
+  const sorted = [...keyframes].sort((a, b) => a.time - b.time)
+  if (sorted.length === 0) return null
+  if (time <= sorted[0].time)
+    return { previous: sorted[0], next: sorted[0], progress: 0 }
+  if (time >= sorted[sorted.length - 1].time) {
+    const last = sorted[sorted.length - 1]
+    return { previous: last, next: last, progress: 1 }
+  }
+  for (let index = 0; index < sorted.length - 1; index++) {
+    const previous = sorted[index]
+    const next = sorted[index + 1]
+    if (time >= previous.time && time <= next.time) {
+      return {
+        previous,
+        next,
+        progress: (time - previous.time) / Math.max(1e-6, next.time - previous.time),
+      }
+    }
+  }
+  const last = sorted[sorted.length - 1]
+  return { previous: last, next: last, progress: 1 }
+}
+
+const interpolateExportScalarTrack = (
+  animation: SvgExportAnimation,
+  trackId: string,
+  time: number,
+  fallback: number
+) => {
+  const track = animation.tracks.find((candidate) => candidate.id === trackId)
+  const keyframes = track?.keyframes ?? []
+  const pair = keyframePair(time, keyframes)
+  if (!pair) return track?.defaultValue ?? fallback
+  if (pair.previous === pair.next) return pair.previous.value
+  const eased = applyExportEasing(pair.previous.easing, pair.progress)
+  return pair.previous.value + (pair.next.value - pair.previous.value) * eased
+}
+
+const interpolateExportVectorKeyframes = (
+  time: number,
+  fallback: Vector3Value,
+  keyframes: SvgExportVectorKeyframe[]
+) => {
+  const pair = keyframePair(time, keyframes)
+  if (!pair) return fallback
+  if (pair.previous === pair.next) return pair.previous.value
+  const eased = applyExportEasing(pair.previous.easing, pair.progress)
+  return {
+    x:
+      pair.previous.value.x +
+      (pair.next.value.x - pair.previous.value.x) * eased,
+    y:
+      pair.previous.value.y +
+      (pair.next.value.y - pair.previous.value.y) * eased,
+    z:
+      pair.previous.value.z +
+      (pair.next.value.z - pair.previous.value.z) * eased,
+  }
+}
+
+const buildExportAnimationClips = (
+  rootName: string,
+  geometryGroupName: string,
+  animation?: SvgExportAnimation
+) => {
+  if (!animation || animation.duration <= 0) return []
+
+  const hasScaleTrack = Boolean(
+    animation.tracks.find((track) => track.id === "scale")?.keyframes.length
+  )
+  const hasRotationTrack = animation.rotationAxisKeyframes.length > 0
+  const hasMoveTrack = animation.moveKeyframes.length > 0
+  const hasExtrusionTrack = Boolean(
+    animation.tracks.find((track) => track.id === "extrusion")?.keyframes.length
+  )
+  if (!hasScaleTrack && !hasRotationTrack && !hasMoveTrack && !hasExtrusionTrack)
+    return []
+
+  const frameRate = 30
+  const frameCount = Math.max(2, Math.ceil(animation.duration * frameRate) + 1)
+  const times = Array.from({ length: frameCount }, (_, index) =>
+    Math.min(animation.duration, index / frameRate)
+  )
+  const tracks: THREE.KeyframeTrack[] = []
+
+  if (hasRotationTrack) {
+    const values: number[] = []
+    for (const time of times) {
+      const rotation = interpolateExportVectorKeyframes(
+        time,
+        animation.rotationOffset,
+        animation.rotationAxisKeyframes
+      )
+      const quaternion = new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(
+          THREE.MathUtils.degToRad(rotation.x),
+          THREE.MathUtils.degToRad(rotation.y),
+          THREE.MathUtils.degToRad(rotation.z)
+        )
+      )
+      values.push(quaternion.x, quaternion.y, quaternion.z, quaternion.w)
+    }
+    tracks.push(
+      new THREE.QuaternionKeyframeTrack(`${rootName}.quaternion`, times, values)
+    )
+  }
+
+  if (hasScaleTrack) {
+    const values: number[] = []
+    const axes = animation.objectScaleAxes ?? { x: 1, y: 1, z: 1 }
+    for (const time of times) {
+      const scale = Math.max(
+        0.05,
+        interpolateExportScalarTrack(animation, "scale", time, animation.objectScale)
+      )
+      values.push(scale * axes.x, scale * axes.y, scale * axes.z)
+    }
+    tracks.push(new THREE.VectorKeyframeTrack(`${rootName}.scale`, times, values))
+  }
+
+  if (hasMoveTrack) {
+    const values: number[] = []
+    for (const time of times) {
+      const move = interpolateExportVectorKeyframes(
+        time,
+        animation.moveOffset,
+        animation.moveKeyframes
+      )
+      values.push(move.x * 0.02, move.y * 0.02, move.z * 0.02)
+    }
+    tracks.push(new THREE.VectorKeyframeTrack(`${rootName}.position`, times, values))
+  }
+
+  if (hasExtrusionTrack) {
+    const values: number[] = []
+    const baseDepth = Math.max(0.001, finiteNumber(animation.extrusionDepth, 1))
+    for (const time of times) {
+      const depth = Math.max(
+        0.001,
+        interpolateExportScalarTrack(
+          animation,
+          "extrusion",
+          time,
+          animation.extrusionDepth
+        )
+      )
+      values.push(1, 1, depth / baseDepth)
+    }
+    tracks.push(
+      new THREE.VectorKeyframeTrack(`${geometryGroupName}.scale`, times, values)
+    )
+  }
+
+  return [new THREE.AnimationClip("VectorForgeTimeline", animation.duration, tracks)]
 }
 
 const createFilamentSafeMaterial = (source: THREE.Material) => {
@@ -117,12 +305,17 @@ export const prepareFilamentExportObject = (
     THREE.MathUtils.degToRad(finiteNumber(props.rotationOffset.z, 0))
   )
   const scale = Math.max(0.05, finiteNumber(props.objectScale, 1))
-  root.scale.set(scale, scale, scale)
+  const scaleAxes = props.objectScaleAxes ?? { x: 1, y: 1, z: 1 }
+  root.scale.set(scale * scaleAxes.x, scale * scaleAxes.y, scale * scaleAxes.z)
   root.position.set(
     finiteNumber(props.moveOffset.x, 0) * 0.02,
     finiteNumber(props.moveOffset.y, 0) * 0.02,
     finiteNumber(props.moveOffset.z, 0) * 0.02
   )
+
+  const geometryGroup = new THREE.Group()
+  geometryGroup.name = GEOMETRY_EXPORT_GROUP_NAME
+  root.add(geometryGroup)
 
   const progress = Math.max(
     0,
@@ -164,7 +357,7 @@ export const prepareFilamentExportObject = (
     mesh.frustumCulled = false
   })
 
-  root.add(clone)
+  geometryGroup.add(clone)
   return root
 }
 
@@ -197,6 +390,11 @@ export const exportFilamentGltf = ({
     sourceGroups,
     applyModelScale
   )
+  const animations = buildExportAnimationClips(
+    exportGroup.name,
+    GEOMETRY_EXPORT_GROUP_NAME,
+    props.exportAnimation
+  )
 
   exporter.parse(
     exportGroup,
@@ -223,6 +421,7 @@ export const exportFilamentGltf = ({
       trs: false,
       truncateDrawRange: true,
       maxTextureSize: 2048,
+      animations,
     }
   )
 }

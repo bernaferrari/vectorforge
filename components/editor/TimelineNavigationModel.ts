@@ -9,6 +9,7 @@ import {
   type Vector3Keyframe,
   clampNumber,
 } from "./EditorModel"
+import { KEYFRAME_TIME_EPSILON } from "./EditorKeyframeModel"
 import type { FillKeyframe } from "./TimelineModel"
 
 export const createShapeTransitionBreakpoints = (shapes: ShapeStop[]) =>
@@ -68,9 +69,9 @@ export const getAdjacentTimelineBreakpoints = ({
   let previousBreakpoint: number | undefined
   let nextBreakpoint: number | undefined
   for (const time of breakpoints) {
-    if (time < currentTime - 0.04) {
+    if (time < currentTime - KEYFRAME_TIME_EPSILON) {
       previousBreakpoint = time
-    } else if (time > currentTime + 0.04) {
+    } else if (time > currentTime + KEYFRAME_TIME_EPSILON) {
       nextBreakpoint = time
       break
     }

@@ -4,7 +4,14 @@ import type {
   TimelineTrack,
 } from "../TimelineModel"
 
-export type MorphWindow = {
+export type ShapeTransitionWindow = {
+  from: ShapeStop
+  to: ShapeStop
+  startTime: number
+  endTime: number
+}
+
+export type MorphWindow = ShapeTransitionWindow & {
   stop: ShapeStop
   next: ShapeStop
   mStart: number
@@ -33,11 +40,18 @@ export const computeMorphWindows = (
     const gap = Math.max(0, next.time - stop.time)
     const startFrac = stop.transitionStart ?? defaultTransitionStart
     const endFrac = stop.transitionEnd ?? defaultTransitionEnd
+    const startTime = stop.time + startFrac * gap
+    const endTime = stop.time + endFrac * gap
+
     return {
+      from: stop,
+      to: next,
+      startTime,
+      endTime,
       stop,
       next,
-      mStart: stop.time + startFrac * gap,
-      mEnd: stop.time + endFrac * gap,
+      mStart: startTime,
+      mEnd: endTime,
     }
   })
 
@@ -49,9 +63,11 @@ export const computeShapeClipBounds = (
   sortedShapes.map((_, index) => {
     if (sortedShapes.length === 1)
       return { left: 0, right: duration, isOnly: true }
-    const left = index === 0 ? 0 : morphWindows[index - 1].mEnd
+    const left = index === 0 ? 0 : morphWindows[index - 1].endTime
     const right =
-      index === sortedShapes.length - 1 ? duration : morphWindows[index].mStart
+      index === sortedShapes.length - 1
+        ? duration
+        : morphWindows[index].startTime
     return { left, right, isOnly: false }
   })
 
@@ -72,9 +88,9 @@ export const collectBreakpointTimes = ({
   propertyRows: TimelinePropertyRow[]
 } & BreakpointTimeOptions) => {
   const shapeTransitionTimes = morphWindows.flatMap(
-    ({ stop, next, mStart, mEnd }) => {
-      if (stop.id === excludeShapeId || next.id === excludeShapeId) return []
-      return [mStart, mEnd]
+    ({ from, to, startTime, endTime }) => {
+      if (from.id === excludeShapeId || to.id === excludeShapeId) return []
+      return [startTime, endTime]
     }
   )
   const numericKeyframeTimes = tracks.flatMap((track) => {

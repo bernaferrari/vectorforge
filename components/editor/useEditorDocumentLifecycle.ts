@@ -39,7 +39,7 @@ export function useEditorDocumentLifecycle(editor: EditorBaseState) {
     setIsPlaying: playback.setIsPlaying,
   })
 
-  useEditorHistorySurface({
+  const historySurface = useEditorHistorySurface({
     activeRecipeId: shapes.activeRecipeId,
     setActiveRecipeId: shapes.setActiveRecipeId,
     shapes: shapes.shapes,
@@ -98,4 +98,11 @@ export function useEditorDocumentLifecycle(editor: EditorBaseState) {
     isInputDragActive: isInspectorInputDragActive,
     onPlayPause: playback.togglePlayback,
   })
+
+  return {
+    projectFiles: {
+      openProjectFile: historySurface.openProjectFile,
+      saveProjectFile: historySurface.saveProjectFile,
+    },
+  }
 }

@@ -25,7 +25,7 @@ export const createShapeStop = (
   fillKeyframes: [],
   pathOverrides: [],
   easing: "ease-in-out",
-  transitionType: "wipe",
+  transitionType: "fade",
   wipeDirection: { x: 0, y: 0 },
   transitionStart: DEFAULT_TRANSITION_START,
   transitionEnd: DEFAULT_TRANSITION_END,

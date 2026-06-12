@@ -11,6 +11,7 @@ import type { TimelineTrack } from "./TimelineModel"
 export type MotionPropertyControlsOptions = {
   currentTime: number
   duration: number
+  autoKeyEnabled: boolean
   tracks: TimelineTrack[]
   setTracks: Dispatch<SetStateAction<TimelineTrack[]>>
   setSelectedMotionTrackId: Dispatch<SetStateAction<MotionTrackId>>
@@ -20,11 +21,12 @@ export type MotionPropertyControlsOptions = {
   activeRotationOffset: LightPosition
   rotationAxisKeyframes: Vector3Keyframe[]
   setRotationAxisKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
-  setPreviewRotationY: Dispatch<SetStateAction<number | null>>
+  setPreviewRotationOffset: Dispatch<SetStateAction<LightPosition | null>>
   setObjectScale: Dispatch<SetStateAction<number>>
   setObjectScaleAxes: Dispatch<SetStateAction<LightPosition>>
   setIsScaleLocked: Dispatch<SetStateAction<boolean>>
   activeMoveOffset: LightPosition
+  moveKeyframes: Vector3Keyframe[]
   setMoveOffset: Dispatch<SetStateAction<LightPosition>>
   setMoveKeyframes: Dispatch<SetStateAction<Vector3Keyframe[]>>
   setKeyLightIntensity: Dispatch<SetStateAction<number>>

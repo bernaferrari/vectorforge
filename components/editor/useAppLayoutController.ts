@@ -12,9 +12,12 @@ import type { AppLayoutViewProps } from "./AppLayoutView"
 
 export function useAppLayoutController(): AppLayoutViewProps {
   const editor = useEditorBaseState()
-  useEditorDocumentLifecycle(editor)
+  const {
+    projectFiles: { openProjectFile, saveProjectFile },
+  } = useEditorDocumentLifecycle(editor)
 
   const {
+    autoKey: { autoKeyEnabled, setAutoKeyEnabled },
     theme: { themeMounted, isLightTheme, themeToggleLabel, setTheme },
     playback: {
       canvas3DRef,
@@ -86,8 +89,8 @@ export function useAppLayoutController(): AppLayoutViewProps {
       setRotationOffset,
       rotationAxisKeyframes,
       setRotationAxisKeyframes,
-      previewRotationY,
-      setPreviewRotationY,
+      previewRotationOffset,
+      setPreviewRotationOffset,
       isScaleLocked,
       setIsScaleLocked,
     },
@@ -225,7 +228,7 @@ export function useAppLayoutController(): AppLayoutViewProps {
     extrusionDepth,
     rotationOffset,
     rotationAxisKeyframes,
-    previewRotationY,
+    previewRotationOffset,
     objectScale,
     moveOffset,
     moveKeyframes,
@@ -260,7 +263,7 @@ export function useAppLayoutController(): AppLayoutViewProps {
     activeRotationOffset,
     rotationAxisKeyframes,
     setRotationAxisKeyframes,
-    setPreviewRotationY,
+    setPreviewRotationOffset,
     setObjectScale,
     setObjectScaleAxes,
     setIsScaleLocked,
@@ -273,6 +276,7 @@ export function useAppLayoutController(): AppLayoutViewProps {
     setQualityKeyframes,
     geometryQuality,
     canvas3DRef,
+    autoKeyEnabled,
   })
 
   const {
@@ -289,6 +293,20 @@ export function useAppLayoutController(): AppLayoutViewProps {
     exportTimelineVideo,
     isVideoExporting,
     videoExportProgress,
+    duration,
+    shapes,
+    tracks,
+    rotationOffset,
+    rotationAxisKeyframes,
+    objectScale,
+    objectScaleAxes,
+    moveOffset,
+    moveKeyframes,
+    keyLightPosition: activeKeyLightPosition,
+    keyLightPositionKeyframes,
+    fillKeyframes,
+    materialSettings: activeMaterialSettings,
+    materialKeyframes,
     materialPreset,
     colorA,
     colorB: renderColorB,
@@ -432,6 +450,17 @@ export function useAppLayoutController(): AppLayoutViewProps {
       selectedLayerId,
       pathOverridesA: morph.from.pathOverrides,
       pathOverridesB: morph.to.pathOverrides,
+      exportAnimation: {
+        duration,
+        tracks,
+        extrusionDepth: activeExtrusionDepth,
+        rotationOffset,
+        rotationAxisKeyframes,
+        objectScale,
+        objectScaleAxes,
+        moveOffset,
+        moveKeyframes,
+      },
       playbackProgress,
       atTimelineStart,
       atTimelineEnd,
@@ -563,8 +592,12 @@ export function useAppLayoutController(): AppLayoutViewProps {
       themeMounted,
       isLightTheme,
       themeToggleLabel,
+      autoKeyEnabled,
       onZenModeChange: setZenMode,
       onThemeChange: setTheme,
+      onAutoKeyChange: setAutoKeyEnabled,
+      onProjectOpen: openProjectFile,
+      onProjectSave: saveProjectFile,
       onExportOpen: openExport,
     },
     viewportProps: {

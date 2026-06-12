@@ -10,6 +10,7 @@ import { useScalarMotionTrackControls } from "./useScalarMotionTrackControls"
 export function useMotionPropertyControls({
   currentTime,
   duration,
+  autoKeyEnabled,
   tracks,
   setTracks,
   setSelectedMotionTrackId,
@@ -17,9 +18,8 @@ export function useMotionPropertyControls({
   setExtrusionDepth,
   setRotationOffset,
   activeRotationOffset,
-  rotationAxisKeyframes,
   setRotationAxisKeyframes,
-  setPreviewRotationY,
+  setPreviewRotationOffset,
   setObjectScale,
   setObjectScaleAxes,
   setIsScaleLocked,
@@ -52,6 +52,7 @@ export function useMotionPropertyControls({
     setObjectScaleAxes,
     setIsScaleLocked,
     setKeyLightIntensity,
+    autoKeyEnabled,
     markCustom,
   })
 
@@ -65,9 +66,9 @@ export function useMotionPropertyControls({
     setSelectedMotionTrackId,
     setRotationOffset,
     activeRotationOffset,
-    rotationAxisKeyframes,
     setRotationAxisKeyframes,
-    setPreviewRotationY,
+    setPreviewRotationOffset,
+    autoKeyEnabled,
     markCustom,
   })
 
@@ -78,11 +79,14 @@ export function useMotionPropertyControls({
     activeMoveOffset,
     setMoveOffset,
     setMoveKeyframes,
+    autoKeyEnabled,
     markCustom,
   })
 
   const { updateQuality } = useQualityMotionControls({
     currentTime,
+    duration,
+    autoKeyEnabled,
     setGeometryQuality,
     setQualityKeyframes,
     markCustom,

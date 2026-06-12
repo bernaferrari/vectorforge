@@ -1,7 +1,6 @@
 "use client"
 
 import React from "react"
-import { Popover, PopoverTrigger } from "@/components/ui/popover"
 import type { ShapeStop } from "../TimelineModel"
 import { ShapePickerContent } from "./ShapePickerContent"
 import { widthForSpan, xForFrac } from "./TimelineGeometry"
@@ -72,23 +71,23 @@ export function TimelineShapeClip({
       }`
 
   return (
-    <Popover
-      open={openShapePicker === stop.id}
-      onOpenChange={(open) => {
-        if (open && shapeDraggedRef.current) {
-          shapeDraggedRef.current = false
-          return
-        }
-        onOpenShapePicker(open ? stop.id : null)
-      }}
-    >
-      <PopoverTrigger
+    <>
+      <button
+        type="button"
         title={
           isOnly
             ? `${shapeLabel(stop)} - click to edit · add another shape to animate`
             : `${shapeLabel(stop)} @ ${stop.time.toFixed(2)}s - drag to retime, click to edit`
         }
         onMouseDown={(event) => event.stopPropagation()}
+        onClick={() => {
+          if (shapeDraggedRef.current) {
+            shapeDraggedRef.current = false
+            return
+          }
+          onSelectShape(stop.id)
+          onOpenShapePicker(stop.id)
+        }}
         onContextMenu={(event) =>
           onOpenContextMenu(event, shapeLabel(stop), [
             createGoToMenuItem(event, stop.time, () => onSelectShape(stop.id)),
@@ -150,11 +149,22 @@ export function TimelineShapeClip({
             add another shape to animate
           </span>
         )}
-      </PopoverTrigger>
+      </button>
       <ShapePickerContent
+        open={openShapePicker === stop.id}
+        onOpenChange={(open) => {
+          if (!open) {
+            onOpenShapePicker(null)
+            return
+          }
+          onSelectShape(stop.id)
+          onOpenShapePicker(stop.id)
+        }}
         stop={stop}
         shapeCount={shapeCount}
         visibleShapeOptions={shapePicker.visibleShapeOptions}
+        favoriteMaterialSymbols={shapePicker.favoriteMaterialSymbols}
+        recentMaterialSymbols={shapePicker.recentMaterialSymbols}
         filteredMaterialSymbols={shapePicker.filteredMaterialSymbols}
         filteredWipePairs={shapePicker.filteredWipePairs}
         normalizedShapeQuery={shapePicker.normalizedShapeQuery}
@@ -170,8 +180,7 @@ export function TimelineShapeClip({
         }
         materialSymbolStatus={shapePicker.materialSymbolStatus}
         onMaterialSymbolStatusChange={shapePicker.setMaterialSymbolStatus}
-        wipePairMode={shapePicker.wipePairMode}
-        onWipePairModeChange={shapePicker.setWipePairMode}
+        onToggleMaterialSymbolFavorite={shapePicker.toggleMaterialSymbolFavorite}
         onImportMaterialSymbol={shapePicker.importMaterialSymbol}
         onChooseMaterialSymbol={shapePicker.chooseMaterialSymbol}
         onChooseWipePair={shapePicker.chooseWipePair}
@@ -180,6 +189,6 @@ export function TimelineShapeClip({
         onUploadShape={onUploadShape}
         onRemoveShape={onRemoveShape}
       />
-    </Popover>
+    </>
   )
 }

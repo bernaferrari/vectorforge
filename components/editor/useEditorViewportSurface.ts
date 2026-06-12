@@ -54,6 +54,7 @@ type UseEditorViewportSurfaceArgs = {
   selectedLayerId: string
   pathOverridesA?: PathOverride[]
   pathOverridesB?: PathOverride[]
+  exportAnimation?: SvgCanvasProps["exportAnimation"]
   playbackProgress: number
   atTimelineStart: boolean
   atTimelineEnd: boolean
@@ -128,6 +129,7 @@ export function useEditorViewportSurface({
   selectedLayerId,
   pathOverridesA,
   pathOverridesB,
+  exportAnimation,
   playbackProgress,
   atTimelineStart,
   atTimelineEnd,
@@ -201,6 +203,7 @@ export function useEditorViewportSurface({
     selectedLayerId: selectedLayerId === ALL_LAYERS_ID ? null : selectedLayerId,
     pathOverridesA,
     pathOverridesB,
+    exportAnimation,
     playbackProgress,
     atTimelineStart,
     atTimelineEnd,

@@ -5,9 +5,7 @@ import {
   createEditorId,
   quantizeTimeToFrame,
 } from "./EditorModel"
-import { previousEasingFor } from "./EditorKeyframeModel"
-
-const MATERIAL_KEYFRAME_TIME_THRESHOLD = 0.04
+import { keyframeTimeMatches, previousEasingFor } from "./EditorKeyframeModel"
 
 export const DEFAULT_MATERIAL_SETTINGS: MaterialSettings = {
   roughness: 0.075,
@@ -27,19 +25,18 @@ export const findMaterialKeyframeAtTime = (
   keyframes: MaterialKeyframe[],
   time: number
 ) =>
-  keyframes.find(
-    (keyframe) =>
-      Math.abs(keyframe.time - time) < MATERIAL_KEYFRAME_TIME_THRESHOLD
-  )
+  keyframes.find((keyframe) => keyframeTimeMatches(keyframe.time, time))
 
 export const upsertMaterialKeyframe = ({
   keyframes,
   time,
   value,
+  createIfMissing = true,
 }: {
   keyframes: MaterialKeyframe[]
   time: number
   value: MaterialSettings
+  createIfMissing?: boolean
 }) => {
   const existing = findMaterialKeyframeAtTime(keyframes, time)
   if (existing) {
@@ -47,6 +44,8 @@ export const upsertMaterialKeyframe = ({
       keyframe.id === existing.id ? { ...keyframe, value } : keyframe
     )
   }
+
+  if (!createIfMissing) return keyframes
 
   return [
     ...keyframes,

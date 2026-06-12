@@ -9,6 +9,7 @@ import type { TimelineMenuItem } from "./TimelineMenuModel"
 type TimelinePropertyRowsProps = {
   duration: number
   rows: TimelinePropertyRow[]
+  revealedRowId: string | null
   selectedKeyframe: SelectedTimelineKeyframe
   onSelectKeyframe: (keyframe: SelectedTimelineKeyframe) => void
   onActivePropertyRowChange?: (rowId: string) => void
@@ -44,6 +45,7 @@ type TimelinePropertyRowsProps = {
 export function TimelinePropertyRows({
   duration,
   rows,
+  revealedRowId,
   selectedKeyframe,
   onSelectKeyframe,
   onActivePropertyRowChange,
@@ -63,6 +65,7 @@ export function TimelinePropertyRows({
           key={row.id}
           duration={duration}
           row={row}
+          isRevealed={revealedRowId === `property:${row.id}`}
           selectedKeyframe={selectedKeyframe}
           onSelectKeyframe={onSelectKeyframe}
           onActivePropertyRowChange={onActivePropertyRowChange}

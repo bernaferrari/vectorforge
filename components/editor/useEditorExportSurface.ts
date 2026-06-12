@@ -12,6 +12,8 @@ type UseEditorExportSurfaceArgs = ExportSceneSnapshot & {
   setShapes: Dispatch<SetStateAction<ShapeStop[]>>
   canvasRef: RefObject<SvgCanvasRef | null>
   exportTimelineVideo: () => Promise<void>
+  isVideoExporting: boolean
+  videoExportProgress: number
   markCustom: () => void
 }
 
@@ -20,6 +22,8 @@ export function useEditorExportSurface({
   setShapes,
   canvasRef,
   exportTimelineVideo,
+  isVideoExporting,
+  videoExportProgress,
   markCustom,
   ...sceneArgs
 }: UseEditorExportSurfaceArgs) {
@@ -50,6 +54,8 @@ export function useEditorExportSurface({
       onClose: closeExport,
       onExportGltf: () => canvasRef.current?.exportGltf(),
       onExportVideo: exportTimelineVideo,
+      isVideoExporting,
+      videoExportProgress,
       scene,
     },
   }

@@ -4,8 +4,8 @@ import type {
   TimelinePropertyRow,
   TimelineTrack,
 } from "../TimelineModel"
+import { keyframeTimeMatches } from "../EditorKeyframeModel"
 import { easingMenuItems } from "./TimelineEasingControls"
-import { quantizeTimeToFrame } from "./TimelineGeometry"
 import type { TimelineMenuItem } from "./TimelineMenuModel"
 
 export type TimelineLeftRailMenuProps = {
@@ -26,18 +26,16 @@ export const isTrackKeyedAtPlayhead = (
   track: TimelineTrack,
   currentTime: number
 ) =>
-  track.keyframes.some(
-    (keyframe) =>
-      Math.abs(keyframe.time - quantizeTimeToFrame(currentTime)) < 0.05
+  track.keyframes.some((keyframe) =>
+    keyframeTimeMatches(keyframe.time, currentTime)
   )
 
 export const propertyRowKeyframeAtPlayhead = (
   row: TimelinePropertyRow,
   currentTime: number
 ) =>
-  row.keyframes.find(
-    (keyframe) =>
-      Math.abs(keyframe.time - quantizeTimeToFrame(currentTime)) < 0.05
+  row.keyframes.find((keyframe) =>
+    keyframeTimeMatches(keyframe.time, currentTime)
   ) ?? null
 
 export const createPropertyRailMenuItems = ({

@@ -13,6 +13,7 @@ import type { SelectedTimelineKeyframe } from "./TimelineTypes"
 export type TimelinePropertyRowLaneProps = {
   duration: number
   row: TimelinePropertyRow
+  isRevealed: boolean
   selectedKeyframe: SelectedTimelineKeyframe
   onSelectKeyframe: (keyframe: SelectedTimelineKeyframe) => void
   onActivePropertyRowChange?: (rowId: string) => void
@@ -48,6 +49,7 @@ export type TimelinePropertyRowLaneProps = {
 export function TimelinePropertyRowLane({
   duration,
   row,
+  isRevealed,
   selectedKeyframe,
   onSelectKeyframe,
   onActivePropertyRowChange,
@@ -67,7 +69,11 @@ export function TimelinePropertyRowLane({
 
   return (
     <div
-      className="relative h-9 border-b border-border transition-colors hover:bg-muted/35"
+      className={`relative h-9 border-b border-border transition-colors ${
+        isRevealed
+          ? "bg-primary/10 ring-1 ring-primary/20 ring-inset"
+          : "hover:bg-muted/35"
+      }`}
       onMouseDown={(event) => {
         if (event.button !== 0) return
         onSelectKeyframe(null)

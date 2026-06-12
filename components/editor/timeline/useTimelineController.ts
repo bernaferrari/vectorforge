@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import type { SelectedTimelineKeyframe, TimelineProps } from "./TimelineTypes"
 import { useShapePickerCatalog } from "./useShapePickerCatalog"
 import { useTimelineContextMenu } from "./useTimelineContextMenu"
@@ -100,6 +100,8 @@ export function useTimelineController({
   const {
     sortedShapes,
     visiblePropertyRows,
+    visibleTracks,
+    hiddenTracks,
     frameSnapActive,
     morphWindows,
     clipBounds,
@@ -113,7 +115,18 @@ export function useTimelineController({
     tracks,
     propertyRows,
     shapeOptions,
+    activeTrackId,
   })
+  const visibleRowIds = useMemo(
+    () => [
+      ...visiblePropertyRows.map((row) => `property:${row.id}`),
+      ...visibleTracks.map((track) => `track:${track.id}`),
+    ],
+    [visiblePropertyRows, visibleTracks]
+  )
+  const previousVisibleRowIdsRef = useRef<string[] | null>(null)
+  const revealRowTimeoutRef = useRef<number | null>(null)
+  const [revealedRowId, setRevealedRowId] = useState<string | null>(null)
 
   const { snapTime, rawTimeFromClientX, timeFromClientX, handleScrubStart } =
     useTimelineScrubbing({
@@ -217,6 +230,47 @@ export function useTimelineController({
     timelineScrollRef,
   })
 
+  useLayoutEffect(() => {
+    syncLeftRailScroll(timelineScrollRef.current?.scrollTop ?? 0)
+  }, [syncLeftRailScroll, visibleRowIds])
+
+  useEffect(() => {
+    const previousRowIds = previousVisibleRowIdsRef.current
+    previousVisibleRowIdsRef.current = visibleRowIds
+    if (!previousRowIds) return
+
+    const newRowId = visibleRowIds.find((rowId) => !previousRowIds.includes(rowId))
+    if (!newRowId) return
+
+    const rowIndex = 1 + visibleRowIds.indexOf(newRowId)
+    const targetScrollTop = Math.max(0, rowIndex * 36 - 12)
+    const scroller = timelineScrollRef.current
+    if (scroller) {
+      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+      const nextScrollTop = Math.min(targetScrollTop, maxScrollTop)
+      scroller.scrollTo({ top: nextScrollTop, behavior: "auto" })
+      syncLeftRailScroll(nextScrollTop)
+    }
+
+    setRevealedRowId(newRowId)
+    if (revealRowTimeoutRef.current !== null) {
+      window.clearTimeout(revealRowTimeoutRef.current)
+    }
+    revealRowTimeoutRef.current = window.setTimeout(() => {
+      setRevealedRowId(null)
+      revealRowTimeoutRef.current = null
+    }, 900)
+  }, [syncLeftRailScroll, timelineScrollRef, visibleRowIds])
+
+  useEffect(
+    () => () => {
+      if (revealRowTimeoutRef.current !== null) {
+        window.clearTimeout(revealRowTimeoutRef.current)
+      }
+    },
+    []
+  )
+
   return {
     contextMenu,
     setContextMenu,
@@ -236,8 +290,10 @@ export function useTimelineController({
       loop,
       selectedShapeId,
       snapEnabled,
-      tracks,
+      tracks: visibleTracks,
+      hiddenTracks,
       visiblePropertyRows,
+      revealedRowId,
       onActivePropertyRowChange,
       onAddShape,
       onApplyDuration: applyDuration,
@@ -302,6 +358,7 @@ export function useTimelineController({
       },
       propertyLane: {
         visiblePropertyRows,
+        revealedRowId,
         selectedKeyframe,
         onActivePropertyRowChange,
         onRemovePropertyKeyframe,
@@ -312,7 +369,8 @@ export function useTimelineController({
         onTimeChange,
       },
       trackLane: {
-        tracks,
+        tracks: visibleTracks,
+        revealedRowId,
         activeTrackId,
         selectedKeyframe,
         timeEditor,

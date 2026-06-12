@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
+  normalizeMaterialSymbolName,
   type MaterialSymbolFontSettings,
   type MaterialSymbolStyle,
 } from "../IconLibrary"
@@ -11,6 +12,33 @@ import {
 } from "./MaterialSymbolCatalog"
 import { useMaterialSymbolCatalogLoader } from "./useMaterialSymbolCatalogLoader"
 import { useMaterialSymbolImportActions } from "./useMaterialSymbolImportActions"
+
+const RECENT_MATERIAL_SYMBOLS_KEY = "vectorforge.recent-material-symbols.v1"
+const FAVORITE_MATERIAL_SYMBOLS_KEY =
+  "vectorforge.favorite-material-symbols.v1"
+const MAX_RECENT_MATERIAL_SYMBOLS = 18
+const MAX_FAVORITE_MATERIAL_SYMBOLS = 48
+
+const readStoredSymbolList = (key: string) => {
+  if (typeof window === "undefined") return []
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "[]")
+    return Array.isArray(parsed)
+      ? parsed
+          .map((item) =>
+            typeof item === "string" ? normalizeMaterialSymbolName(item) : ""
+          )
+          .filter(Boolean)
+      : []
+  } catch {
+    return []
+  }
+}
+
+const writeStoredSymbolList = (key: string, symbols: string[]) => {
+  if (typeof window === "undefined") return
+  window.localStorage.setItem(key, JSON.stringify(symbols))
+}
 
 export function useShapePickerCatalog({
   openShapePicker,
@@ -41,10 +69,48 @@ export function useShapePickerCatalog({
     })
   const [materialSymbolOptionsOpen, setMaterialSymbolOptionsOpen] =
     useState(false)
+  const [recentMaterialSymbolNames, setRecentMaterialSymbolNames] = useState<
+    string[]
+  >([])
+  const [favoriteMaterialSymbolNames, setFavoriteMaterialSymbolNames] =
+    useState<string[]>([])
   const { materialSymbolNames } = useMaterialSymbolCatalogLoader(
     Boolean(openShapePicker)
   )
-  const [wipePairMode, setWipePairMode] = useState<"slash" | "morph">("slash")
+
+  useEffect(() => {
+    setRecentMaterialSymbolNames(readStoredSymbolList(RECENT_MATERIAL_SYMBOLS_KEY))
+    setFavoriteMaterialSymbolNames(
+      readStoredSymbolList(FAVORITE_MATERIAL_SYMBOLS_KEY)
+    )
+  }, [])
+
+  const rememberMaterialSymbol = useCallback((symbolName: string) => {
+    const normalized = normalizeMaterialSymbolName(symbolName)
+    if (!normalized) return
+    setRecentMaterialSymbolNames((current) => {
+      const next = [
+        normalized,
+        ...current.filter((candidate) => candidate !== normalized),
+      ].slice(0, MAX_RECENT_MATERIAL_SYMBOLS)
+      writeStoredSymbolList(RECENT_MATERIAL_SYMBOLS_KEY, next)
+      return next
+    })
+  }, [])
+
+  const toggleMaterialSymbolFavorite = useCallback((symbolName: string) => {
+    const normalized = normalizeMaterialSymbolName(symbolName)
+    if (!normalized) return
+    setFavoriteMaterialSymbolNames((current) => {
+      const exists = current.includes(normalized)
+      const next = exists
+        ? current.filter((candidate) => candidate !== normalized)
+        : [normalized, ...current].slice(0, MAX_FAVORITE_MATERIAL_SYMBOLS)
+      writeStoredSymbolList(FAVORITE_MATERIAL_SYMBOLS_KEY, next)
+      return next
+    })
+  }, [])
+
   const {
     materialSymbolStatus,
     setMaterialSymbolStatus,
@@ -54,11 +120,11 @@ export function useShapePickerCatalog({
   } = useMaterialSymbolImportActions({
     shapeSearchQuery,
     materialSymbolStyle,
-    wipePairMode,
     onShapeIconChange,
     onShapeWipePairChange,
     onSearchQueryChange: setShapeSearchQuery,
     onOpenShapePicker,
+    onSymbolImported: rememberMaterialSymbol,
   })
 
   const normalizedShapeQuery = materialSymbolQuery(shapeSearchQuery)
@@ -78,9 +144,35 @@ export function useShapePickerCatalog({
       return haystack.includes(query) || haystack.includes(normalizedShapeQuery)
     })
   }, [normalizedShapeQuery, shapeOptions, shapeSearchQuery])
+  const favoriteMaterialSymbols = useMemo(
+    () =>
+      favoriteMaterialSymbolNames.length
+        ? visibleMaterialSymbols(favoriteMaterialSymbolNames, shapeSearchQuery)
+        : [],
+    [favoriteMaterialSymbolNames, shapeSearchQuery]
+  )
+  const recentMaterialSymbols = useMemo(
+    () =>
+      recentMaterialSymbolNames.length
+        ? visibleMaterialSymbols(recentMaterialSymbolNames, shapeSearchQuery).filter(
+            (symbolName) => !favoriteMaterialSymbols.includes(symbolName)
+          )
+        : [],
+    [favoriteMaterialSymbols, recentMaterialSymbolNames, shapeSearchQuery]
+  )
   const filteredMaterialSymbols = useMemo(
-    () => visibleMaterialSymbols(materialSymbolNames, shapeSearchQuery),
-    [materialSymbolNames, shapeSearchQuery]
+    () =>
+      visibleMaterialSymbols(materialSymbolNames, shapeSearchQuery).filter(
+        (symbolName) =>
+          !favoriteMaterialSymbols.includes(symbolName) &&
+          !recentMaterialSymbols.includes(symbolName)
+      ),
+    [
+      favoriteMaterialSymbols,
+      materialSymbolNames,
+      recentMaterialSymbols,
+      shapeSearchQuery,
+    ]
   )
   const filteredWipePairs = useMemo(
     () => visibleWipePairs(shapeSearchQuery),
@@ -101,6 +193,8 @@ export function useShapePickerCatalog({
     setShapeSearchQuery,
     normalizedShapeQuery,
     visibleShapeOptions,
+    favoriteMaterialSymbols,
+    recentMaterialSymbols,
     filteredMaterialSymbols,
     filteredWipePairs,
     materialSymbolStyle,
@@ -111,8 +205,7 @@ export function useShapePickerCatalog({
     setMaterialSymbolOptionsOpen,
     materialSymbolStatus,
     setMaterialSymbolStatus,
-    wipePairMode,
-    setWipePairMode,
+    toggleMaterialSymbolFavorite,
     importMaterialSymbol,
     chooseMaterialSymbol,
     chooseWipePair,

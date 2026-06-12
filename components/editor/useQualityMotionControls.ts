@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback } from "react"
-import { clampNumber } from "./EditorModel"
+import { clampNumber, createEditorId, quantizeTimeToFrame } from "./EditorModel"
 import { findKeyframeAtTime } from "./EditorKeyframeModel"
 import type {
   MarkCustom,
@@ -10,13 +10,19 @@ import type {
 
 type QualityMotionControlsOptions = Pick<
   MotionPropertyControlsOptions,
-  "currentTime" | "setGeometryQuality" | "setQualityKeyframes"
+  | "currentTime"
+  | "duration"
+  | "autoKeyEnabled"
+  | "setGeometryQuality"
+  | "setQualityKeyframes"
 > & {
   markCustom: MarkCustom
 }
 
 export function useQualityMotionControls({
   currentTime,
+  duration,
+  autoKeyEnabled,
   setGeometryQuality,
   setQualityKeyframes,
   markCustom,
@@ -27,16 +33,38 @@ export function useQualityMotionControls({
       markCustom()
       setGeometryQuality(clamped)
       setQualityKeyframes((prev) => {
-        if (prev.length === 0) return prev
+        const playheadTime = clampNumber(
+          quantizeTimeToFrame(currentTime),
+          0,
+          duration
+        )
         const existing = findKeyframeAtTime(prev, currentTime)
         if (existing)
           return prev.map((kf) =>
             kf.id === existing.id ? { ...kf, value: clamped } : kf
           )
+        if (autoKeyEnabled) {
+          return [
+            ...prev,
+            {
+              id: createEditorId("quality"),
+              time: playheadTime,
+              value: clamped,
+              easing: "ease-in-out" as const,
+            },
+          ].sort((a, b) => a.time - b.time)
+        }
         return prev
       })
     },
-    [currentTime, markCustom, setGeometryQuality, setQualityKeyframes]
+    [
+      autoKeyEnabled,
+      currentTime,
+      duration,
+      markCustom,
+      setGeometryQuality,
+      setQualityKeyframes,
+    ]
   )
 
   return { updateQuality }

@@ -9,6 +9,7 @@ import type { TimelineMenuItem } from "./TimelineMenuModel"
 type TimelineTrackRowsProps = {
   duration: number
   tracks: TimelineTrack[]
+  revealedRowId: string | null
   activeTrackId?: string | null
   selectedKeyframe: SelectedTimelineKeyframe
   timeEditor: TrackTimeEditor | null
@@ -55,6 +56,7 @@ type TimelineTrackRowsProps = {
 export function TimelineTrackRows({
   duration,
   tracks,
+  revealedRowId,
   activeTrackId,
   selectedKeyframe,
   timeEditor,
@@ -83,6 +85,7 @@ export function TimelineTrackRows({
           key={track.id}
           duration={duration}
           track={track}
+          isRevealed={revealedRowId === `track:${track.id}`}
           isActive={activeTrackId === track.id}
           selectedKeyframe={selectedKeyframe}
           timeEditor={timeEditor}

@@ -1,6 +1,8 @@
 import type { PathOverride } from "../3d/SvgTypes"
 
 export type EasingType = "linear" | "ease-in-out" | "spring" | "bounce"
+export type TransitionType = "cut" | "fade" | "wipe"
+export type LegacyTransitionType = "none"
 
 export interface Keyframe {
   id: string
@@ -60,16 +62,33 @@ export interface ShapeStop {
   fillKeyframes?: FillKeyframe[]
   pathOverrides?: PathOverride[]
   easing: EasingType
-  transitionType: "none" | "wipe"
+  transitionType: TransitionType
   wipeDirection: { x: number; y: number }
   transitionStart?: number
   transitionEnd?: number
 }
 
-// Where the morph window sits inside a shape gap, as fractions of the gap (0..1).
+// Where the transition window sits inside a shape gap, as fractions of the gap (0..1).
 // Outside [start, end] the shape holds; inside it blends to the next shape.
 export const DEFAULT_TRANSITION_START = 0.25
 export const DEFAULT_TRANSITION_END = 0.75
+
+export const normalizeTransitionType = (
+  type: TransitionType | LegacyTransitionType | undefined,
+  wipeDirection?: { x: number; y: number }
+): TransitionType => {
+  if (type === "cut" || type === "fade" || type === "wipe") return type
+  if (type === "none") return "cut"
+  if (wipeDirection && wipeDirection.x === 0 && wipeDirection.y === 0)
+    return "fade"
+  return "wipe"
+}
+
+export const shapeTransitionType = (shape: {
+  transitionType?: TransitionType | LegacyTransitionType
+  wipeDirection?: { x: number; y: number }
+}): TransitionType =>
+  normalizeTransitionType(shape.transitionType, shape.wipeDirection)
 
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t)
 

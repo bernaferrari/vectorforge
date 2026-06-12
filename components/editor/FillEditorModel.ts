@@ -1,7 +1,6 @@
 import { createEditorId } from "./EditorModel"
+import { keyframeTimeMatches } from "./EditorKeyframeModel"
 import type { FillKeyframe } from "./TimelineModel"
-
-const FILL_KEYFRAME_TIME_THRESHOLD = 0.04
 
 export const previousFillEasing = (
   keyframes: FillKeyframe[],
@@ -16,13 +15,15 @@ export const upsertFillKeyframe = ({
   keyframes,
   time,
   patch,
+  createIfMissing = true,
 }: {
   keyframes: FillKeyframe[]
   time: number
   patch: Pick<FillKeyframe, "stops" | "gradientType">
+  createIfMissing?: boolean
 }) => {
-  const existing = keyframes.find(
-    (keyframe) => Math.abs(keyframe.time - time) < FILL_KEYFRAME_TIME_THRESHOLD
+  const existing = keyframes.find((keyframe) =>
+    keyframeTimeMatches(keyframe.time, time)
   )
 
   if (existing) {
@@ -30,6 +31,8 @@ export const upsertFillKeyframe = ({
       keyframe.id === existing.id ? { ...keyframe, ...patch } : keyframe
     )
   }
+
+  if (!createIfMissing) return keyframes
 
   return [
     ...keyframes,

@@ -18,6 +18,8 @@ interface ExportModalProps {
   onClose: () => void
   onExportGltf: () => void
   onExportVideo: () => Promise<void>
+  isVideoExporting: boolean
+  videoExportProgress: number
   scene: ExportSceneSnapshot
 }
 
@@ -26,6 +28,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   onClose,
   onExportGltf,
   onExportVideo,
+  isVideoExporting,
+  videoExportProgress,
   scene,
 }) => {
   const {
@@ -38,7 +42,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     isCopied,
     isRecording,
     r3fCode,
-  } = useExportModalController({ scene, onExportVideo })
+  } = useExportModalController({
+    scene,
+    onExportVideo,
+    isVideoExporting,
+  })
 
   return (
     <Dialog
@@ -71,6 +79,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             <TabsContent value="options" className="min-w-0 p-4 outline-none">
               <ExportAssetOptions
                 isRecording={isRecording}
+                progress={videoExportProgress}
                 onExportGltf={onExportGltf}
                 onExportVideo={handleVideoExport}
               />

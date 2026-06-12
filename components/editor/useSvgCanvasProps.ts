@@ -49,6 +49,7 @@ export type UseSvgCanvasPropsArgs = {
   selectedLayerId?: string | null
   pathOverridesA: SvgCanvasProps["pathOverridesA"]
   pathOverridesB: SvgCanvasProps["pathOverridesB"]
+  exportAnimation?: SvgCanvasProps["exportAnimation"]
   onZoomChange: (zoom: number) => void
   onViewRotationCommit: NonNullable<SvgCanvasProps["onViewRotationCommit"]>
   onViewRotationSet: NonNullable<SvgCanvasProps["onViewRotationSet"]>
@@ -107,6 +108,7 @@ export function useSvgCanvasProps({
   selectedLayerId,
   pathOverridesA,
   pathOverridesB,
+  exportAnimation,
   onZoomChange,
   onViewRotationCommit,
   onViewRotationSet,
@@ -198,6 +200,7 @@ export function useSvgCanvasProps({
       selectedLayerId,
       pathOverridesA,
       pathOverridesB,
+      exportAnimation,
       onZoomChange,
       onViewRotationCommit,
       onViewRotationSet,
@@ -279,6 +282,7 @@ export function useSvgCanvasProps({
       selectedLayerId,
       pathOverridesA,
       pathOverridesB,
+      exportAnimation,
       onZoomChange,
       onViewRotationCommit,
       onViewRotationSet,

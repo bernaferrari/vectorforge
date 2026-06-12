@@ -9,7 +9,7 @@ import {
   createEditorId,
   quantizeTimeToFrame,
 } from "./EditorModel"
-import { previousEasingFor } from "./EditorKeyframeModel"
+import { keyframeTimeMatches, previousEasingFor } from "./EditorKeyframeModel"
 import { interpolateLightPositionKeyframes } from "./KeyframeInterpolationModel"
 import { useGroupedSettings } from "./useGroupedSettings"
 
@@ -23,10 +23,12 @@ export const STATIC_STUDIO_LIGHTING = {
 export function useLightEditor({
   currentTime,
   duration,
+  autoKeyEnabled,
   onEdit,
 }: {
   currentTime: number
   duration: number
+  autoKeyEnabled: boolean
   onEdit: () => void
 }) {
   const [baseLightSettings, setLightBaseSettings, setLightSetting] =
@@ -67,8 +69,8 @@ export function useLightEditor({
 
   const lightPositionKeyframeAtPlayhead = useCallback(() => {
     const playheadTime = quantizeTimeToFrame(currentTime)
-    return keyLightPositionKeyframes.find(
-      (keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04
+    return keyLightPositionKeyframes.find((keyframe) =>
+      keyframeTimeMatches(keyframe.time, playheadTime)
     )
   }, [currentTime, keyLightPositionKeyframes])
 
@@ -80,8 +82,8 @@ export function useLightEditor({
     )
     onEdit()
     setKeyLightPositionKeyframes((prev) => {
-      const existing = prev.find(
-        (keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04
+      const existing = prev.find((keyframe) =>
+        keyframeTimeMatches(keyframe.time, playheadTime)
       )
       if (existing)
         return prev.filter((keyframe) => keyframe.id !== existing.id)
@@ -115,9 +117,8 @@ export function useLightEditor({
       onEdit()
       setKeyLightPosition(nextPosition)
       setKeyLightPositionKeyframes((prev) => {
-        if (prev.length === 0) return prev
-        const existing = prev.find(
-          (keyframe) => Math.abs(keyframe.time - playheadTime) < 0.04
+        const existing = prev.find((keyframe) =>
+          keyframeTimeMatches(keyframe.time, playheadTime)
         )
         if (existing) {
           return prev.map((keyframe) =>
@@ -126,6 +127,8 @@ export function useLightEditor({
               : keyframe
           )
         }
+
+        if (!autoKeyEnabled) return prev
 
         return [
           ...prev,
@@ -138,7 +141,14 @@ export function useLightEditor({
         ].sort((a, b) => a.time - b.time)
       })
     },
-    [activeKeyLightPosition, currentTime, duration, onEdit]
+    [
+      activeKeyLightPosition,
+      autoKeyEnabled,
+      currentTime,
+      duration,
+      onEdit,
+      setKeyLightPosition,
+    ]
   )
 
   return {

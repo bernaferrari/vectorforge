@@ -12,9 +12,14 @@ import { exportFilamentGltf } from "./SvgExport"
 import { animateSvgViewReset } from "./SvgViewReset"
 import type { SvgCanvasLiveRenderProps } from "./useSvgCanvasLiveRefs"
 import type { SvgCanvasProps, SvgCanvasRef } from "./SvgTypes"
+import type { CanvasRecorderOptions } from "./useCanvasRecorder"
 
 type CanvasRecorder = {
-  startRecording: (canvas: HTMLCanvasElement | null) => void
+  startRecording: (
+    canvas: HTMLCanvasElement | null,
+    options?: CanvasRecorderOptions
+  ) => void
+  requestFrame: () => void
   stopRecording: (callback: (blob: Blob) => void) => void
 }
 
@@ -68,9 +73,13 @@ export function useSvgCanvasImperativeHandle({
       })
     },
 
-    startRecording() {
+    startRecording(options?: CanvasRecorderOptions) {
       if (!rendererRef.current) return
-      canvasRecorder.startRecording(canvasRef.current)
+      canvasRecorder.startRecording(canvasRef.current, options)
+    },
+
+    requestRecordingFrame() {
+      canvasRecorder.requestFrame()
     },
 
     stopRecording(callback: (blob: Blob) => void) {

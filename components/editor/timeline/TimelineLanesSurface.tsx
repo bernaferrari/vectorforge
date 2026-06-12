@@ -89,6 +89,7 @@ export function TimelineLanesSurface({
             <TimelinePropertyRows
               duration={viewport.duration}
               rows={propertyLane.visiblePropertyRows}
+              revealedRowId={propertyLane.revealedRowId}
               selectedKeyframe={propertyLane.selectedKeyframe}
               onSelectKeyframe={propertyLane.onSelectKeyframe}
               onActivePropertyRowChange={propertyLane.onActivePropertyRowChange}
@@ -105,6 +106,7 @@ export function TimelineLanesSurface({
             <TimelineTrackRows
               duration={viewport.duration}
               tracks={trackLane.tracks}
+              revealedRowId={trackLane.revealedRowId}
               activeTrackId={trackLane.activeTrackId}
               selectedKeyframe={trackLane.selectedKeyframe}
               timeEditor={trackLane.timeEditor}

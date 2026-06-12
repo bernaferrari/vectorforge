@@ -6,7 +6,7 @@ import type { MorphWindow } from "./TimelineLayoutModel"
 import type { WipeDirectionOption } from "./TimelineTypes"
 import type { TimelineMenuItem } from "./TimelineMenuModel"
 import { TimelineMorphWindow } from "./TimelineMorphWindow"
-import type { MorphEdge } from "./TimelineTransitionModel"
+import type { TransitionEdge } from "./TimelineTransitionModel"
 
 type TimelineMorphWindowsProps = {
   duration: number
@@ -22,7 +22,7 @@ type TimelineMorphWindowsProps = {
   onMorphEdgeDrag: (
     event: React.PointerEvent<HTMLElement>,
     shapeId: string,
-    edge: MorphEdge,
+    edge: TransitionEdge,
     fromTime: number,
     toTime: number
   ) => void
@@ -61,7 +61,7 @@ export function TimelineMorphWindows({
     <>
       {morphWindows.map((window) => (
         <TimelineMorphWindow
-          key={`morph-${window.stop.id}`}
+          key={`transition-${window.stop.id}`}
           duration={duration}
           window={window}
           openClipEditor={openClipEditor}

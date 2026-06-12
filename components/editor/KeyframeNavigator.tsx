@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { ReactNode } from "react"
 import { TimeKeyframe, clampNumber } from "./EditorModel"
+import { KEYFRAME_TIME_EPSILON } from "./EditorKeyframeModel"
 
 const keyframeNavButtonClass =
   "flex size-3.5 shrink-0 items-center justify-center rounded text-muted-foreground/45 transition-colors duration-100 hover:bg-muted/50 hover:text-foreground focus-visible:outline-none"
@@ -23,9 +24,9 @@ const getAdjacentKeyframeTimes = (
   let previous: number | undefined
   let next: number | undefined
   for (const time of sortedTimes) {
-    if (time < currentTime - 0.04) {
+    if (time < currentTime - KEYFRAME_TIME_EPSILON) {
       previous = time
-    } else if (time > currentTime + 0.04) {
+    } else if (time > currentTime + KEYFRAME_TIME_EPSILON) {
       next = time
       break
     }

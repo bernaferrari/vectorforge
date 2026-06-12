@@ -51,10 +51,11 @@ export const EasingPicker: React.FC<{
   value: EasingType
   onChange: (easing: EasingType) => void
   color?: string
-}> = ({ value, onChange, color = "#a1a1aa" }) => (
+  scopeLabel?: string
+}> = ({ value, onChange, color = "#a1a1aa", scopeLabel }) => (
   <Popover>
     <PopoverTrigger
-      title={`Easing: ${getEasingLabel(value)}`}
+      title={`${scopeLabel ?? "Easing"}: ${getEasingLabel(value)}`}
       className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:outline-none"
       onClick={(event) => event.stopPropagation()}
     >

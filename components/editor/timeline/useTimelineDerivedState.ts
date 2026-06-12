@@ -22,6 +22,7 @@ export const useTimelineDerivedState = ({
   tracks,
   propertyRows,
   shapeOptions,
+  activeTrackId,
 }: {
   duration: number
   timelineZoom: number
@@ -29,6 +30,7 @@ export const useTimelineDerivedState = ({
   tracks: TimelineTrack[]
   propertyRows: TimelinePropertyRow[]
   shapeOptions: ShapeOption[]
+  activeTrackId?: string | null
 }) => {
   const sortedShapes = useMemo(
     () => [...shapes].sort((a, b) => a.time - b.time),
@@ -37,6 +39,17 @@ export const useTimelineDerivedState = ({
   const visiblePropertyRows = useMemo(
     () => propertyRows.filter((row) => row.keyframes.length > 0),
     [propertyRows]
+  )
+  const visibleTracks = useMemo(
+    () =>
+      tracks.filter(
+        (track) => track.keyframes.length > 0 || track.id === activeTrackId
+      ),
+    [activeTrackId, tracks]
+  )
+  const hiddenTracks = useMemo(
+    () => tracks.filter((track) => !visibleTracks.includes(track)),
+    [tracks, visibleTracks]
   )
   const frameSnapActive = timelineZoom >= TIMELINE_ZOOM_MAX - 0.001
 
@@ -83,6 +96,8 @@ export const useTimelineDerivedState = ({
   return {
     sortedShapes,
     visiblePropertyRows,
+    visibleTracks,
+    hiddenTracks,
     frameSnapActive,
     morphWindows,
     clipBounds,

@@ -11,6 +11,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { TIMELINE_LAYER } from "./TimelineLayering"
 
 interface TimelineHeaderProps {
   currentTime: number
@@ -40,7 +41,10 @@ export function TimelineHeader({
   onLoopChange,
 }: TimelineHeaderProps) {
   return (
-    <div className="flex h-7 shrink-0 items-center gap-2 border-b border-border bg-background py-0 pr-1 pl-2 font-mono text-[10px] tabular-nums">
+    <div
+      className="relative flex h-7 shrink-0 items-center gap-2 border-b border-border bg-background py-0 pr-1 pl-2 font-mono text-[10px] tabular-nums"
+      style={{ zIndex: TIMELINE_LAYER.ruler }}
+    >
       <Popover
         open={durationEditor !== null}
         onOpenChange={(open) => {

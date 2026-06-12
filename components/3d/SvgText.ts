@@ -34,5 +34,5 @@ export const normalizeSvgToIconViewBox = (svgContent: string) => {
 
 export const appendVectorForgeSlash = (svgContent: string) => {
   const normalized = normalizeSvgToIconViewBox(svgContent)
-  return `<svg viewBox="0 0 24 24">${extractSvgInner(normalized)}<path data-vectorforge-slash="true" d="M2.25 3.79 2.79 3.25 20.79 21.25 20.25 21.79z"/></svg>`
+  return `<svg viewBox="0 0 24 24">${extractSvgInner(normalized)}<path data-vectorforge-slash="true" d="M1.98 3.92 2.92 1.98 21.92 20.98 21.08 22.02z"/></svg>`
 }

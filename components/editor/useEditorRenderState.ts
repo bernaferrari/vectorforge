@@ -38,7 +38,7 @@ type UseEditorRenderStateArgs = {
   extrusionDepth: number
   rotationOffset: LightPosition
   rotationAxisKeyframes: Vector3Keyframe[]
-  previewRotationY: number | null
+  previewRotationOffset: LightPosition | null
   objectScale: number
   moveOffset: LightPosition
   moveKeyframes: Vector3Keyframe[]
@@ -69,7 +69,7 @@ export function useEditorRenderState({
   extrusionDepth,
   rotationOffset,
   rotationAxisKeyframes,
-  previewRotationY,
+  previewRotationOffset,
   objectScale,
   moveOffset,
   moveKeyframes,
@@ -114,7 +114,7 @@ export function useEditorRenderState({
     extrusionDepth,
     rotationOffset,
     rotationAxisKeyframes,
-    previewRotationY,
+    previewRotationOffset,
     objectScale,
     moveOffset,
     moveKeyframes,

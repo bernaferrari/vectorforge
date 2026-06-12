@@ -40,11 +40,7 @@ export const applySvgTransitionState = ({
     transitionIsActive &&
     transitionType === "wipe" &&
     (wipeDirection.x !== 0 || wipeDirection.y !== 0)
-  const isCrossfade =
-    transitionIsActive &&
-    transitionType === "wipe" &&
-    wipeDirection.x === 0 &&
-    wipeDirection.y === 0
+  const isCrossfade = transitionIsActive && transitionType === "fade"
 
   if (isWipeActive && clipPlaneA && clipPlaneB) {
     const wipePlanes = createDiagonalWipePlanes({

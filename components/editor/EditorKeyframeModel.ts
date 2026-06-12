@@ -14,11 +14,14 @@ type EasedTimeKeyframe = TimeKeyframe & {
   easing?: FillKeyframe["easing"]
 }
 
+export const KEYFRAME_TIME_EPSILON = 0.0005
+
 export const keyframeTimeMatches = (
   keyframeTime: number,
-  time: number,
-  threshold = 0.04
-) => Math.abs(keyframeTime - quantizeTimeToFrame(time)) < threshold
+  time: number
+) =>
+  Math.abs(quantizeTimeToFrame(keyframeTime) - quantizeTimeToFrame(time)) <=
+  KEYFRAME_TIME_EPSILON
 
 export const findKeyframeAtTime = <T extends TimeKeyframe>(
   keyframes: T[],

@@ -4,6 +4,40 @@ export type GradientType = "linear" | "radial" | "conic" | "mesh"
 
 export type Vector3Value = { x: number; y: number; z: number }
 
+export type SvgExportEasing = "linear" | "ease-in-out" | "spring" | "bounce"
+
+export type SvgExportScalarKeyframe = {
+  id: string
+  time: number
+  value: number
+  easing: SvgExportEasing
+}
+
+export type SvgExportVectorKeyframe = {
+  id: string
+  time: number
+  value: Vector3Value
+  easing: SvgExportEasing
+}
+
+export type SvgExportTrack = {
+  id: string
+  defaultValue: number
+  keyframes: SvgExportScalarKeyframe[]
+}
+
+export type SvgExportAnimation = {
+  duration: number
+  tracks: SvgExportTrack[]
+  extrusionDepth: number
+  rotationOffset: Vector3Value
+  rotationAxisKeyframes: SvgExportVectorKeyframe[]
+  objectScale: number
+  objectScaleAxes?: Vector3Value
+  moveOffset: Vector3Value
+  moveKeyframes: SvgExportVectorKeyframe[]
+}
+
 export interface PathOverride {
   id: string
   visible: boolean
@@ -47,7 +81,7 @@ export interface SvgCanvasProps {
   geometryQuality: number
   layerSpacing: number
   innerElementScale: Vector3Value
-  transitionType: "none" | "wipe"
+  transitionType: "cut" | "fade" | "wipe"
   wipeDirection: { x: number; y: number }
   transitionProgress: number
   rotationOffset: Vector3Value
@@ -70,6 +104,7 @@ export interface SvgCanvasProps {
   selectedLayerId?: string | null
   pathOverridesA?: PathOverride[]
   pathOverridesB?: PathOverride[]
+  exportAnimation?: SvgExportAnimation
   onZoomChange?: (zoom: number) => void
   onViewRotationCommit?: (rotationDelta: Vector3Value) => void
   onViewRotationSet?: (
@@ -94,7 +129,11 @@ export interface SvgCanvasProps {
 
 export interface SvgCanvasRef {
   exportGltf: () => void
-  startRecording: () => void
+  startRecording: (options?: {
+    frameRate?: number
+    manualFrames?: boolean
+  }) => void
+  requestRecordingFrame: () => void
   stopRecording: (callback: (blob: Blob) => void) => void
   resetRotation: () => void
 }

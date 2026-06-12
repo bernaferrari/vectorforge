@@ -16,6 +16,7 @@ export type MaterialPresetId =
   | "cutInk"
   | "cutInner"
   | "cutOuter"
+  | "softCut"
   | "custom"
 
 export interface MaterialProps {
@@ -78,7 +79,13 @@ const chainBeforeCompile = <T extends THREE.Material>(
 }
 
 export const isGraphiteCutPreset = (preset: MaterialPresetId) =>
-  preset === "cutInk" || preset === "cutInner" || preset === "cutOuter"
+  preset === "cutInk" ||
+  preset === "cutInner" ||
+  preset === "cutOuter" ||
+  preset === "softCut"
+
+export const isSoftCutPreset = (preset: MaterialPresetId) =>
+  preset === "softCut"
 
 const addElevatedReflectionBands = <T extends THREE.Material>(
   material: T,
@@ -180,7 +187,7 @@ export function createThreeMaterial(
           ? Math.max(2.6, reflectance * 3.2)
           : preset === "gelGlass"
             ? Math.max(1.45, reflectance * 1.75)
-            : preset === "cutInk"
+            : isGraphiteCutPreset(preset)
               ? Math.max(0.42, reflectance * 1.4)
               : preset === "holo"
                 ? Math.max(0.9, reflectance * 1.15)
@@ -597,6 +604,7 @@ export function createThreeMaterial(
     case "cutInk":
     case "cutInner":
     case "cutOuter":
+    case "softCut":
       const cutMaterial = withReflectance(
         new THREE.MeshPhysicalMaterial({
           color: new THREE.Color("#2f3031"),

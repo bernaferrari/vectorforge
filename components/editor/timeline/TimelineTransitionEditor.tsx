@@ -30,8 +30,8 @@ const TRANSITION_MODES = [
     icon: <ArrowRight className="size-3.5" />,
   },
   {
-    id: "none" as const,
-    label: "None",
+    id: "cut" as const,
+    label: "Cut",
     icon: <SquareSplitHorizontal className="size-3.5" />,
   },
 ]
@@ -44,22 +44,24 @@ export function TimelineTransitionEditor({
   onShapeEasingChange,
 }: TimelineTransitionEditorProps) {
   const selectMode = (nextMode: TransitionMode) => {
-    if (nextMode === "none") {
-      onShapeBlendChange(stop.id, { transitionType: "none" })
+    if (nextMode === "cut") {
+      onShapeBlendChange(stop.id, { transitionType: "cut" })
       return
     }
 
     if (nextMode === "fade") {
       onShapeBlendChange(stop.id, {
-        transitionType: "wipe",
-        wipeDirection: { x: 0, y: 0 },
+        transitionType: "fade",
       })
       return
     }
 
     onShapeBlendChange(stop.id, {
       transitionType: "wipe",
-      wipeDirection: mode === "fade" ? { x: 1, y: 0 } : stop.wipeDirection,
+      wipeDirection:
+        stop.wipeDirection.x === 0 && stop.wipeDirection.y === 0
+          ? { x: 1, y: 0 }
+          : stop.wipeDirection,
     })
   }
 
@@ -69,10 +71,11 @@ export function TimelineTransitionEditor({
         <span className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
           Transition
         </span>
-        {mode !== "none" && (
+        {mode !== "cut" && (
           <EasingPicker
             value={stop.easing}
             onChange={(easing) => onShapeEasingChange(stop.id, easing)}
+            scopeLabel="Transition easing"
           />
         )}
       </div>

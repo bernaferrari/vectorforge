@@ -1,10 +1,13 @@
 "use client"
 
 import {
+  CircleDot,
   Download,
+  FolderOpen,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  Save,
   Sun,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -14,8 +17,12 @@ interface AppTopBarProps {
   themeMounted: boolean
   isLightTheme: boolean
   themeToggleLabel: string
+  autoKeyEnabled: boolean
   onZenModeChange: (enabled: boolean) => void
   onThemeChange: (theme: "dark" | "light") => void
+  onAutoKeyChange: (enabled: boolean) => void
+  onProjectOpen: () => void
+  onProjectSave: () => void
   onExportOpen: () => void
 }
 
@@ -24,8 +31,12 @@ export function AppTopBar({
   themeMounted,
   isLightTheme,
   themeToggleLabel,
+  autoKeyEnabled,
   onZenModeChange,
   onThemeChange,
+  onAutoKeyChange,
+  onProjectOpen,
+  onProjectSave,
   onExportOpen,
 }: AppTopBarProps) {
   return (
@@ -60,6 +71,44 @@ export function AppTopBar({
       <div />
 
       <div className="flex items-center gap-1.5">
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-label="Open project"
+          title="Open project"
+          onClick={onProjectOpen}
+          className="h-8 gap-1.5 rounded-lg border border-border bg-muted/50 px-2 text-xs font-medium"
+        >
+          <FolderOpen className="size-3.5" />
+          <span className="hidden sm:inline">Open</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-label="Save project"
+          title="Save project"
+          onClick={onProjectSave}
+          className="h-8 gap-1.5 rounded-lg border border-border bg-muted/50 px-2 text-xs font-medium"
+        >
+          <Save className="size-3.5" />
+          <span className="hidden sm:inline">Save</span>
+        </Button>
+        <Button
+          size="sm"
+          variant={autoKeyEnabled ? "destructive" : "ghost"}
+          aria-pressed={autoKeyEnabled}
+          aria-label={autoKeyEnabled ? "Disable auto-key" : "Enable auto-key"}
+          title={
+            autoKeyEnabled
+              ? "Auto-key is on: edits create keyframes at the playhead"
+              : "Auto-key is off: edits stay static unless a keyframe is selected"
+          }
+          onClick={() => onAutoKeyChange(!autoKeyEnabled)}
+          className="h-8 gap-1.5 rounded-lg border border-border bg-muted/50 px-2 text-xs font-medium"
+        >
+          <CircleDot className="size-3.5" />
+          Auto-key
+        </Button>
         <Button
           size="icon"
           variant="ghost"

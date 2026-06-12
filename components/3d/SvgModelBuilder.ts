@@ -21,7 +21,14 @@ import {
 } from "./SvgGeometryScale"
 import { svgExtrudeBaseSettings } from "./SvgExtrudeSettings"
 import { createSvgPathMaterial } from "./SvgPathMaterial"
-import { createSvgShapeGeometry } from "./SvgShapeGeometry"
+import {
+  collectRoofRidgeHeights,
+  computeShapeMedialRoof,
+  createSvgShapeGeometry,
+  medialRoofPitchFromHeights,
+  type MedialRoofPitch,
+} from "./SvgShapeGeometry"
+import type { SkeletonRoofResult } from "./StraightSkeleton"
 import { parseSvgShapes, type ParsedSvgShapes } from "./SvgParsing"
 import type { SvgCanvasProps } from "./SvgTypes"
 
@@ -80,10 +87,7 @@ export const buildSvgIconGroup = ({
     if (!isIconA && clipPlaneB) clippingPlanes.push(clipPlaneB)
   }
 
-  const isCrossfade =
-    props.transitionType === "wipe" &&
-    props.wipeDirection.x === 0 &&
-    props.wipeDirection.y === 0
+  const isCrossfade = props.transitionType === "fade"
   // Material Symbols are authored in a stable 24x24 icon space. Keep color
   // sampling in that same space so wipe pairs do not remap/reverse gradients.
   const iconBounds = new THREE.Box2(
@@ -105,6 +109,35 @@ export const buildSvgIconGroup = ({
       : props.colorBSecondary || props.colorB
   )
   const useGradientVertexColors = Boolean(props.enableGradient)
+
+  // Precompute every shape's skeleton roof so the chisel pitch can be derived
+  // from the combined ridge statistics. One shared pitch keeps all strokes of
+  // the icon (and every glyph of a multi-shape text) meeting their medial
+  // ridge lines at the same angle, like the reference chiseled numbers.
+  const wantsMedialRoof =
+    baseExtrude.crownEnabled && baseExtrude.crownMode === "medial"
+  const medialRoofByShape = new Map<THREE.Shape, SkeletonRoofResult | null>()
+  let sharedRoofPitch: MedialRoofPitch | null = null
+  if (wantsMedialRoof) {
+    const ridgeHeights: number[] = []
+    paths.forEach((path, pathIndex) => {
+      const isSlashOverlay =
+        path.userData?.node?.getAttribute?.("data-vectorforge-slash") === "true"
+      if (isSlashOverlay) return
+      shapesByPath[pathIndex].forEach((shape, shapeIndex) => {
+        const override = overrideByLayerId.get(`${pathIndex}:${shapeIndex}`)
+        if (override && !override.visible) return
+        const roof = computeShapeMedialRoof(shape, baseExtrude.curveSegments)
+        medialRoofByShape.set(shape, roof)
+        if (roof) ridgeHeights.push(...collectRoofRidgeHeights(roof))
+      })
+    })
+    sharedRoofPitch = medialRoofPitchFromHeights(
+      ridgeHeights,
+      baseExtrude,
+      baseExtrude.depth
+    )
+  }
 
   paths.forEach((path, pathIndex) => {
     const isSlashOverlay =
@@ -167,6 +200,12 @@ export const buildSvgIconGroup = ({
         bevelEnabled: props.bevelEnabled,
         slashDepthRatio: VECTORFORGE_SLASH_DEPTH_RATIO,
         isSlashOverlay,
+        medialRoofPlan: wantsMedialRoof
+          ? {
+              roof: medialRoofByShape.get(shape) ?? null,
+              pitch: sharedRoofPitch,
+            }
+          : undefined,
       })
       if (!shapeGeometry) {
         layerOrder += 1
@@ -189,6 +228,7 @@ export const buildSvgIconGroup = ({
 
       const mesh = new THREE.Mesh(geometry, pathMaterial)
       mesh.userData.pathLayerId = layerId
+      mesh.userData.iconColorRole = isIconA ? "a" : "b"
       mesh.position.z = isSlashOverlay
         ? baseExtrude.depth / 2 +
           extrude.shapeDepth / 2 +

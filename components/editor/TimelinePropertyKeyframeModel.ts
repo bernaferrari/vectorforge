@@ -9,6 +9,7 @@ import type {
 import { createEditorId } from "./EditorModel"
 import {
   addKeyframeAtTime,
+  keyframeTimeMatches,
   moveKeyframeById,
   removeKeyframeById,
   setKeyframeEasingById,
@@ -18,7 +19,6 @@ import type { FillKeyframe } from "./TimelineModel"
 import type { EasingType } from "./TimelineModel"
 
 const STYLE_ROW_PREFIX = "style-"
-const KEYFRAME_TIME_THRESHOLD = 0.04
 
 type KeyframeArraySetter<T> = Dispatch<SetStateAction<T[]>>
 
@@ -71,7 +71,7 @@ export const styleKeyframeTimeFromId = (keyframeId: string) =>
   Number(keyframeId.replace(STYLE_ROW_PREFIX, ""))
 
 export const matchesStyleKeyframeId = (time: number, keyframeId: string) =>
-  Math.abs(time - styleKeyframeTimeFromId(keyframeId)) < KEYFRAME_TIME_THRESHOLD
+  keyframeTimeMatches(time, styleKeyframeTimeFromId(keyframeId))
 
 export const removeStyleKeyframesAtIdTime = <T extends { time: number }>(
   keyframes: T[],
